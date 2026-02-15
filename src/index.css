@@ -1,0 +1,22 @@
+/* Fullscreen layout */
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Cesium container */
+.globe-container {
+  width: 100%;
+  height: 100%;
+}
+
+/* Ensure Cesium canvas fills container */
+.cesium-viewer,
+.cesium-widget,
+.cesium-widget canvas {
+  width: 100%;
+  height: 100%;
+}
