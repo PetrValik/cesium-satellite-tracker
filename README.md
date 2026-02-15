@@ -1,8 +1,8 @@
 <div align="center">
-  <img src="docs/images/logo.png" alt="Cesium Satellite Tracker Logo" width="200"/>
+  <img src="docs/images/logo.png" alt="Cesium Satellite Tracker" width="120"/>
+  <h1>Cesium Satellite Tracker</h1>
+  <p><em>Real-time satellite tracking and 3D Earth visualization</em></p>
 </div>
-
-# Cesium Satellite Tracker
 
 A React + CesiumJS application for real-time satellite tracking, orbital visualization, and geospatial analysis. Built to explore satellite operations, orbital mechanics, and 3D Earth visualization techniques relevant to aerospace and defense applications.
 
