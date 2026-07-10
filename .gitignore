@@ -147,4 +147,7 @@ dist
 Thumbs.db
 
 # Cesium assets (copied from node_modules during build)
-public/cesium/
+apps/web/public/cesium/
+
+# API runtime database (seed lives in apps/api/seed/, committed)
+apps/api/data/

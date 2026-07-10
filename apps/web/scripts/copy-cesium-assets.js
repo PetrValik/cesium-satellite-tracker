@@ -1,13 +1,16 @@
 import { copyFileSync, mkdirSync, readdirSync, statSync } from 'fs';
 import { join, dirname } from 'path';
+import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Source: node_modules/cesium/Build/Cesium
-// Destination: public/cesium
-const sourceDir = join(__dirname, '..', 'node_modules', 'cesium', 'Build', 'Cesium');
+// Resolve the cesium package root wherever npm hoisted it (workspace-safe).
+const require = createRequire(import.meta.url);
+const cesiumRoot = dirname(require.resolve('cesium'));
+
+const sourceDir = join(cesiumRoot, 'Build', 'Cesium');
 const destDir = join(__dirname, '..', 'public', 'cesium');
 
 function copyRecursiveSync(src, dest) {
