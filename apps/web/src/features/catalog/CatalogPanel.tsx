@@ -45,6 +45,8 @@ function SearchBox() {
   const [results, setResults] = useState<Satellite[]>([])
   const [open, setOpen] = useState(false)
   const debounce = useRef<ReturnType<typeof setTimeout>>(undefined)
+  // Monotonic request id: a slow early response must not overwrite a later one.
+  const searchSeq = useRef(0)
   const registerSat = useCatalog((s) => s.registerSat)
   const select = useCatalog((s) => s.select)
 
@@ -54,18 +56,23 @@ function SearchBox() {
     setQ(value)
     clearTimeout(debounce.current)
     if (value.trim().length < 2) {
+      searchSeq.current++
       setResults([])
       setOpen(false)
       return
     }
     debounce.current = setTimeout(() => {
+      const seq = ++searchSeq.current
       api
         .search(value.trim())
         .then((sats) => {
+          if (seq !== searchSeq.current) return // stale response
           setResults(sats)
           setOpen(true)
         })
-        .catch(() => setResults([]))
+        .catch(() => {
+          if (seq === searchSeq.current) setResults([])
+        })
     }, 250)
   }
 

@@ -5,7 +5,7 @@ import {
   SatelliteListSchema,
   SatelliteSchema,
 } from '@orbital-ops/shared'
-import { DEFAULT_TTL_MS } from '../src/refresh.ts'
+import { DEFAULT_FAILURE_COOLDOWN_MS, DEFAULT_TTL_MS } from '../src/refresh.ts'
 import { failingFetcher, testEnv, tleFor } from './helpers.ts'
 
 describe('GET /api/satellites?group=', () => {
@@ -76,6 +76,24 @@ describe('GET /api/satellites?group=', () => {
     const { app } = testEnv(failingFetcher())
     const res = await app.request('/api/satellites?group=stations')
     expect(res.status).toBe(503)
+  })
+
+  it('cools down after a failed refresh instead of hammering CelesTrak', async () => {
+    const fetcher = failingFetcher()
+    const { app, advance } = testEnv(fetcher)
+
+    expect((await app.request('/api/satellites?group=stations')).status).toBe(503)
+    expect((await app.request('/api/satellites?group=stations')).status).toBe(503)
+    expect(fetcher).toHaveBeenCalledTimes(1) // stations retry suppressed by cooldown
+
+    await app.request('/api/groups') // sweep: the 11 other groups each fetch once
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(12))
+    await app.request('/api/groups') // all groups cooling down now — no new fetches
+    expect(fetcher).toHaveBeenCalledTimes(12)
+
+    advance(DEFAULT_FAILURE_COOLDOWN_MS + 1)
+    expect((await app.request('/api/satellites?group=stations')).status).toBe(503)
+    expect(fetcher).toHaveBeenCalledTimes(13)
   })
 
   it('rejects unknown groups with 404 and a missing param with 400', async () => {

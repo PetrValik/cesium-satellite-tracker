@@ -53,25 +53,31 @@ export function GlobeView() {
     // --- selected satellite (propagated on the main thread every frame) ---
     let selectedSatrec: SatRec | null = null
     let selectedName = ''
-    let trackEpochMs = 0
-    let trackPeriodMin = 0
+    let trackAnchorMs = 0
+    let trackPeriodMs = 0
 
     const refreshTrack = (epochMs: number) => {
       if (!selectedSatrec) return
-      const track = sampleOrbitTrack(selectedSatrec, epochMs)
+      const periodMs = orbitalPeriodMinutes(selectedSatrec) * 60_000
+      // Sample slightly into the past so a rewinding satellite stays on its path.
+      const track = sampleOrbitTrack(selectedSatrec, epochMs - periodMs * 0.15)
       tracking.setTrack(track)
-      trackEpochMs = epochMs
-      trackPeriodMin = track.periodMinutes
+      trackAnchorMs = epochMs
+      trackPeriodMs = track.periodMinutes * 60_000
     }
+
+    /** Sampled window is stale once sim time drifts past either margin. */
+    const trackNeedsRefresh = (epochMs: number) =>
+      epochMs > trackAnchorMs + trackPeriodMs * 0.6 || epochMs < trackAnchorMs - trackPeriodMs * 0.1
 
     const applySelection = (noradId: number | null) => {
       constellation.setSelected(noradId)
+      // Always drop the previous satellite's visuals/telemetry first, so a
+      // failed TLE can't leave them displayed under the new selection.
       selectedSatrec = null
-      if (noradId === null) {
-        tracking.clear()
-        useTelemetry.getState().clear()
-        return
-      }
+      tracking.clear()
+      useTelemetry.getState().clear()
+      if (noradId === null) return
       const sat = useCatalog.getState().byId.get(noradId)
       if (!sat) return
       const satrec = createSatrec(sat.tle1, sat.tle2)
@@ -139,7 +145,7 @@ export function GlobeView() {
 
     // Scrub/NOW jumps: force an immediate constellation re-tick.
     const unsubClock = simClock.subscribe((state, prev) => {
-      if (Math.abs(state.epochMs - prev.epochMs) > 60_000) lastTickWall = 0
+      if (state.jumpNonce !== prev.jumpNonce) lastTickWall = 0
     })
 
     // --- picking ---
@@ -163,8 +169,7 @@ export function GlobeView() {
 
       if (selectedSatrec) {
         // Re-sample the orbit path when sim time leaves the sampled window.
-        const windowMs = trackPeriodMin * 60_000
-        if (epochMs < trackEpochMs || epochMs > trackEpochMs + windowMs * 0.6) {
+        if (trackNeedsRefresh(epochMs)) {
           refreshTrack(epochMs)
         }
         const live = propagateEcef(selectedSatrec, epochMs)
@@ -205,9 +210,11 @@ export function GlobeView() {
   if (engineError) {
     return (
       <div className="engine-error">
-        <h1>RENDERER OFFLINE</h1>
-        <p>Cesium failed to initialize: {engineError}</p>
-        <p>Try a browser with WebGL 2 support.</p>
+        <div className="engine-error-panel">
+          <h1>RENDERER OFFLINE</h1>
+          <p>Cesium failed to initialize: {engineError}</p>
+          <p>Try a browser with WebGL 2 support.</p>
+        </div>
       </div>
     )
   }

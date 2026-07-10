@@ -31,11 +31,13 @@ export interface PassesState {
   passes: PassPrediction[]
   /** noradId the current passes list was computed for; null = none. */
   computedFor: number | null
+  /** Sim time the prediction window was anchored at (ms), null = none. */
+  windowStartMs: number | null
   computing: boolean
   selectedPass: number | null
   setObserver: (observer: ObserverGeo) => void
   startCompute: (noradId: number) => void
-  setResults: (noradId: number, passes: PassPrediction[]) => void
+  setResults: (noradId: number, passes: PassPrediction[], windowStartMs: number) => void
   selectPass: (index: number | null) => void
   clear: () => void
 }
@@ -44,6 +46,7 @@ export const usePasses = create<PassesState>((set) => ({
   observer: loadObserver(),
   passes: [],
   computedFor: null,
+  windowStartMs: null,
   computing: false,
   selectedPass: null,
 
@@ -53,15 +56,20 @@ export const usePasses = create<PassesState>((set) => ({
     } catch {
       // storage may be unavailable (private mode) — observer still works in-memory
     }
-    set({ observer, computedFor: null, passes: [], selectedPass: null })
+    set({ observer, computedFor: null, windowStartMs: null, passes: [], selectedPass: null })
   },
 
   startCompute: (noradId) => set({ computing: true, computedFor: noradId }),
 
-  setResults: (noradId, passes) =>
-    set((s) => (s.computedFor === noradId ? { passes, computing: false, selectedPass: null } : s)),
+  setResults: (noradId, passes, windowStartMs) =>
+    set((s) =>
+      s.computedFor === noradId
+        ? { passes, windowStartMs, computing: false, selectedPass: null }
+        : s,
+    ),
 
   selectPass: (index) => set({ selectedPass: index }),
 
-  clear: () => set({ passes: [], computedFor: null, computing: false, selectedPass: null }),
+  clear: () =>
+    set({ passes: [], computedFor: null, windowStartMs: null, computing: false, selectedPass: null }),
 }))
