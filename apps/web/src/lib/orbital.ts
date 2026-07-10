@@ -185,6 +185,69 @@ export function sampleOrbitTrack(
   return { orbitEcef, groundTrack, periodMinutes }
 }
 
+export interface OrbitRing {
+  /** ECI (TEME) kilometers, [x0,y0,z0, ...]; last sample repeats the first. */
+  eciKm: Float64Array
+  periodMinutes: number
+}
+
+/** GMST in radians at `epochMs` — the ECI→ECEF rotation angle. */
+export function gmstAt(epochMs: number): number {
+  return gstime(new Date(epochMs))
+}
+
+/**
+ * Sample one full revolution in the inertial (ECI) frame starting at
+ * `epochMs` — the instantaneous orbit as a closed curve (the final sample
+ * duplicates the first to close the loop). Unlike `sampleOrbitTrack`, this
+ * stays in ECI kilometers: the renderer rotates the whole ring by the
+ * current GMST each frame, so the ring turns with the sky, not the ground.
+ * If every propagation fails the array is NaN-filled.
+ */
+export function sampleOrbitRingEci(
+  satrec: SatRec,
+  epochMs: number,
+  samples = 180,
+): OrbitRing {
+  const n = Math.max(8, Math.floor(samples))
+  const periodMinutes = orbitalPeriodMinutes(satrec)
+  const periodMs = periodMinutes * 60_000
+  const eciKm = new Float64Array(3 * (n + 1))
+
+  let lastGood = -1
+  const pendingBackfill: number[] = []
+  const copySample = (from: number, to: number): void => {
+    eciKm[3 * to] = eciKm[3 * from]
+    eciKm[3 * to + 1] = eciKm[3 * from + 1]
+    eciKm[3 * to + 2] = eciKm[3 * from + 2]
+  }
+
+  for (let i = 0; i < n; i++) {
+    const tMs = epochMs + (periodMs * i) / n
+    const pv = propagate(satrec, new Date(tMs))
+    if (pv && isFiniteVec(pv.position)) {
+      eciKm[3 * i] = pv.position.x
+      eciKm[3 * i + 1] = pv.position.y
+      eciKm[3 * i + 2] = pv.position.z
+      for (const j of pendingBackfill) copySample(i, j)
+      pendingBackfill.length = 0
+      lastGood = i
+    } else if (lastGood >= 0) {
+      copySample(lastGood, i)
+    } else {
+      pendingBackfill.push(i)
+    }
+  }
+
+  if (lastGood < 0) {
+    eciKm.fill(Number.NaN)
+  } else {
+    copySample(0, n) // close the loop
+  }
+
+  return { eciKm, periodMinutes }
+}
+
 /**
  * Great-circle radius (meters) of the ground area from which the satellite is
  * above the geometric horizon: R * acos(R / (R + alt)).
