@@ -4,6 +4,7 @@ import 'cesium/Build/Cesium/Widgets/widgets.css'
 import { createOrbitalViewer, syncViewerClock } from '../core/engine/createViewer'
 import { simClock } from '../core/sim/simClock'
 import { ConstellationLayer } from '../features/constellation/ConstellationLayer'
+import { GroundTrackWindow } from '../features/tracking/GroundTrackWindow'
 import { TrackingVisuals } from '../features/tracking/TrackingVisuals'
 import { useCatalog } from '../features/catalog/catalogStore'
 import { useTelemetry } from '../features/tracking/telemetryStore'
@@ -15,7 +16,6 @@ import {
   orbitalPeriodMinutes,
   propagateEcef,
   sampleOrbitRingEci,
-  sampleOrbitTrack,
 } from '../lib/orbital'
 import type { SatRec } from 'satellite.js'
 import type { WorkerRequest, WorkerResponse } from '../lib/protocol'
@@ -55,35 +55,15 @@ export function GlobeView() {
     // --- selected satellite (propagated on the main thread every frame) ---
     let selectedSatrec: SatRec | null = null
     let selectedName = ''
+    let groundWindow: GroundTrackWindow | null = null
     let trackAnchorMs = 0
     let trackPeriodMs = 0
-    let groundAnchorMs = 0
-    let lastGroundWall = 0
-
-    const GROUND_SAMPLES = 128
-    // At high warp the ground window would slide every frame; cap the
-    // recompute rate (a full resample is ~1 ms of SGP4 on the main thread).
-    const GROUND_REFRESH_MIN_WALL_MS = 100
-
-    /**
-     * Sliding ground-track window [now − 0.15 P, now + 0.85 P]: refreshed
-     * every sample-interval of sim time, so the trail continuously recedes
-     * behind the satellite while new path grows ahead of it.
-     */
-    const refreshGround = (epochMs: number) => {
-      if (!selectedSatrec) return
-      const periodMs = orbitalPeriodMinutes(selectedSatrec) * 60_000
-      const track = sampleOrbitTrack(selectedSatrec, epochMs - periodMs * 0.15, GROUND_SAMPLES)
-      tracking.setGroundTrack(track.groundTrack)
-      groundAnchorMs = epochMs
-    }
 
     const refreshTrack = (epochMs: number) => {
       if (!selectedSatrec) return
       // Closed orbit ring in the inertial frame; rotated by GMST at render time.
       const ring = sampleOrbitRingEci(selectedSatrec, epochMs)
       tracking.setOrbitRing(ring.eciKm)
-      refreshGround(epochMs)
       trackAnchorMs = epochMs
       trackPeriodMs = orbitalPeriodMinutes(selectedSatrec) * 60_000
     }
@@ -97,6 +77,7 @@ export function GlobeView() {
       // Always drop the previous satellite's visuals/telemetry first, so a
       // failed TLE can't leave them displayed under the new selection.
       selectedSatrec = null
+      groundWindow = null
       tracking.clear()
       useTelemetry.getState().clear()
       if (noradId === null) return
@@ -105,6 +86,7 @@ export function GlobeView() {
       const satrec = createSatrec(sat.tle1, sat.tle2)
       if (!satrec) return
       selectedSatrec = satrec
+      groundWindow = new GroundTrackWindow(satrec)
       selectedName = sat.name
       useTelemetry.getState().update({
         noradId,
@@ -203,17 +185,11 @@ export function GlobeView() {
 
       if (selectedSatrec) {
         // Re-sample the orbit ring when sim time leaves the sampled window;
-        // slide the ground-track window one sample at a time in between.
+        // the ground track below slides in real time.
         if (trackNeedsRefresh(epochMs)) {
           refreshTrack(epochMs)
-        } else if (
-          trackPeriodMs > 0 &&
-          Math.abs(epochMs - groundAnchorMs) > trackPeriodMs / GROUND_SAMPLES &&
-          now - lastGroundWall > GROUND_REFRESH_MIN_WALL_MS
-        ) {
-          refreshGround(epochMs)
-          lastGroundWall = now
         }
+        if (groundWindow) tracking.setGroundTrack(groundWindow.update(epochMs))
         const live = propagateEcef(selectedSatrec, epochMs)
         if (live) {
           tracking.updateLive({
