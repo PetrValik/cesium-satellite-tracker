@@ -6,8 +6,17 @@ import { simClock } from '../core/sim/simClock'
 import { ConstellationLayer } from '../features/constellation/ConstellationLayer'
 import { GroundTrackWindow } from '../features/tracking/GroundTrackWindow'
 import { TrackingVisuals } from '../features/tracking/TrackingVisuals'
+import { AircraftLayer } from '../features/airspace/AircraftLayer'
+import { useAircraft } from '../features/airspace/aircraftStore'
+import { LaunchSitesLayer } from '../features/infra/LaunchSitesLayer'
+import { PortsLayer } from '../features/infra/PortsLayer'
+import { ShipsLayer } from '../features/maritime/ShipsLayer'
+import { useShips } from '../features/maritime/shipsStore'
 import { useCatalog } from '../features/catalog/catalogStore'
 import { useTelemetry } from '../features/tracking/telemetryStore'
+import { useMode } from '../core/ui/modeStore'
+import launchSites from '../data/launchSites.json'
+import ports from '../data/ports.json'
 import {
   classifyOrbit,
   createSatrec,
@@ -47,10 +56,31 @@ export function GlobeView() {
 
     const constellation = new ConstellationLayer(viewer.scene)
     const tracking = new TrackingVisuals(viewer)
+    const shipsLayer = new ShipsLayer(viewer.scene)
+    const aircraftLayer = new AircraftLayer(viewer.scene)
+    const launchSitesLayer = new LaunchSitesLayer(viewer.scene, launchSites)
+    const portsLayer = new PortsLayer(viewer.scene, ports)
     const worker = new Worker(new URL('../workers/propagation.worker.ts', import.meta.url), {
       type: 'module',
     })
     const post = (msg: WorkerRequest) => worker.postMessage(msg)
+
+    // --- live domain layers: data + infra visibility ---
+    shipsLayer.setShips(useShips.getState().ships)
+    aircraftLayer.setAircraft(useAircraft.getState().aircraft)
+    launchSitesLayer.setVisible(useMode.getState().launchSites)
+    portsLayer.setVisible(useMode.getState().ports)
+
+    const unsubShips = useShips.subscribe((state, prev) => {
+      if (state.ships !== prev.ships) shipsLayer.setShips(state.ships)
+    })
+    const unsubAircraft = useAircraft.subscribe((state, prev) => {
+      if (state.aircraft !== prev.aircraft) aircraftLayer.setAircraft(state.aircraft)
+    })
+    const unsubMode = useMode.subscribe((state, prev) => {
+      if (state.launchSites !== prev.launchSites) launchSitesLayer.setVisible(state.launchSites)
+      if (state.ports !== prev.ports) portsLayer.setVisible(state.ports)
+    })
 
     // --- selected satellite (propagated on the main thread every frame) ---
     let selectedSatrec: SatRec | null = null
@@ -163,11 +193,45 @@ export function GlobeView() {
       }
     })
 
-    // --- picking ---
+    // --- picking: current mode's layer first, cross-domain hits switch mode ---
     const pickHandler = new ScreenSpaceEventHandler(viewer.scene.canvas)
     pickHandler.setInputAction((movement: { position: Cartesian2 }) => {
-      const picked = constellation.pick(movement.position, viewer.scene)
-      useCatalog.getState().select(picked)
+      const mode = useMode.getState().mode
+
+      const trySat = () => {
+        const id = constellation.pick(movement.position, viewer.scene)
+        if (id === null) return false
+        useMode.getState().setMode('orbital')
+        useCatalog.getState().select(id)
+        return true
+      }
+      const tryShip = () => {
+        const mmsi = shipsLayer.pick(movement.position, viewer.scene)
+        if (mmsi === null) return false
+        useMode.getState().setMode('maritime')
+        useShips.getState().select(mmsi)
+        return true
+      }
+      const tryAircraft = () => {
+        const icao = aircraftLayer.pick(movement.position, viewer.scene)
+        if (icao === null) return false
+        useMode.getState().setMode('airspace')
+        useAircraft.getState().select(icao)
+        return true
+      }
+
+      const order =
+        mode === 'maritime'
+          ? [tryShip, tryAircraft, trySat]
+          : mode === 'airspace'
+            ? [tryAircraft, tryShip, trySat]
+            : [trySat, tryShip, tryAircraft]
+      if (order.some((attempt) => attempt())) return
+
+      // Empty click: deselect within the current mode only.
+      if (mode === 'orbital') useCatalog.getState().select(null)
+      else if (mode === 'maritime') useShips.getState().select(null)
+      else useAircraft.getState().select(null)
     }, ScreenSpaceEventType.LEFT_CLICK)
 
     // --- render loop: sim clock, viewer clock, selected satellite ---
@@ -182,6 +246,10 @@ export function GlobeView() {
       const epochMs = simClock.get().epochMs
       syncViewerClock(viewer, epochMs)
       constellation.advance(epochMs)
+      // Live domains dead-reckon on wall time (they can't time-travel);
+      // both layers self-gate to one update per ~250 ms.
+      shipsLayer.advance(Date.now())
+      aircraftLayer.advance(Date.now())
 
       if (selectedSatrec) {
         // Re-sample the orbit ring when sim time leaves the sampled window;
@@ -218,10 +286,17 @@ export function GlobeView() {
       clearInterval(tickTimer)
       unsubCatalog()
       unsubClock()
+      unsubShips()
+      unsubAircraft()
+      unsubMode()
       pickHandler.destroy()
       worker.terminate()
       constellation.dispose()
       tracking.dispose()
+      shipsLayer.dispose()
+      aircraftLayer.dispose()
+      launchSitesLayer.dispose()
+      portsLayer.dispose()
       if (!viewer.isDestroyed()) viewer.destroy()
     }
   }, [])

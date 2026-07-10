@@ -7,6 +7,11 @@ import {
 } from '@orbital-ops/shared'
 import { DEFAULT_FAILURE_COOLDOWN_MS, DEFAULT_TTL_MS } from '../src/refresh.ts'
 import { failingFetcher, testEnv, tleFor } from './helpers.ts'
+import { AircraftListSchema, LiveStatusSchema, ShipListSchema } from '@orbital-ops/shared'
+import { AdsbFeed } from '../src/adsb.ts'
+import { AisFeed } from '../src/ais.ts'
+import { createApp } from '../src/app.ts'
+import { T0 } from './helpers.ts'
 
 describe('GET /api/satellites?group=', () => {
   it('fetches from CelesTrak on first request and serves from cache within TTL', async () => {
@@ -197,5 +202,95 @@ describe('GET /api/health and /api/groups', () => {
     expect(stations.stale).toBe(false)
     expect(stations.updatedAt).not.toBeNull()
     expect(groups.filter((g) => g.slug !== 'stations').every((g) => g.stale)).toBe(true)
+  })
+})
+
+describe('live feeds: /api/ships, /api/aircraft, /api/live/status', () => {
+  type SocketListener = (event: { data?: unknown }) => void
+
+  class StubSocket {
+    readonly sent: string[] = []
+    private readonly listeners = new Map<string, SocketListener[]>()
+    addEventListener(type: string, listener: SocketListener): void {
+      const list = this.listeners.get(type) ?? []
+      list.push(listener)
+      this.listeners.set(type, list)
+    }
+    send(data: string): void {
+      this.sent.push(data)
+    }
+    close(): void {}
+    emit(type: string, event: { data?: unknown } = {}): void {
+      for (const listener of this.listeners.get(type) ?? []) listener(event)
+    }
+  }
+
+  it('returns 503s and an all-off status when no feeds are wired', async () => {
+    const { app } = testEnv(failingFetcher())
+    expect((await app.request('/api/ships')).status).toBe(503)
+    expect((await app.request('/api/aircraft')).status).toBe(503)
+
+    const res = await app.request('/api/live/status')
+    expect(res.status).toBe(200)
+    const status = LiveStatusSchema.parse(await res.json())
+    expect(status).toEqual({
+      ais: { configured: false, connected: false, ships: 0 },
+      adsb: { configured: false, aircraft: 0, lastPollMs: null },
+    })
+  })
+
+  it('returns 503 for ships when the AIS feed has no API key', async () => {
+    const { db, refresher } = testEnv(failingFetcher())
+    const ais = new AisFeed({ apiKey: undefined, log: () => {} })
+    const app = createApp({ db, refresher, ais })
+    expect((await app.request('/api/ships')).status).toBe(503)
+
+    const status = LiveStatusSchema.parse(await (await app.request('/api/live/status')).json())
+    expect(status.ais).toEqual({ configured: false, connected: false, ships: 0 })
+  })
+
+  it('serves schema-valid ships, aircraft, and live status from wired feeds', async () => {
+    const socket = new StubSocket()
+    const ais = new AisFeed({ apiKey: 'k', makeSocket: () => socket, now: () => T0, log: () => {} })
+    ais.start()
+    socket.emit('open')
+    socket.emit('message', {
+      data: JSON.stringify({
+        MessageType: 'PositionReport',
+        MetaData: { MMSI: 244123456, ShipName: 'EVER GIVEN ', latitude: 51.9, longitude: 4.1 },
+        Message: { PositionReport: { Latitude: 51.9, Longitude: 4.1, Sog: 12.3, Cog: 245.1 } },
+      }),
+    })
+
+    const adsbFetcher: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          time: Math.floor(T0 / 1000),
+          states: [
+            ['4b1814', 'SWR123  ', 'CH', 1749999990, 1749999995, 8.5, 47.4, 11582.4, false, 245.6, 87.3, 0.3, null, null, null, false, 0],
+          ],
+        }),
+      )
+    const adsb = new AdsbFeed({ fetcher: adsbFetcher, now: () => T0, log: () => {} })
+    await adsb.poll()
+
+    const { db, refresher } = testEnv(failingFetcher())
+    const app = createApp({ db, refresher, ais, adsb })
+
+    const ships = ShipListSchema.parse(await (await app.request('/api/ships')).json())
+    expect(ships).toHaveLength(1)
+    expect(ships[0]).toMatchObject({ mmsi: 244123456, name: 'EVER GIVEN', shipType: 'other' })
+
+    const aircraft = AircraftListSchema.parse(await (await app.request('/api/aircraft')).json())
+    expect(aircraft).toHaveLength(1)
+    expect(aircraft[0]).toMatchObject({ icao24: '4b1814', callsign: 'SWR123' })
+
+    const status = LiveStatusSchema.parse(await (await app.request('/api/live/status')).json())
+    expect(status).toEqual({
+      ais: { configured: true, connected: true, ships: 1 },
+      adsb: { configured: true, aircraft: 1, lastPollMs: T0 },
+    })
+    ais.stop()
+    adsb.stop()
   })
 })
