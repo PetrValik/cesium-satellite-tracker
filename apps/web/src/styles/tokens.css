@@ -1,0 +1,84 @@
+/* ============================================================
+   ORBITAL OPS — design tokens
+   Avionics multi-function display over a fullscreen globe.
+   Components consume ONLY these custom properties; no raw hex
+   values belong in component skins.
+   ============================================================ */
+
+:root {
+  /* ---- space & surfaces ---------------------------------- */
+  --space: #06090f;
+  --panel-bg: rgba(6, 9, 15, 0.82);
+  --panel-bg-solid: rgba(9, 14, 22, 0.96);
+  --panel-blur: 6px;
+  --hairline: rgba(255, 255, 255, 0.08);
+  --hairline-strong: rgba(255, 255, 255, 0.18);
+  --input-bg: rgba(255, 255, 255, 0.04);
+  --scroll-thumb: rgba(255, 255, 255, 0.14);
+  --scroll-thumb-hover: rgba(255, 255, 255, 0.28);
+  --scanlines: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.02) 0 1px,
+    transparent 1px 3px
+  );
+
+  /* ---- text ------------------------------------------------ */
+  --text: #e8eef7;
+  --text-dim: #8b98a9;
+
+  /* ---- signal amber (primary accent, CRT warmth) ----------- */
+  --amber: #ffb454;
+  --amber-bright: #ffe8c7; /* matches SELECTED_OUTLINE_COLOR in engine */
+  --amber-outline: rgba(255, 180, 84, 0.55);
+  --amber-soft: rgba(255, 180, 84, 0.35);
+  --amber-wash: rgba(255, 180, 84, 0.12);
+  --amber-glow: rgba(255, 180, 84, 0.4);
+  --glow-amber-text: 0 0 12px rgba(255, 180, 84, 0.35);
+  --glow-amber-box: 0 0 8px rgba(255, 180, 84, 0.4);
+
+  /* ---- cyan (orbit geometry, links) ------------------------ */
+  --cyan: #6ee7ff;
+  --cyan-glow: rgba(110, 231, 255, 0.55);
+  --cyan-wash: rgba(110, 231, 255, 0.05);
+
+  /* ---- alert ----------------------------------------------- */
+  --alert: #f87171;
+  --alert-outline: rgba(248, 113, 113, 0.45);
+  --alert-wash: rgba(248, 113, 113, 0.1);
+  --glow-alert-text: 0 0 12px rgba(248, 113, 113, 0.35);
+
+  /* ---- orbit-class hues (mirror ConstellationLayer.ts) ----- */
+  --orbit-leo: #ffb454;
+  --orbit-meo: #6ee7ff;
+  --orbit-geo: #c084fc;
+  --orbit-heo: #f87171;
+
+  /* ---- type ------------------------------------------------ */
+  --mono: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --fs-label: 10px;
+  --fs-label-lg: 11px;
+  --fs-data: 12px;
+  --fs-data-lg: 13px;
+  --fs-callout: 14px;
+  --fs-readout: 16px;
+  --ls-data: 0.06em;
+  --ls-label: 0.12em;
+  --ls-label-tight: 0.08em;
+  --ls-wide: 0.2em;
+  --ls-boot: 0.4em;
+
+  /* ---- geometry -------------------------------------------- */
+  --chamfer: 10px;
+  --radius: 2px;
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --w-catalog: 256px;
+  --w-right: 272px;
+  --hud-top: 44px;
+
+  /* ---- motion ---------------------------------------------- */
+  --t-fast: 140ms;
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
