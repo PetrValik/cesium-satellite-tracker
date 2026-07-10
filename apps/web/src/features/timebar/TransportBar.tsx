@@ -47,6 +47,8 @@ export function TransportBar() {
           scrubTo(Date.now() + minutes * 60_000)
         }}
         onPointerUp={() => setScrub(0)}
+        onKeyUp={() => setScrub(0)}
+        onBlur={() => setScrub(0)}
         title="Scrub ±12 h"
       />
       <button className="hud-button transport-now" onClick={resetToNow}>

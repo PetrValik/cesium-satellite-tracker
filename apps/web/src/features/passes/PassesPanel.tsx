@@ -15,8 +15,15 @@ export function PassesPanel() {
   const computing = usePasses((s) => s.computing)
   const selectedPass = usePasses((s) => s.selectedPass)
   const selectPass = usePasses((s) => s.selectPass)
+  const windowStartMs = usePasses((s) => s.windowStartMs)
   // Re-render each sim minute so the live marker and "next pass" stay fresh.
   const epochMin = useSimClock((s) => Math.floor(s.epochMs / 60_000))
+
+  const epochMs = epochMin * 60_000
+  // Sim time warped/scrubbed outside the predicted window → predictions stale.
+  const windowExpired =
+    windowStartMs !== null &&
+    (epochMs < windowStartMs - 60_000 || epochMs > windowStartMs + WINDOW_HOURS * 3_600_000)
 
   useEffect(() => {
     if (!sat) {
@@ -25,21 +32,24 @@ export function PassesPanel() {
     }
     // Read computedFor via getState(): keeping it out of the deps means the
     // startCompute() below can't retrigger this effect and cancel its own timer.
-    if (usePasses.getState().computedFor === sat.noradId) return
+    if (usePasses.getState().computedFor === sat.noradId && !windowExpired) return
     const satrec = createSatrec(sat.tle1, sat.tle2)
-    if (!satrec) return
+    if (!satrec) {
+      usePasses.getState().clear()
+      return
+    }
     usePasses.getState().startCompute(sat.noradId)
     // Defer off the click handler so the panel paints its "COMPUTING…" state.
     const timer = setTimeout(() => {
-      const result = predictPasses(satrec, usePasses.getState().observer, simClock.get().epochMs, WINDOW_HOURS)
-      usePasses.getState().setResults(sat.noradId, result)
+      const startMs = simClock.get().epochMs
+      const result = predictPasses(satrec, usePasses.getState().observer, startMs, WINDOW_HOURS)
+      usePasses.getState().setResults(sat.noradId, result, startMs)
     }, 10)
     return () => clearTimeout(timer)
-  }, [sat, observer])
+  }, [sat, observer, windowExpired])
 
   if (!sat) return null
 
-  const epochMs = epochMin * 60_000
   const shownIndex =
     selectedPass ?? passes.findIndex((p) => p.losMs >= epochMs)
   const shown = shownIndex >= 0 ? passes[shownIndex] : undefined
@@ -51,6 +61,9 @@ export function PassesPanel() {
       {computing && <div className="passes-empty">COMPUTING…</div>}
       {!computing && passes.length === 0 && (
         <div className="passes-empty">NO PASSES ABOVE 5° FOR THIS OBSERVER</div>
+      )}
+      {!computing && passes.length > 0 && !shown && (
+        <div className="passes-empty">WINDOW ELAPSED — RECOMPUTING…</div>
       )}
       {!computing && shown && (
         <>
