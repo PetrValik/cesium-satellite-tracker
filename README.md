@@ -35,6 +35,10 @@ A working real-time satellite tracker: 12,000+ objects propagated with SGP4 in a
 - **Pass prediction** — AOS/LOS windows (bisection-refined to ~1 s) for a configurable observer over the next 24 h, drawn on a polar az/el sky plot; one click jumps sim time to the pass.
 - **Runs without a Cesium Ion token** — falls back to OpenStreetMap imagery + ellipsoid terrain; with `VITE_CESIUM_TOKEN` set you get Cesium World Terrain.
 - **Runs without network** — a committed TLE seed (12,653 records) boots the API offline; live data refreshes stale-while-revalidate with a 6 h TTL and per-group failure cooldown.
+- **Multi-domain ops modes** — MFD-style tabs switch the HUD between ORBITAL, MARITIME, and AIRSPACE. Clicking any object on the globe jumps to its domain.
+- **Live aircraft (ADS-B)** — OpenSky `/states/all` polling (anonymous works out of the box; a free OpenSky account via `OPENSKY_CLIENT_ID`/`OPENSKY_CLIENT_SECRET` speeds polling to 60 s), ~10k aircraft colored by altitude band, dead-reckoned between polls.
+- **Live ships (AIS)** — aisstream.io WebSocket ingest (free key via `AISSTREAM_API_KEY` in `apps/api/.env`, see `.env.example`); vessels colored by type, dead-reckoned along their course. Without a key the panel shows AIS OFFLINE.
+- **Infra overlays** — 26 launch sites and 45 major ports as toggleable markers with zoom-in labels.
 
 ## Architecture
 
