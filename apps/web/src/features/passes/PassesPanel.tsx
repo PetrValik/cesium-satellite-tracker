@@ -12,7 +12,6 @@ export function PassesPanel() {
   const sat = useCatalog((s) => (s.selectedId === null ? undefined : s.byId.get(s.selectedId)))
   const observer = usePasses((s) => s.observer)
   const passes = usePasses((s) => s.passes)
-  const computedFor = usePasses((s) => s.computedFor)
   const computing = usePasses((s) => s.computing)
   const selectedPass = usePasses((s) => s.selectedPass)
   const selectPass = usePasses((s) => s.selectPass)
@@ -24,7 +23,9 @@ export function PassesPanel() {
       usePasses.getState().clear()
       return
     }
-    if (computedFor === sat.noradId) return
+    // Read computedFor via getState(): keeping it out of the deps means the
+    // startCompute() below can't retrigger this effect and cancel its own timer.
+    if (usePasses.getState().computedFor === sat.noradId) return
     const satrec = createSatrec(sat.tle1, sat.tle2)
     if (!satrec) return
     usePasses.getState().startCompute(sat.noradId)
@@ -34,7 +35,7 @@ export function PassesPanel() {
       usePasses.getState().setResults(sat.noradId, result)
     }, 10)
     return () => clearTimeout(timer)
-  }, [sat, computedFor, observer])
+  }, [sat, observer])
 
   if (!sat) return null
 
