@@ -1,22 +1,468 @@
-/* Fullscreen layout */
-html, body, #root {
-  width: 100%;
+/* Functional baseline — the ORBITAL OPS design pass will replace tokens/skins. */
+
+:root {
+  --bg-space: #06090f;
+  --hairline: rgba(255, 255, 255, 0.08);
+  --amber: #ffb454;
+  --cyan: #6ee7ff;
+  --text: #d7dde6;
+  --text-dim: #7b8494;
+  --panel-bg: rgba(6, 9, 15, 0.82);
+  --mono: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
   height: 100%;
   margin: 0;
-  padding: 0;
+}
+
+body {
+  background: var(--bg-space);
+  color: var(--text);
+  font-family: var(--mono);
   overflow: hidden;
 }
 
-/* Cesium container */
-.globe-container {
+.app-root,
+.globe-root {
+  position: absolute;
+  inset: 0;
+}
+
+.globe-root .cesium-viewer,
+.globe-root .cesium-widget,
+.globe-root .cesium-widget canvas {
   width: 100%;
   height: 100%;
 }
 
-/* Ensure Cesium canvas fills container */
-.cesium-viewer,
-.cesium-widget,
-.cesium-widget canvas {
+.hud-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.hud-layer > * {
+  pointer-events: auto;
+}
+
+/* --- panels --- */
+.hud-panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--hairline);
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.hud-title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.hud-button {
+  background: transparent;
+  border: 1px solid var(--hairline);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.hud-button:hover {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.hud-input {
   width: 100%;
-  height: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--hairline);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 6px 8px;
+  letter-spacing: 0.06em;
+}
+
+/* --- status line --- */
+.status-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  gap: 24px;
+  padding: 8px 16px;
+  background: linear-gradient(rgba(6, 9, 15, 0.9), rgba(6, 9, 15, 0));
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+
+.status-brand {
+  color: var(--amber);
+  font-weight: 700;
+}
+
+.status-item {
+  color: var(--text-dim);
+}
+
+.status-offline {
+  color: #f87171;
+}
+
+/* --- catalog --- */
+.catalog-panel {
+  position: absolute;
+  top: 48px;
+  left: 12px;
+  width: 250px;
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+}
+
+.group-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.group-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 2px;
+  cursor: pointer;
+  letter-spacing: 0.08em;
+}
+
+.group-row.is-active {
+  color: var(--text);
+}
+
+.group-indicator {
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--hairline);
+  flex: none;
+}
+
+.group-row.is-active .group-indicator {
+  background: var(--amber);
+  border-color: var(--amber);
+}
+
+.group-name {
+  flex: 1;
+  text-align: left;
+}
+
+.group-count {
+  color: var(--text-dim);
+}
+
+.stale-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #f87171;
+  margin-left: 5px;
+  vertical-align: middle;
+}
+
+/* --- search --- */
+.search-box {
+  position: relative;
+}
+
+.search-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  background: var(--bg-space);
+  border: 1px solid var(--hairline);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.search-result {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 6px 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.search-result:hover {
+  background: rgba(255, 180, 84, 0.12);
+}
+
+.search-norad {
+  color: var(--text-dim);
+}
+
+/* --- right stack: telemetry + passes --- */
+.right-stack {
+  position: absolute;
+  top: 48px;
+  right: 12px;
+  width: 264px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  pointer-events: auto;
+}
+
+.telemetry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.telemetry-name {
+  color: var(--amber);
+  font-size: 14px;
+  margin: 4px 0 10px;
+  letter-spacing: 0.04em;
+}
+
+.telemetry-grid {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 4px 8px;
+  margin: 0;
+  font-size: 11px;
+}
+
+.telemetry-grid dt {
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+}
+
+.telemetry-grid dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- transport bar --- */
+.transport-bar {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+}
+
+.transport-rates {
+  display: flex;
+  gap: 4px;
+}
+
+.rate-button.is-active {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.transport-scrub {
+  width: 180px;
+  accent-color: var(--amber);
+}
+
+.transport-utc {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  letter-spacing: 0.06em;
+}
+
+/* --- passes + sky plot --- */
+.passes-empty {
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  padding: 10px 0;
+}
+
+.observer-editor {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.observer-label {
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
+.observer-input {
+  width: 64px;
+  padding: 4px 6px;
+}
+
+.sky-plot {
+  display: block;
+  width: 100%;
+  max-width: 230px;
+  margin: 4px auto 8px;
+}
+
+.sky-ring {
+  fill: none;
+  stroke: var(--hairline);
+  stroke-width: 1;
+}
+
+.sky-label {
+  fill: var(--text-dim);
+  font-size: 9px;
+  font-family: var(--mono);
+}
+
+.sky-track {
+  fill: none;
+  stroke: var(--cyan);
+  stroke-width: 1.5;
+}
+
+.sky-aos {
+  fill: var(--amber);
+}
+
+.sky-los {
+  fill: none;
+  stroke: var(--amber);
+  stroke-width: 1;
+}
+
+.sky-live {
+  fill: #ffffff;
+  stroke: var(--amber);
+  stroke-width: 2;
+}
+
+.pass-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.pass-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pass-list li.is-active .pass-row {
+  color: var(--amber);
+}
+
+.pass-row {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 4px 2px;
+  cursor: pointer;
+}
+
+.pass-goto {
+  padding: 1px 6px;
+}
+
+/* --- overlays --- */
+.boot-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: var(--bg-space);
+}
+
+.boot-text {
+  color: var(--amber);
+  letter-spacing: 0.4em;
+  font-size: 14px;
+  animation: boot-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes boot-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.engine-error {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  gap: 8px;
+  color: var(--text);
+}
+
+.engine-error h1 {
+  color: #f87171;
+  letter-spacing: 0.3em;
+  font-size: 18px;
+}
+
+/* --- cesium chrome --- */
+.cesium-credits {
+  position: absolute;
+  bottom: 2px;
+  right: 6px;
+  z-index: 5;
+  font-size: 9px;
+  opacity: 0.5;
+}
+
+.cesium-credits a {
+  color: var(--text-dim);
 }
