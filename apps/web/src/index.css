@@ -269,6 +269,72 @@ body {
   }
 }
 
+/* ---- ops mode tabs (top center) ------------------------------ */
+
+.mode-tabs {
+  position: absolute;
+  top: 38px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  pointer-events: auto;
+}
+
+.mode-tab {
+  padding: 5px 16px;
+  letter-spacing: var(--ls-wide);
+  color: var(--text-dim);
+  background: var(--panel-bg);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
+}
+
+.mode-tab.is-active {
+  color: var(--amber);
+  border-color: var(--amber-outline);
+  box-shadow: 0 0 8px var(--amber-glow), inset 0 -2px 0 var(--amber);
+}
+
+/* ---- live domain readouts ------------------------------------ */
+
+.live-count {
+  color: var(--text);
+  font-size: var(--fs-data-lg, 13px);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--ls-label-tight);
+  margin: 2px 0 8px;
+}
+
+.live-meta {
+  color: var(--text-dim);
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+  margin-bottom: 6px;
+}
+
+.infra-title {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* ship-type + infra indicator hues (match the layer colors) */
+.group-indicator.ship-cargo { background: var(--cyan); border-color: var(--cyan); }
+.group-indicator.ship-tanker { background: var(--amber); border-color: var(--amber); }
+.group-indicator.ship-passenger { background: #c084fc; border-color: #c084fc; }
+.group-indicator.ship-fishing { background: #7dd87d; border-color: #7dd87d; }
+.group-indicator.ship-highspeed { background: #f0f4f8; border-color: #f0f4f8; }
+.group-indicator.ship-other { background: #8a93a3; border-color: #8a93a3; }
+.group-row.is-active .group-indicator.infra-port { background: var(--cyan); border-color: var(--cyan); }
+
+.ship-type.ship-cargo { color: var(--cyan); }
+.ship-type.ship-tanker { color: var(--amber); }
+.ship-type.ship-passenger { color: #c084fc; }
+.ship-type.ship-fishing { color: #7dd87d; }
+.ship-type.ship-highspeed { color: #f0f4f8; }
+.ship-type.ship-other { color: #8a93a3; }
+
 /* ---- catalog rail (left) ------------------------------------ */
 
 .catalog-panel {

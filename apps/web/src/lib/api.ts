@@ -1,11 +1,17 @@
 import {
+  AircraftListSchema,
   GroupListSchema,
   HealthSchema,
+  LiveStatusSchema,
   SatelliteListSchema,
   SatelliteSchema,
+  ShipListSchema,
+  type Aircraft,
   type GroupInfo,
   type Health,
+  type LiveStatus,
   type Satellite,
+  type Ship,
 } from '@orbital-ops/shared'
 
 export class ApiError extends Error {
@@ -50,4 +56,7 @@ export const api = {
     get(`/satellites/search?q=${encodeURIComponent(q)}`, SatelliteListSchema),
   satellite: (noradId: number): Promise<Satellite> =>
     get(`/satellites/${noradId}`, SatelliteSchema),
+  ships: (): Promise<Ship[]> => get('/ships', ShipListSchema),
+  aircraft: (): Promise<Aircraft[]> => get('/aircraft', AircraftListSchema),
+  liveStatus: (): Promise<LiveStatus> => get('/live/status', LiveStatusSchema),
 }
