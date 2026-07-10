@@ -57,18 +57,35 @@ export function GlobeView() {
     let selectedName = ''
     let trackAnchorMs = 0
     let trackPeriodMs = 0
+    let groundAnchorMs = 0
+    let lastGroundWall = 0
+
+    const GROUND_SAMPLES = 128
+    // At high warp the ground window would slide every frame; cap the
+    // recompute rate (a full resample is ~1 ms of SGP4 on the main thread).
+    const GROUND_REFRESH_MIN_WALL_MS = 100
+
+    /**
+     * Sliding ground-track window [now − 0.15 P, now + 0.85 P]: refreshed
+     * every sample-interval of sim time, so the trail continuously recedes
+     * behind the satellite while new path grows ahead of it.
+     */
+    const refreshGround = (epochMs: number) => {
+      if (!selectedSatrec) return
+      const periodMs = orbitalPeriodMinutes(selectedSatrec) * 60_000
+      const track = sampleOrbitTrack(selectedSatrec, epochMs - periodMs * 0.15, GROUND_SAMPLES)
+      tracking.setGroundTrack(track.groundTrack)
+      groundAnchorMs = epochMs
+    }
 
     const refreshTrack = (epochMs: number) => {
       if (!selectedSatrec) return
-      const periodMs = orbitalPeriodMinutes(selectedSatrec) * 60_000
-      // Closed orbit ring in the inertial frame (rotated by GMST at render
-      // time) + ground track sampled slightly into the past so a rewinding
-      // satellite stays on its path.
+      // Closed orbit ring in the inertial frame; rotated by GMST at render time.
       const ring = sampleOrbitRingEci(selectedSatrec, epochMs)
-      const track = sampleOrbitTrack(selectedSatrec, epochMs - periodMs * 0.15)
-      tracking.setTrack({ ringEciKm: ring.eciKm, groundTrack: track.groundTrack })
+      tracking.setOrbitRing(ring.eciKm)
+      refreshGround(epochMs)
       trackAnchorMs = epochMs
-      trackPeriodMs = periodMs
+      trackPeriodMs = orbitalPeriodMinutes(selectedSatrec) * 60_000
     }
 
     /** Sampled window is stale once sim time drifts past either margin. */
@@ -185,9 +202,17 @@ export function GlobeView() {
       constellation.advance(epochMs)
 
       if (selectedSatrec) {
-        // Re-sample the orbit path when sim time leaves the sampled window.
+        // Re-sample the orbit ring when sim time leaves the sampled window;
+        // slide the ground-track window one sample at a time in between.
         if (trackNeedsRefresh(epochMs)) {
           refreshTrack(epochMs)
+        } else if (
+          trackPeriodMs > 0 &&
+          Math.abs(epochMs - groundAnchorMs) > trackPeriodMs / GROUND_SAMPLES &&
+          now - lastGroundWall > GROUND_REFRESH_MIN_WALL_MS
+        ) {
+          refreshGround(epochMs)
+          lastGroundWall = now
         }
         const live = propagateEcef(selectedSatrec, epochMs)
         if (live) {

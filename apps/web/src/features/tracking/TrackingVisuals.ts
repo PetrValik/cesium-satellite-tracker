@@ -13,6 +13,12 @@ import type { Entity, Viewer } from 'cesium'
 const ORBIT_COLOR = Color.fromCssColorString('#ffb454').withAlpha(0.8) // signal amber
 const GROUND_TRACK_COLOR = Color.fromCssColorString('#6ee7ff').withAlpha(0.6) // cyan
 const MARKER_COLOR = Color.fromCssColorString('#ffb454')
+/**
+ * The ground track floats slightly above the ellipsoid: enough to never
+ * z-fight the globe surface, far too little to read as "in orbit" (the
+ * tracked satellites fly hundreds of km up).
+ */
+const GROUND_TRACK_HEIGHT_M = 10_000
 const FOOTPRINT_FILL = Color.fromCssColorString('#ffb454').withAlpha(0.06)
 const FOOTPRINT_OUTLINE = Color.fromCssColorString('#ffb454').withAlpha(0.35)
 /** Up-right of the marker (screen space: +x right, -y up). */
@@ -35,8 +41,9 @@ export class TrackingVisuals {
   private readonly _orbit: Entity
   private readonly _marker: Entity
   private readonly _footprint: Entity
-  /** One polyline entity per antimeridian-split segment; rebuilt per setTrack. */
-  private readonly _groundSegments: Entity[] = []
+  private readonly _ground: Entity
+  /** Sliding-window ground track positions, mutated in place by setGroundTrack. */
+  private _groundPositions: Cartesian3[] = []
 
   // Live state read by the callback properties each frame.
   private readonly _livePosition = new Cartesian3()
@@ -93,6 +100,22 @@ export class TrackingVisuals {
       },
     })
 
+    this._ground = viewer.entities.add({
+      show: false,
+      polyline: {
+        // Dynamic positions: the window slides with sim time (setGroundTrack).
+        // 3D Cartesian points, so the antimeridian needs no special casing.
+        positions: new CallbackProperty(() => this._groundPositions, false),
+        width: 1,
+        material: GROUND_TRACK_COLOR,
+        // Straight chords between samples: at 128 samples per revolution a
+        // chord dips only ~2 km below the surface arc, well inside the 10 km
+        // float height — and unlike GEODESIC it costs no per-frame
+        // re-tessellation on a dynamic polyline.
+        arcType: ArcType.NONE,
+      },
+    })
+
     this._footprint = viewer.entities.add({
       show: false,
       position: new CallbackPositionProperty(
@@ -114,15 +137,12 @@ export class TrackingVisuals {
   }
 
   /**
-   * Install the precomputed track for the selected satellite.
-   * ringEciKm: closed orbit ring in ECI kilometers (one revolution, last
-   * sample repeating the first); rotated by GMST at render time.
-   * groundTrack: [lonDeg,latDeg,...] pairs over one period.
+   * Install the orbit ring for the selected satellite: one closed revolution
+   * in ECI kilometers (last sample repeating the first), rotated by GMST at
+   * render time.
    */
-  setTrack(payload: { ringEciKm: Float64Array; groundTrack: Float64Array }): void {
+  setOrbitRing(ringEciKm: Float64Array): void {
     if (this._isUnusable()) return
-
-    const { ringEciKm } = payload
     const usable =
       ringEciKm.length >= 6 && ringEciKm.length % 3 === 0 && Number.isFinite(ringEciKm[0])
     if (usable) {
@@ -137,8 +157,27 @@ export class TrackingVisuals {
       this._ringEciKm = null
       this._orbit.show = false
     }
+  }
 
-    this._rebuildGroundTrack(payload.groundTrack)
+  /**
+   * Replace the ground-track window: [lonDeg, latDeg] pairs. Called on a
+   * sim-time cadence so the trail recedes behind the satellite while new
+   * path grows ahead. Mutates the position pool in place; the dynamic
+   * polyline picks the change up on its next evaluation.
+   */
+  setGroundTrack(track: Float64Array): void {
+    if (this._isUnusable()) return
+    let count = 0
+    for (let i = 0; i + 1 < track.length; i += 2) {
+      const lon = track[i]
+      const lat = track[i + 1]
+      if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue
+      if (count === this._groundPositions.length) this._groundPositions.push(new Cartesian3())
+      Cartesian3.fromDegrees(lon, lat, GROUND_TRACK_HEIGHT_M, undefined, this._groundPositions[count])
+      count++
+    }
+    this._groundPositions.length = count
+    this._ground.show = count >= 2
   }
 
   /** Rotate the ECI ring into ECEF meters for the current GMST (in place). */
@@ -200,69 +239,23 @@ export class TrackingVisuals {
   clear(): void {
     if (this._isUnusable()) return
     this._ringEciKm = null
+    this._groundPositions.length = 0
     this._orbit.show = false
+    this._ground.show = false
     this._marker.show = false
     this._footprint.show = false
-    this._removeGroundSegments()
   }
 
   dispose(): void {
-    if (this._viewer.isDestroyed()) {
-      this._groundSegments.length = 0
-      return
-    }
-    this._removeGroundSegments()
+    if (this._viewer.isDestroyed()) return
     const entities = this._viewer.entities
     entities.remove(this._orbit)
+    entities.remove(this._ground)
     entities.remove(this._marker)
     entities.remove(this._footprint)
   }
 
   private _isUnusable(): boolean {
     return this._viewer.isDestroyed()
-  }
-
-  private _rebuildGroundTrack(track: Float64Array): void {
-    this._removeGroundSegments()
-
-    // Split at the antimeridian: a longitude jump of more than 180° between
-    // consecutive samples means the track wrapped, and a single polyline
-    // would smear across the whole map.
-    let segment: Cartesian3[] = []
-    let prevLon = Number.NaN
-    for (let i = 0; i + 1 < track.length; i += 2) {
-      const lon = track[i]
-      const lat = track[i + 1]
-      if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue
-      if (!Number.isNaN(prevLon) && Math.abs(lon - prevLon) > 180) {
-        this._addGroundSegment(segment)
-        segment = []
-      }
-      segment.push(Cartesian3.fromDegrees(lon, lat, 0))
-      prevLon = lon
-    }
-    this._addGroundSegment(segment)
-  }
-
-  private _addGroundSegment(positions: Cartesian3[]): void {
-    if (positions.length < 2) return
-    this._groundSegments.push(
-      this._viewer.entities.add({
-        polyline: {
-          positions,
-          width: 1,
-          material: GROUND_TRACK_COLOR,
-          clampToGround: true,
-        },
-      }),
-    )
-  }
-
-  private _removeGroundSegments(): void {
-    const entities = this._viewer.entities
-    for (const segment of this._groundSegments) {
-      entities.remove(segment)
-    }
-    this._groundSegments.length = 0
   }
 }
