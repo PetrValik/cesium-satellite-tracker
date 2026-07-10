@@ -1,220 +1,125 @@
 <div align="center">
   <img src="docs/images/logo.png" alt="Cesium Satellite Tracker" width="120"/>
-  <h1>Cesium Satellite Tracker</h1>
+  <h1>ORBITAL OPS</h1>
   <p><em>Real-time satellite tracking and 3D Earth visualization</em></p>
+
+  <p>
+    <img src="https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white" alt="React 19"/>
+    <img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white" alt="TypeScript 5.9"/>
+    <img src="https://img.shields.io/badge/CesiumJS-1.138-48B881?logo=cesium&logoColor=white" alt="CesiumJS 1.138"/>
+    <img src="https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white" alt="Vite 7"/>
+    <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License"/>
+  </p>
 </div>
 
-A React + CesiumJS application for real-time satellite tracking, orbital visualization, and geospatial analysis. Built to explore satellite operations, orbital mechanics, and 3D Earth visualization techniques relevant to aerospace and defense applications.
+A working real-time satellite tracker: 12,000+ objects propagated with SGP4 in a Web Worker and rendered as GPU point primitives on a CesiumJS globe, fed by a caching TLE backend with a committed offline seed. Time is simulated — play, warp up to ×3600, rewind, scrub — and pass predictions come with a polar sky plot.
 
 ## Screenshots
 
 <div align="center">
-  <img src="docs/images/screenshot-globe.png" alt="Global View" width="800"/>
-  <p><em>3D Earth visualization with Cesium World Terrain</em></p>
+  <img src="docs/images/orbital-ops-overview.png" alt="Full catalog — 12,408 tracked objects" width="900"/>
+  <p><em>Full catalog: 12,408 objects including the Starlink shell, day/night terminator, orbit-class colors</em></p>
 </div>
 
 <div align="center">
-  <img src="docs/images/screenshot-terrain.png" alt="Mountain Terrain" width="800"/>
-  <p><em>High-resolution terrain rendering with elevation data</em></p>
+  <img src="docs/images/orbital-ops-tracking.png" alt="Tracking ISS with pass predictions" width="900"/>
+  <p><em>Tracking ISS (ZARYA): live telemetry, orbit path, ground track, visibility footprint, and 24 h pass predictions with a polar sky plot</em></p>
 </div>
 
-<div align="center">
-  <img src="docs/images/screenshot-buildings.png" alt="Prague 3D Buildings" width="800"/>
-  <p><em>OSM 3D Buildings layer - Prague city center</em></p>
-</div>
+## Features
 
-<div align="center">
-  <img src="docs/images/screenshot-city.png" alt="Urban Detail" width="800"/>
-  <p><em>Detailed urban visualization with photorealistic imagery</em></p>
-</div>
+- **Live TLE catalog** — 12 curated CelesTrak groups (stations, Starlink, OneWeb, GNSS constellations, GEO belt, science, …) served by a small caching API; searchable by name or NORAD id.
+- **Whole-constellation propagation** — a Web Worker runs batch SGP4 (satellite.js) and streams ECEF positions as transferable `Float32Array`s; the globe renders them as a single `PointPrimitiveCollection` colored by orbit class (LEO / MEO / GEO / HEO).
+- **Selected-satellite tracking** — per-frame propagation on the main thread for smooth motion, orbit path, antimeridian-safe ground track, visibility footprint, and a live telemetry panel (altitude, velocity, position, period, inclination).
+- **Simulation time** — one sim clock drives everything: play/pause, warp ×1 – ×3600, rewind, ±12 h scrub, and a NOW reset. The Cesium sun/terminator follows sim time.
+- **Pass prediction** — AOS/LOS windows (bisection-refined to ~1 s) for a configurable observer over the next 24 h, drawn on a polar az/el sky plot; one click jumps sim time to the pass.
+- **Runs without a Cesium Ion token** — falls back to OpenStreetMap imagery + ellipsoid terrain; with `VITE_CESIUM_TOKEN` set you get Cesium World Terrain.
+- **Runs without network** — a committed TLE seed (12,653 records) boots the API offline; live data refreshes stale-while-revalidate with a 6 h TTL and per-group failure cooldown.
 
-## Project Goals
+## Architecture
 
-This project serves as a technical foundation for understanding:
-- Real-time satellite position propagation using Two-Line Element (TLE) sets
-- 3D visualization of Low Earth Orbit (LEO), Medium Earth Orbit (MEO), and Geostationary (GEO) satellites
-- Ground track computation and coverage analysis
-- Integration of geospatial data with orbital mechanics
-- Performance optimization for tracking large satellite constellations
+npm-workspaces monorepo:
 
-## Current Implementation
+```
+apps/
+├── api/                  # Hono + node:sqlite TLE cache on :8787
+│   ├── src/
+│   │   ├── app.ts        # endpoints (injectable db + fetcher → testable)
+│   │   ├── celestrak.ts  # GP fetcher + 3-line TLE parser (Alpha-5 aware)
+│   │   ├── db.ts         # sqlite schema & queries (zero native deps)
+│   │   ├── refresh.ts    # stale-while-revalidate, TTL, failure cooldown
+│   │   └── seed.ts       # loads the committed snapshot on first boot
+│   └── seed/*.tle        # offline TLE snapshot
+└── web/                  # Vite + React 19 + CesiumJS
+    └── src/
+        ├── core/
+        │   ├── engine/   # non-React Cesium wrapper (token-free fallback)
+        │   └── sim/      # simulation clock (Zustand) — the time authority
+        ├── workers/      # propagation.worker.ts — batch SGP4 → Float32Array
+        ├── features/     # catalog, constellation, tracking, passes, timebar
+        └── lib/          # orbital math, API client, formatters
+packages/
+└── shared/               # zod schemas — the API contract
+```
 
-**Core Infrastructure:**
-- React 18 + TypeScript + Vite development environment
-- CesiumJS 3D globe with Cesium World Terrain
-- OSM 3D Buildings layer for urban visualization
-- Minimal UI (Cesium default widgets disabled for custom controls)
-- Modular Cesium service layer (viewer creation, camera control, layer management)
+**Data flow:** CelesTrak → API cache (SQLite, 6 h TTL, seed fallback) → `/api/*` → catalog store → worker SGP4 → ECEF positions → point primitives. The selected satellite is propagated on the main thread every frame; the rest of the constellation ticks at 1–4 Hz.
 
-**Camera & Visualization:**
-- Initial view positioned over Prague (testing ground for 3D building visibility)
-- Terrain-aware rendering with elevation data
-- Configurable camera orientations (heading, pitch, roll)
-
-## Development Roadmap
-
-### Phase 1: Core Satellite Tracking
-- [ ] **TLE Data Integration**: Research and implement satellite orbital data source (TLE format)
-- [ ] **Orbital Propagation**: Implement SGP4/SDP4 algorithm for position/velocity computation
-- [ ] **Single Satellite Visualization**: Render satellite entity with animated real-time position
-- [ ] **Orbit Path Rendering**: Display ground track (past trail) and predicted future orbit
-- [ ] **Time Control System**: Simulation time manipulation (real-time, acceleration, reverse)
-- [ ] **Performance Foundation**: Establish update throttling and rendering optimization patterns
-
-### Phase 2: Multi-Satellite Support & Optimization
-- [ ] **Constellation Architecture**: Support for tracking multiple satellites simultaneously
-- [ ] **Efficient Data Management**: Implement caching strategies for orbital data
-- [ ] **Level-of-Detail (LOD)**: Optimize rendering based on camera distance and visible satellites
-- [ ] **Update Throttling**: Smart position update scheduling to maintain frame rate
-- [ ] **Memory Management**: Proper cleanup and resource disposal for large datasets
-- [ ] **Grouping & Filtering**: Organize satellites by type, constellation, or custom categories
-- [ ] **Search & Selection**: Fast lookup and selection mechanisms
-
-### Phase 3: Analysis & Coverage Tools
-- [ ] **Ground Station Integration**: Add observer positions with visibility calculations
-- [ ] **Coverage Visualization**: Satellite footprint and visibility zone rendering
-- [ ] **Pass Prediction**: Calculate visibility windows for ground locations
-- [ ] **Proximity Detection**: Basic conjunction analysis for close approaches
-- [ ] **Performance Profiling**: Identify and resolve bottlenecks in large-scale scenarios
-
-### Phase 4: Geospatial Integration
-- [ ] **Custom Overlays**: Point, line, and polygon annotations on globe
-- [ ] **GeoJSON Support**: Import/export standard geospatial data formats
-- [ ] **Measurement Tools**: Distance, area, and elevation calculations
-- [ ] **Layer Management**: Efficient handling of multiple data layers
-
-### Phase 5: User Experience & Polish
-- [ ] **Interface Design**: Clean, functional UI for controls and data display
-- [ ] **Camera Controls**: Smart navigation and tracking features
-- [ ] **Responsive Design**: Cross-device compatibility
-- [ ] **Error Handling**: Graceful degradation and user feedback
-- [ ] **Documentation**: Usage guides and code documentation
-
-## Technical Stack
-
-**Frontend:**
-- React 19.2 (functional components, hooks)
-- TypeScript 5.9 (strict type checking)
-- Vite 7.3 (fast HMR, optimized builds)
-
-**3D Visualization:**
-- CesiumJS 1.138 (WebGL-based 3D globe)
-- Cesium Ion (terrain, imagery streaming)
-
-**Orbital Mechanics (Planned):**
-- SGP4/SDP4 propagation algorithms
-- TLE (Two-Line Element) data format
-- Research: Data source selection (public APIs, local datasets)
-- Research: Real-time vs. cached prediction strategies
-
-**Future Considerations:**
-- IndexedDB for offline data persistence
-- Web Workers for computation-heavy orbital calculations
-- WebAssembly for performance-critical propagation code
-- GeoJSON standard for interoperability
-
-## Use Cases
-
-**Educational:**
-- Learn orbital mechanics and satellite operations
-- Visualize how different orbit types behave (LEO vs GEO)
-- Understand ground track patterns and coverage
-
-**Operational Planning:**
-- Track International Space Station (ISS) passes
-- Monitor satellite constellation deployments
-- Plan ground station visibility windows
-
-**Situational Awareness:**
-- Visualize satellite positions relative to ground infrastructure
-- Identify potential conflicts in orbital space
-- Analyze coverage gaps in communication networks
+**API:** `GET /api/health` · `/api/groups` · `/api/satellites?group=` · `/api/satellites/search?q=` · `/api/satellites/:noradId`
 
 ## Setup & Development
 
 ### Prerequisites
-- Node.js 18+ and npm
-- Cesium Ion access token (free tier available at [cesium.com/ion](https://cesium.com/ion))
+- Node.js **≥ 22.5** (`node:sqlite` is built in — no native dependencies)
+- No Cesium token required (optional: free Ion token for world terrain)
 
-### Installation
+### Run it
 ```bash
-# Clone the repository
 git clone <repository-url>
 cd cesium-satellite-tracker
+npm install          # also copies Cesium static assets
 
-# Install dependencies (automatically copies Cesium assets)
-npm install
-
-# Create .env file with your Cesium Ion token
-echo "VITE_CESIUM_TOKEN=your_token_here" > .env
+npm run dev          # api on :8787 + web on :5173, proxied together
 ```
 
-**Note:** The `postinstall` script automatically copies Cesium assets from `node_modules` to `public/cesium/` after installation. The `public/cesium/` directory is auto-generated and should not be committed to git.
-
-### Development
+Optional Ion terrain:
 ```bash
-# Start development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
+echo "VITE_CESIUM_TOKEN=your_token_here" > apps/web/.env
 ```
 
-### Project Structure
+### Other commands
+```bash
+npm run build              # typecheck + build all workspaces
+npm test                   # 52 tests: API endpoints, orbital math, stores, schemas
+npm run lint               # eslint across the monorepo
+npm run seed:make -w apps/api   # refresh the committed TLE snapshot from CelesTrak
 ```
-src/
-├── components/
-│   └── Globe.tsx           # Main Cesium viewer component
-├── cesium/
-│   ├── createViewer.ts     # Viewer initialization
-│   ├── setDefaultView.ts   # Camera configuration
-│   └── addOsmBuildings.ts  # 3D buildings layer
-├── App.tsx                 # Root component
-├── main.tsx               # Application entry point
-└── index.css              # Global styles
-```
+
+## Testing
+
+- **`apps/api`** — endpoint tests against an in-memory SQLite DB with an injected fake fetcher and clock: TTL behavior, stale-while-revalidate, offline 503s, failure cooldown, search escaping, Alpha-5 NORAD ids.
+- **`apps/web`** — orbital math pinned to a real ISS TLE (period, altitude, velocity, ground-track bounds, Prague pass windows), sim-clock semantics, formatters.
+- **`packages/shared`** — schema round-trips.
 
 ## Learning Resources
 
-**CesiumJS:**
-- [CesiumJS Tutorials](https://cesium.com/learn/cesiumjs-learn/)
-- [API Reference](https://cesium.com/learn/cesiumjs/ref-doc/)
-- [Sandcastle Examples](https://sandcastle.cesium.com/)
-
-**Orbital Mechanics:**
-- [Two-Line Element Format](https://en.wikipedia.org/wiki/Two-line_element_set)
-- [SGP4 Algorithm](https://en.wikipedia.org/wiki/Simplified_perturbations_models)
-- [satellite.js](https://github.com/shashwatak/satellite-js) - JavaScript implementation
-
-**Data Sources:**
-- [Celestrak](https://celestrak.org/) - Satellite TLE data
-- [Space-Track.org](https://www.space-track.org/) - Official catalog
-
-## Development Notes
-
-This project is being developed as a hands-on exploration of satellite tracking technology and geospatial visualization. It demonstrates:
-- Practical application of orbital mechanics principles
-- Integration of real-time data with 3D visualization
-- Modern React development patterns with TypeScript
-- Performance considerations for real-time applications
-
-The roadmap focuses on features relevant to operational satellite tracking systems, with emphasis on multi-satellite support, coverage analysis, and situational awareness tools commonly used in aerospace and defense contexts.
+- [CesiumJS Tutorials](https://cesium.com/learn/cesiumjs-learn/) · [Sandcastle Examples](https://sandcastle.cesium.com/)
+- [Two-Line Element Format](https://en.wikipedia.org/wiki/Two-line_element_set) · [SGP4 Algorithm](https://en.wikipedia.org/wiki/Simplified_perturbations_models)
+- [satellite.js](https://github.com/shashwatak/satellite-js) — the propagation library used here
+- [CelesTrak](https://celestrak.org/) — TLE data source (please fetch politely; that's what the caching API is for)
 
 ## License
 
-This project is for educational and portfolio purposes.
+Released under the [MIT License](LICENSE). Built for educational and portfolio purposes.
 
 ## Acknowledgments
 
 - **CesiumJS** for providing an excellent 3D geospatial platform
 - **Cesium Ion** for terrain and imagery data
-- **OpenStreetMap** contributors for building data
+- **OpenStreetMap** contributors for imagery tiles
 - **CelesTrak** for satellite TLE data
+- **satellite.js** for the SGP4 implementation
 - Icon design by Alena Klimecká
 
 ---
 
-**Status:** Active Development | **Last Updated:** February 2026
+**Status:** Active Development | **Last Updated:** July 2026
