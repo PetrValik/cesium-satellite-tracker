@@ -11,8 +11,10 @@ import {
   classifyOrbit,
   createSatrec,
   footprintRadiusM,
+  gmstAt,
   orbitalPeriodMinutes,
   propagateEcef,
+  sampleOrbitRingEci,
   sampleOrbitTrack,
 } from '../lib/orbital'
 import type { SatRec } from 'satellite.js'
@@ -59,11 +61,14 @@ export function GlobeView() {
     const refreshTrack = (epochMs: number) => {
       if (!selectedSatrec) return
       const periodMs = orbitalPeriodMinutes(selectedSatrec) * 60_000
-      // Sample slightly into the past so a rewinding satellite stays on its path.
+      // Closed orbit ring in the inertial frame (rotated by GMST at render
+      // time) + ground track sampled slightly into the past so a rewinding
+      // satellite stays on its path.
+      const ring = sampleOrbitRingEci(selectedSatrec, epochMs)
       const track = sampleOrbitTrack(selectedSatrec, epochMs - periodMs * 0.15)
-      tracking.setTrack(track)
+      tracking.setTrack({ ringEciKm: ring.eciKm, groundTrack: track.groundTrack })
       trackAnchorMs = epochMs
-      trackPeriodMs = track.periodMinutes * 60_000
+      trackPeriodMs = periodMs
     }
 
     /** Sampled window is stale once sim time drifts past either margin. */
@@ -98,16 +103,25 @@ export function GlobeView() {
     let lastTickWall = 0
     let workerReady = false
 
+    // Ticks are requested ahead of display time by one tick interval of sim
+    // time, so the interpolation window [prev, curr] usually brackets "now"
+    // and advance() interpolates instead of extrapolating.
+    const requestTick = () => {
+      tickBusy = true
+      const { epochMs, rate, playing } = simClock.get()
+      const leadMs = playing ? tickIntervalMs(rate) * rate : 0
+      post({ type: 'tick', epochMs: epochMs + leadMs })
+    }
+
     worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
       const msg = e.data
       if (msg.type === 'ready') {
         constellation.setCatalog(msg.noradIds, msg.classes)
         constellation.setSelected(useCatalog.getState().selectedId)
         workerReady = true
-        tickBusy = true
-        post({ type: 'tick', epochMs: simClock.get().epochMs })
+        requestTick()
       } else if (msg.type === 'positions') {
-        constellation.updatePositions(msg.positions)
+        constellation.updatePositions(msg.positions, msg.epochMs)
         tickBusy = false
         lastTickWall = performance.now()
       } else if (msg.type === 'error') {
@@ -129,8 +143,7 @@ export function GlobeView() {
       if (!workerReady || tickBusy) return
       const { rate } = simClock.get()
       if (performance.now() - lastTickWall < tickIntervalMs(rate)) return
-      tickBusy = true
-      post({ type: 'tick', epochMs: simClock.get().epochMs })
+      requestTick()
     }, 100)
 
     // --- store subscriptions (transient; no React re-renders involved) ---
@@ -143,9 +156,12 @@ export function GlobeView() {
       if (state.selectedId !== prev.selectedId) applySelection(state.selectedId)
     })
 
-    // Scrub/NOW jumps: force an immediate constellation re-tick.
+    // Scrub/NOW jumps: drop the interpolation pair and force a fresh tick.
     const unsubClock = simClock.subscribe((state, prev) => {
-      if (state.jumpNonce !== prev.jumpNonce) lastTickWall = 0
+      if (state.jumpNonce !== prev.jumpNonce) {
+        constellation.onTimeJump()
+        lastTickWall = 0
+      }
     })
 
     // --- picking ---
@@ -166,6 +182,7 @@ export function GlobeView() {
       simClock.get().advance(dt)
       const epochMs = simClock.get().epochMs
       syncViewerClock(viewer, epochMs)
+      constellation.advance(epochMs)
 
       if (selectedSatrec) {
         // Re-sample the orbit path when sim time leaves the sampled window.
@@ -178,6 +195,7 @@ export function GlobeView() {
             positionEcefM: live.positionEcefM,
             footprintRadiusM: footprintRadiusM(live.altKm),
             name: selectedName,
+            gmstRad: gmstAt(epochMs),
           })
           if (now - lastTelemetry > TELEMETRY_INTERVAL_MS) {
             lastTelemetry = now

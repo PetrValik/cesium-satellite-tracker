@@ -25,22 +25,45 @@ const CLASS_STYLES: Record<OrbitClass, ClassStyle> = {
 const STYLE_BY_CLASS: readonly ClassStyle[] = ORBIT_CLASSES.map((c) => CLASS_STYLES[c])
 const FALLBACK_STYLE = STYLE_BY_CLASS[0]
 
-// Module-scope scratch: updatePositions runs every sim tick for thousands of
-// points and must not allocate.
+// Module-scope scratch: advance() runs every frame for thousands of points
+// and must not allocate.
 const scratchPosition = new Cartesian3()
 
 /**
+ * Below this arc between samples, a straight lerp is indistinguishable from
+ * the spherical arc (sagitta < ~2 km at LEO radius) and much cheaper.
+ */
+const LERP_ANGLE_RAD = 0.02
+
+/**
+ * Extrapolation bounds for the interpolation parameter: slightly outside the
+ * sample pair is fine (slerp continues along the same arc while the next
+ * worker tick is in flight), but far outside would swing points wildly.
+ */
+const T_MIN = -1
+const T_MAX = 2
+
+/**
  * The whole-catalog satellite layer: one PointPrimitiveCollection, one point
- * per satellite, positions mutated in place each tick. The selected satellite
- * is rendered by TrackingVisuals (smooth, per-frame), so its point here is
- * hidden — the 1 Hz tick cadence would otherwise show it trailing the
- * per-frame marker.
+ * per satellite. The worker delivers position snapshots at 1–4 Hz; between
+ * snapshots `advance()` interpolates every point each frame along the sphere
+ * (slerp on direction, lerp on radius) — orbits are near-circular, so the
+ * spherical arc between two samples closely follows the true path and the
+ * constellation moves smoothly even under heavy time warp. The selected
+ * satellite is rendered by TrackingVisuals (exact, per-frame), so its point
+ * here is hidden.
  */
 export class ConstellationLayer {
   private readonly _scene: Scene
   private readonly _points: PointPrimitiveCollection
   private readonly _indexByNoradId = new Map<number, number>()
   private _selectedNoradId: number | null = null
+
+  // Two most recent worker snapshots; advance() interpolates between them.
+  private _prevPositions: Float32Array | null = null
+  private _prevEpochMs = 0
+  private _currPositions: Float32Array | null = null
+  private _currEpochMs = 0
 
   constructor(scene: Scene) {
     this._scene = scene
@@ -58,6 +81,8 @@ export class ConstellationLayer {
     points.removeAll()
     this._indexByNoradId.clear()
     this._selectedNoradId = null
+    this._prevPositions = null
+    this._currPositions = null
     for (let i = 0; i < noradIds.length; i++) {
       const style = STYLE_BY_CLASS[classes[i]] ?? FALLBACK_STYLE
       points.add({
@@ -82,23 +107,100 @@ export class ConstellationLayer {
    * Scene/PointPrimitive; verified in cesium 1.138) and retains no reference
    * to what we pass in.
    */
-  updatePositions(positions: Float32Array): void {
+  /**
+   * Accept a worker snapshot for sim time `epochMs`. Rendering happens in
+   * `advance()`; this only rotates the sample pair. The worker transfers a
+   * fresh buffer per tick, so retaining the reference is safe.
+   */
+  updatePositions(positions: Float32Array, epochMs: number): void {
+    if (this._currPositions !== null && this._currPositions.length === positions.length) {
+      this._prevPositions = this._currPositions
+      this._prevEpochMs = this._currEpochMs
+    } else {
+      this._prevPositions = null
+    }
+    this._currPositions = positions
+    this._currEpochMs = epochMs
+  }
+
+  /** Forget the sample pair (sim time jumped; interpolating across it would sweep points). */
+  onTimeJump(): void {
+    this._prevPositions = null
+  }
+
+  /**
+   * Per-frame render: place every point at sim time `simEpochMs` by
+   * interpolating between the two latest snapshots. Zero allocations: one
+   * shared scratch Cartesian3 is reused — safe because PointPrimitive's
+   * `position` setter clones the value into its internal Cartesian3
+   * (verified in cesium 1.138) and retains no reference to what we pass in.
+   */
+  advance(simEpochMs: number): void {
     if (this._isUnusable()) return
+    const curr = this._currPositions
+    if (curr === null) return
     const points = this._points
-    const count = Math.min(points.length, (positions.length / 3) | 0)
+    const count = Math.min(points.length, (curr.length / 3) | 0)
     const selectedIndex =
       this._selectedNoradId === null
         ? -1
         : (this._indexByNoradId.get(this._selectedNoradId) ?? -1)
+
+    const prev = this._prevPositions
+    const span = this._currEpochMs - this._prevEpochMs
+    const interpolate = prev !== null && span !== 0
+    let t = 0
+    if (interpolate) {
+      t = (simEpochMs - this._prevEpochMs) / span
+      if (t < T_MIN) t = T_MIN
+      else if (t > T_MAX) t = T_MAX
+    }
+
     for (let i = 0; i < count; i++) {
       const point = points.get(i)
-      const x = positions[3 * i]
-      const y = positions[3 * i + 1]
-      const z = positions[3 * i + 2]
-      if (Number.isNaN(x) || Number.isNaN(y) || Number.isNaN(z)) {
+      const bx = curr[3 * i]
+      const by = curr[3 * i + 1]
+      const bz = curr[3 * i + 2]
+      if (Number.isNaN(bx) || Number.isNaN(by) || Number.isNaN(bz)) {
         point.show = false
         continue
       }
+
+      let x = bx
+      let y = by
+      let z = bz
+      if (interpolate) {
+        const ax = prev![3 * i]
+        const ay = prev![3 * i + 1]
+        const az = prev![3 * i + 2]
+        if (!Number.isNaN(ax) && !Number.isNaN(ay) && !Number.isNaN(az)) {
+          const ra = Math.sqrt(ax * ax + ay * ay + az * az)
+          const rb = Math.sqrt(bx * bx + by * by + bz * bz)
+          if (ra > 0 && rb > 0) {
+            let cos = (ax * bx + ay * by + az * bz) / (ra * rb)
+            if (cos > 1) cos = 1
+            else if (cos < -1) cos = -1
+            const theta = Math.acos(cos)
+            if (theta < LERP_ANGLE_RAD) {
+              x = ax + (bx - ax) * t
+              y = ay + (by - ay) * t
+              z = az + (bz - az) * t
+            } else {
+              // Slerp the direction, lerp the radius: for a near-circular
+              // orbit this follows the true arc; t outside [0,1] continues
+              // along the same arc (graceful extrapolation between ticks).
+              const sinTheta = Math.sin(theta)
+              const wa = Math.sin((1 - t) * theta) / (sinTheta * ra)
+              const wb = Math.sin(t * theta) / (sinTheta * rb)
+              const r = ra + (rb - ra) * t
+              x = (ax * wa + bx * wb) * r
+              y = (ay * wa + by * wb) * r
+              z = (az * wa + bz * wb) * r
+            }
+          }
+        }
+      }
+
       scratchPosition.x = x
       scratchPosition.y = y
       scratchPosition.z = z

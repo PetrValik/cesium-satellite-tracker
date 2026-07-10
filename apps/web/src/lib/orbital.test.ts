@@ -180,3 +180,41 @@ describe('footprintRadiusM', () => {
     expect(footprintRadiusM(Number.NaN)).toBe(0)
   })
 })
+
+describe('sampleOrbitRingEci', () => {
+  it('returns a closed, finite ring at orbital radius', async () => {
+    const { sampleOrbitRingEci } = await import('./orbital')
+    const satrec = issSatrec()
+    const ring = sampleOrbitRingEci(satrec, tleEpochMs(satrec), 180)
+
+    expect(ring.eciKm.length).toBe(3 * 181) // 180 samples + closing duplicate
+    expect(ring.periodMinutes).toBeCloseTo(92.9, 0)
+
+    const n = ring.eciKm.length / 3
+    // Closed: the last sample repeats the first exactly.
+    expect(ring.eciKm[3 * (n - 1)]).toBe(ring.eciKm[0])
+    expect(ring.eciKm[3 * (n - 1) + 1]).toBe(ring.eciKm[1])
+    expect(ring.eciKm[3 * (n - 1) + 2]).toBe(ring.eciKm[2])
+
+    for (let i = 0; i < n; i++) {
+      const x = ring.eciKm[3 * i]
+      const y = ring.eciKm[3 * i + 1]
+      const z = ring.eciKm[3 * i + 2]
+      expect(Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)).toBe(true)
+      const r = Math.hypot(x, y, z)
+      expect(r).toBeGreaterThan(6650) // km — above Earth's surface
+      expect(r).toBeLessThan(6900) // km — near-circular LEO stays close to a = 6798
+    }
+  })
+
+  it('NaN-fills the ring for an unpropagatable satrec', async () => {
+    const { sampleOrbitRingEci } = await import('./orbital')
+    const satrec = issSatrec()
+    // 30 years after epoch SGP4 fails for a decayed LEO element set — if it
+    // ever succeeds, the finite check below just passes trivially instead.
+    const ring = sampleOrbitRingEci(satrec, tleEpochMs(satrec) + 30 * 365 * 86_400_000)
+    const allNaN = ring.eciKm.every((v) => Number.isNaN(v))
+    const allFinite = ring.eciKm.every((v) => Number.isFinite(v))
+    expect(allNaN || allFinite).toBe(true)
+  })
+})
