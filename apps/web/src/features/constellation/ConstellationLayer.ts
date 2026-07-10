@@ -4,16 +4,13 @@ import { ORBIT_CLASSES } from '../../lib/protocol'
 import type { OrbitClass } from '../../lib/protocol'
 
 interface ClassStyle {
-  /** Slightly translucent fill used for the resting state. */
+  /** Slightly translucent fill. */
   color: Color
-  /** Full-alpha fill used while the satellite is selected. */
-  colorSolid: Color
   pixelSize: number
 }
 
 function makeStyle(css: string, pixelSize: number): ClassStyle {
-  const solid = Color.fromCssColorString(css)
-  return { color: solid.withAlpha(0.9), colorSolid: solid, pixelSize }
+  return { color: Color.fromCssColorString(css).withAlpha(0.9), pixelSize }
 }
 
 /** Design tokens per orbit class. */
@@ -28,25 +25,20 @@ const CLASS_STYLES: Record<OrbitClass, ClassStyle> = {
 const STYLE_BY_CLASS: readonly ClassStyle[] = ORBIT_CLASSES.map((c) => CLASS_STYLES[c])
 const FALLBACK_STYLE = STYLE_BY_CLASS[0]
 
-const SELECTED_PIXEL_SIZE = 6
-const SELECTED_OUTLINE_COLOR = Color.fromCssColorString('#ffe8c7') // white-amber, full alpha
-const SELECTED_OUTLINE_WIDTH = 2
-
 // Module-scope scratch: updatePositions runs every sim tick for thousands of
 // points and must not allocate.
 const scratchPosition = new Cartesian3()
 
 /**
  * The whole-catalog satellite layer: one PointPrimitiveCollection, one point
- * per satellite, positions mutated in place each tick. Rich visuals for the
- * selected satellite live elsewhere (TrackingVisuals) — this layer only
- * restyles the selected point.
+ * per satellite, positions mutated in place each tick. The selected satellite
+ * is rendered by TrackingVisuals (smooth, per-frame), so its point here is
+ * hidden — the 1 Hz tick cadence would otherwise show it trailing the
+ * per-frame marker.
  */
 export class ConstellationLayer {
   private readonly _scene: Scene
   private readonly _points: PointPrimitiveCollection
-  /** Orbit-class byte per point, in collection (= init) order. */
-  private _classes: Uint8Array = new Uint8Array(0)
   private readonly _indexByNoradId = new Map<number, number>()
   private _selectedNoradId: number | null = null
 
@@ -66,8 +58,6 @@ export class ConstellationLayer {
     points.removeAll()
     this._indexByNoradId.clear()
     this._selectedNoradId = null
-    // Own copy: the worker/caller may reuse or transfer its buffer.
-    this._classes = classes.slice()
     for (let i = 0; i < noradIds.length; i++) {
       const style = STYLE_BY_CLASS[classes[i]] ?? FALLBACK_STYLE
       points.add({
@@ -96,6 +86,10 @@ export class ConstellationLayer {
     if (this._isUnusable()) return
     const points = this._points
     const count = Math.min(points.length, (positions.length / 3) | 0)
+    const selectedIndex =
+      this._selectedNoradId === null
+        ? -1
+        : (this._indexByNoradId.get(this._selectedNoradId) ?? -1)
     for (let i = 0; i < count; i++) {
       const point = points.get(i)
       const x = positions[3 * i]
@@ -109,35 +103,22 @@ export class ConstellationLayer {
       scratchPosition.y = y
       scratchPosition.z = z
       point.position = scratchPosition
-      point.show = true
+      point.show = i !== selectedIndex
     }
   }
 
-  /** Highlight one satellite (or none); the previous one gets its class style back. */
+  /**
+   * Mark one satellite (or none) as selected. Its layer point is hidden —
+   * TrackingVisuals draws the smooth per-frame marker in its place. The
+   * previously selected point reappears on the next tick.
+   */
   setSelected(noradId: number | null): void {
     if (this._isUnusable()) return
     if (noradId === this._selectedNoradId) return
-
-    if (this._selectedNoradId !== null) {
-      const prev = this._pointFor(this._selectedNoradId)
-      if (prev !== undefined) {
-        const style = this._styleFor(this._selectedNoradId)
-        prev.pixelSize = style.pixelSize
-        prev.color = style.color
-        prev.outlineWidth = 0
-      }
-    }
-
     this._selectedNoradId = noradId
     if (noradId !== null) {
       const point = this._pointFor(noradId)
-      if (point !== undefined) {
-        const style = this._styleFor(noradId)
-        point.pixelSize = SELECTED_PIXEL_SIZE
-        point.color = style.colorSolid
-        point.outlineColor = SELECTED_OUTLINE_COLOR
-        point.outlineWidth = SELECTED_OUTLINE_WIDTH
-      }
+      if (point !== undefined) point.show = false
     }
   }
 
@@ -180,11 +161,5 @@ export class ConstellationLayer {
     const index = this._indexByNoradId.get(noradId)
     if (index === undefined || index >= this._points.length) return undefined
     return this._points.get(index)
-  }
-
-  private _styleFor(noradId: number): ClassStyle {
-    const index = this._indexByNoradId.get(noradId)
-    if (index === undefined || index >= this._classes.length) return FALLBACK_STYLE
-    return STYLE_BY_CLASS[this._classes[index]] ?? FALLBACK_STYLE
   }
 }
