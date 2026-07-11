@@ -1,3 +1,4 @@
+/** Aircraft slice routes: snapshot of the latest OpenSky state vectors. */
 import { Hono } from 'hono'
 import type { AdsbFeed } from './adsb.ts'
 

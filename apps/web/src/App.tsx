@@ -1,3 +1,8 @@
+/**
+ * Application shell: fullscreen globe + HUD chrome. The right stack swaps
+ * per ops mode (orbital → telemetry+passes, maritime → vessel, airspace →
+ * aircraft); live-feed polling starts once here.
+ */
 import { useEffect } from 'react'
 import { GlobeView } from './app/GlobeView'
 import { HelpButton, HelpOverlay } from './app/HelpOverlay'

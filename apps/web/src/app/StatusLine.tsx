@@ -1,3 +1,4 @@
+/** Top status strip: brand, tracked-object count, TLE age, sim state. Read-only HUD. */
 import { useSimClock } from '../core/sim/simClock'
 import { useCatalog } from '../features/catalog/catalogStore'
 import { formatAge, formatCount, formatRate } from '../lib/format'
