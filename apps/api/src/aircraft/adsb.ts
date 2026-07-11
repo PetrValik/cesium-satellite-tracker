@@ -142,7 +142,7 @@ export class AdsbFeed {
   }
 
   /** Latest state vectors in API order, capped at `limit`. */
-  snapshot(limit = 8_000): Aircraft[] {
+  snapshot(limit = 20_000): Aircraft[] {
     return this.aircraft.slice(0, limit)
   }
 

@@ -64,39 +64,6 @@ const MIN_COS_LAT = 0.01
 // not allocate. Safe to share because Billboard's `position` setter clones
 // the value into its internal Cartesian3 (verified in cesium 1.138).
 const scratchPosition = new Cartesian3()
-// Scratch for the world-space travel axis. Safe to share for the same
-// reason: both the Billboard constructor and the `alignedAxis` setter clone
-// the value into the billboard's internal Cartesian3 (cesium 1.138).
-const scratchAxis = new Cartesian3()
-
-/**
- * ECEF unit vector of horizontal travel for a bearing (degrees clockwise
- * from north) at (latDeg, lonDeg), using the local ENU basis
- *   east  = (-sinLon, cosLon, 0)
- *   north = (-sinLat·cosLon, -sinLat·sinLon, cosLat)
- *   dir   = east·sin(brg) + north·cos(brg)
- * east and north are orthonormal, so dir is unit-length by construction.
- */
-function travelAxis(
-  latDeg: number,
-  lonDeg: number,
-  bearingDeg: number,
-  result: Cartesian3,
-): Cartesian3 {
-  const latRad = latDeg * RAD_PER_DEG
-  const lonRad = lonDeg * RAD_PER_DEG
-  const bearingRad = bearingDeg * RAD_PER_DEG
-  const sinLat = Math.sin(latRad)
-  const cosLat = Math.cos(latRad)
-  const sinLon = Math.sin(lonRad)
-  const cosLon = Math.cos(lonRad)
-  const sinBrg = Math.sin(bearingRad)
-  const cosBrg = Math.cos(bearingRad)
-  result.x = -sinLon * sinBrg - sinLat * cosLon * cosBrg
-  result.y = cosLon * sinBrg - sinLat * sinLon * cosBrg
-  result.z = cosLat * cosBrg
-  return result
-}
 
 /** Color for a state vector (chosen at set time, not re-derived per frame). */
 function colorFor(aircraft: Aircraft, mode: AircraftColorMode): Color {
@@ -119,13 +86,12 @@ function colorFor(aircraft: Aircraft, mode: AircraftColorMode): Color {
  * `advance()` dead-reckons every aircraft with a usable velocity/track along
  * its track (cheap equirectangular step) plus vertical rate on altitude,
  * gated to at most once per 250 ms and clamped to 15 minutes of
- * extrapolation. Each glyph points along its reported track via world-space
- * Billboard.alignedAxis (the ECEF travel direction; sprite-up follows its
- * screen projection, which Cesium recomputes every frame, so the heading
- * reads correctly from any camera angle — no per-frame rotation work).
- * Null-track aircraft use alignedAxis = ZERO (plain screen-aligned);
- * rotation stays at its default 0 everywhere. The selected aircraft's
- * billboard is hidden — a dedicated marker elsewhere represents it.
+ * extrapolation. Each glyph carries a FIXED screen rotation by its reported
+ * track, set once per feed snapshot — moving the camera never re-orients an
+ * icon (explicit user preference over world-projected orientation, which
+ * visibly spins while orbiting a followed aircraft). Null-track aircraft
+ * render upright. The selected aircraft's billboard is hidden — a dedicated
+ * marker elsewhere represents it.
  *
  * Update strategy: when a poll delivers exactly the working set we already
  * hold (same ICAO set), billboards and dead-reckoning state are updated in
@@ -166,7 +132,7 @@ export class AircraftLayer {
    * positions/velocities/colors; otherwise the collection is rebuilt.
    * An empty array clears the layer. Selection survives either path (the
    * selected billboard stays hidden as long as its ICAO is present).
-   * alignedAxis is computed here, at store time only: dead reckoning never
+   * Rotation is set here, at store time only: dead reckoning never
    * changes the track, so advance() carries no orientation work at all.
    */
   setAircraft(aircraft: Aircraft[]): void {
@@ -188,10 +154,7 @@ export class AircraftLayer {
         )
         billboard.position = scratchPosition
         // No reported track → ZERO means plain screen-aligned.
-        billboard.alignedAxis =
-          state.trackDeg === null
-            ? Cartesian3.ZERO
-            : travelAxis(state.latDeg, state.lonDeg, state.trackDeg, scratchAxis)
+        billboard.rotation = state.trackDeg === null ? 0 : -state.trackDeg * RAD_PER_DEG
         billboard.show = state.icao24 !== this._selectedIcao24
       }
       return
@@ -226,10 +189,7 @@ export class AircraftLayer {
         color: colorFor(state, this._colorMode),
         scaleByDistance: SCALE_BY_DISTANCE,
         // No reported track → ZERO means plain screen-aligned.
-        alignedAxis:
-          state.trackDeg === null
-            ? Cartesian3.ZERO
-            : travelAxis(state.latDeg, state.lonDeg, state.trackDeg, scratchAxis),
+        rotation: state.trackDeg === null ? 0 : -state.trackDeg * RAD_PER_DEG,
         eyeOffset: EYE_OFFSET,
         show: state.icao24 !== this._selectedIcao24,
       })
@@ -246,7 +206,7 @@ export class AircraftLayer {
    * Dead-reckon every reckonable aircraft to wall-clock `wallNowMs`. No-op
    * unless at least 250 ms elapsed since the last pass; extrapolation is
    * clamped to 15 minutes past the state vector. Orientation costs nothing
-   * here: alignedAxis is world-space and set once per feed snapshot, and
+   * here: rotation is fixed at store time, and
    * Cesium re-projects it to the screen every frame on its own. Zero
    * allocations: one shared scratch Cartesian3 is reused for every
    * billboard.
