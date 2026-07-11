@@ -1,12 +1,12 @@
 import { useEffect } from 'react'
 import { GlobeView } from './app/GlobeView'
 import { HelpButton, HelpOverlay } from './app/HelpOverlay'
+import { LeftRail } from './app/LeftRail'
 import { ModeTabs } from './app/ModeTabs'
 import { StatusLine } from './app/StatusLine'
 import { useMode } from './core/ui/modeStore'
 import { AircraftPanel } from './features/airspace/AircraftPanel'
 import { startAircraftPolling } from './features/airspace/aircraftStore'
-import { CatalogPanel } from './features/catalog/CatalogPanel'
 import { useCatalog } from './features/catalog/catalogStore'
 import { ShipPanel } from './features/maritime/ShipPanel'
 import { startShipsPolling } from './features/maritime/shipsStore'
@@ -31,7 +31,7 @@ export default function App() {
       <div className="hud-layer">
         <StatusLine />
         <ModeTabs />
-        <CatalogPanel />
+        <LeftRail />
         <div className="right-stack">
           {mode === 'orbital' && (
             <>

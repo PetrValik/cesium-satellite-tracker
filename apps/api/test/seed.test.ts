@@ -2,9 +2,9 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { Db } from '../src/db.ts'
-import { GROUPS } from '../src/groups.ts'
-import { loadSeed } from '../src/seed.ts'
+import { Db } from '../src/satellites/db.ts'
+import { GROUPS } from '../src/satellites/groups.ts'
+import { loadSeed } from '../src/satellites/seed.ts'
 import { tleFor } from './helpers.ts'
 
 describe('loadSeed', () => {

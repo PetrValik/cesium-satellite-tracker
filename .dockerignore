@@ -1,0 +1,11 @@
+node_modules
+**/node_modules
+**/dist
+apps/web/public/cesium
+apps/api/data
+.git
+docs
+*.md
+.env
+**/.env
+.claude
