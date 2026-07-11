@@ -38,7 +38,10 @@ export function rateLimit(options: RateLimitOptions = {}) {
 
     let ip = 'unknown'
     if (trustProxy) {
-      ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+      // Take the LAST hop: that is the address our own proxy appended.
+      // Earlier entries are client-supplied and would let an attacker pick
+      // an arbitrary bucket (limit bypass) or exhaust a victim's.
+      ip = c.req.header('x-forwarded-for')?.split(',').at(-1)?.trim() || 'unknown'
     } else {
       try {
         ip = getConnInfo(c).remote.address ?? 'unknown'
