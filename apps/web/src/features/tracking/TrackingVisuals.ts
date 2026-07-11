@@ -9,6 +9,7 @@ import {
   ConstantProperty,
 } from 'cesium'
 import type { Entity, Viewer } from 'cesium'
+import { satelliteIcon } from '../../core/engine/icons'
 
 const ORBIT_COLOR = Color.fromCssColorString('#ffb454').withAlpha(0.8) // signal amber
 const GROUND_TRACK_COLOR = Color.fromCssColorString('#6ee7ff').withAlpha(0.6) // cyan
@@ -86,9 +87,14 @@ export class TrackingVisuals {
         (_time, result) => Cartesian3.clone(this._livePosition, result),
         false,
       ),
-      point: {
-        pixelSize: 8,
+      // Selected-satellite marker: the shared satellite sprite (64 px canvas,
+      // BillboardGraphics.image accepts it directly), amber-tinted. Fixed
+      // scale 0.5 ≈ 32 px — this is the one satellite the user is inspecting,
+      // so no distance scaling.
+      billboard: {
+        image: satelliteIcon(),
         color: MARKER_COLOR,
+        scale: 0.5,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
       label: {
