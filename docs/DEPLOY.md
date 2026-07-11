@@ -52,13 +52,37 @@ control.
 | `TRUST_PROXY` | `0` | trust `X-Forwarded-For` (behind reverse proxy only) |
 | `ALLOWED_ORIGINS` | — | comma-separated CORS allowlist; unset = same-origin only |
 
-## 4. Updating
+## 4. Automatic deploys (GitHub Actions)
+
+Every push to `main` runs `.github/workflows/deploy.yml`: lint + build +
+tests → Docker image → GHCR → SSH to the server → `docker compose pull &&
+up -d` → health check. Manual runs via *workflow_dispatch*.
+
+One-time setup:
+
+1. **Server**: clone the repo (or just copy `docker-compose.yml` + `.env`)
+   into a directory, e.g. `/opt/orbital-ops`. If the GHCR package is private,
+   `docker login ghcr.io -u <user> -p <PAT with read:packages>` once.
+2. **GitHub repo → Settings → Environments**: create `production`.
+3. **Secrets** (repo or environment scope):
+
+   | Secret | Value |
+   |---|---|
+   | `DEPLOY_HOST` | server IP / hostname |
+   | `DEPLOY_USER` | SSH user (needs docker group) |
+   | `DEPLOY_SSH_KEY` | private key for that user (dedicated deploy key) |
+   | `DEPLOY_PATH` | e.g. `/opt/orbital-ops` (where docker-compose.yml lives) |
+
+The live-feed keys stay in the server-side `.env` next to
+`docker-compose.yml` — they never enter GitHub.
+
+## 5. Manual updating
 
 ```bash
 git pull && docker compose up -d --build
 ```
 
-## 5. Notes
+## 6. Notes
 
 - The seed refreshes automatically from CelesTrak (stale-while-revalidate,
   6 h TTL, per-group failure cooldown) — no cron needed.
