@@ -26,6 +26,11 @@ A real-time, multi-domain ops console on a CesiumJS globe: 12,000+ satellites pr
   <p><em>ORBITAL mode — tracking ISS (ZARYA): live telemetry, orbit path, ground track, visibility footprint, and 24 h pass predictions with a polar sky plot</em></p>
 </div>
 
+<div align="center">
+  <img src="docs/images/orbital-ops-airspace.png" alt="AIRSPACE mode — camera locked onto a live flight over Italy" width="900"/>
+  <p><em>AIRSPACE mode — camera follow-locked onto a live Ryanair flight over the Tyrrhenian Sea; aircraft icons rotate with their track and are colored by altitude band</em></p>
+</div>
+
 ## Features
 
 - **Three OPS modes** — MFD-style tabs (`1`/`2`/`3`) switch the HUD between **ORBITAL**, **MARITIME**, and **AIRSPACE**. Clicking any object on the globe jumps to its domain.
