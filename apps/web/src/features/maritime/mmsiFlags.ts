@@ -1,0 +1,83 @@
+/**
+ * Flag state from the MMSI's Maritime Identification Digits (first three
+ * digits, ITU assignment). Deliberately partial: the major flag states and
+ * open registries that cover the overwhelming share of AIS traffic; unknown
+ * prefixes return null and the panel just omits the row.
+ */
+
+const MID_COUNTRIES: Record<number, string> = {
+  201: 'Albania', 203: 'Austria', 205: 'Belgium', 209: 'Cyprus', 210: 'Cyprus',
+  211: 'Germany', 212: 'Cyprus', 215: 'Malta', 218: 'Germany', 219: 'Denmark',
+  220: 'Denmark', 224: 'Spain', 225: 'Spain', 226: 'France', 227: 'France',
+  228: 'France', 229: 'Malta', 230: 'Finland', 231: 'Faroe Islands', 232: 'UK',
+  233: 'UK', 234: 'UK', 235: 'UK', 236: 'Gibraltar', 237: 'Greece',
+  238: 'Croatia', 239: 'Greece', 240: 'Greece', 241: 'Greece', 242: 'Morocco',
+  243: 'Hungary', 244: 'Netherlands', 245: 'Netherlands', 246: 'Netherlands',
+  247: 'Italy', 248: 'Malta', 249: 'Malta', 250: 'Ireland', 251: 'Iceland',
+  253: 'Luxembourg', 255: 'Madeira (PT)', 256: 'Malta', 257: 'Norway',
+  258: 'Norway', 259: 'Norway', 261: 'Poland', 263: 'Portugal', 264: 'Romania',
+  265: 'Sweden', 266: 'Sweden', 267: 'Slovakia', 268: 'San Marino',
+  269: 'Switzerland', 271: 'Turkey', 272: 'Ukraine', 273: 'Russia',
+  274: 'North Macedonia', 275: 'Latvia', 276: 'Estonia', 277: 'Lithuania',
+  278: 'Slovenia', 279: 'Serbia', 301: 'Anguilla', 303: 'USA (Alaska)',
+  304: 'Antigua & Barbuda', 305: 'Antigua & Barbuda', 306: 'Curaçao',
+  308: 'Bahamas', 309: 'Bahamas', 310: 'Bermuda', 311: 'Bahamas',
+  312: 'Belize', 314: 'Barbados', 316: 'Canada', 319: 'Cayman Islands',
+  325: 'Dominica', 327: 'Dominican Rep.', 329: 'Guadeloupe', 330: 'Grenada',
+  331: 'Greenland', 332: 'Guatemala', 334: 'Honduras', 336: 'Haiti',
+  338: 'USA', 339: 'Jamaica', 341: 'St. Kitts & Nevis', 343: 'St. Lucia',
+  345: 'Mexico', 347: 'Martinique', 348: 'Montserrat', 350: 'Nicaragua',
+  351: 'Panama', 352: 'Panama', 353: 'Panama', 354: 'Panama', 355: 'Panama',
+  356: 'Panama', 357: 'Panama', 358: 'Puerto Rico', 359: 'El Salvador',
+  361: 'St. Pierre & Miquelon', 362: 'Trinidad & Tobago', 364: 'Turks & Caicos',
+  366: 'USA', 367: 'USA', 368: 'USA', 369: 'USA', 370: 'Panama',
+  371: 'Panama', 372: 'Panama', 373: 'Panama', 374: 'Panama', 375: 'St. Vincent',
+  376: 'St. Vincent', 377: 'St. Vincent', 378: 'British Virgin Is.',
+  379: 'US Virgin Is.', 401: 'Afghanistan', 403: 'Saudi Arabia',
+  405: 'Bangladesh', 408: 'Bahrain', 410: 'Bhutan', 412: 'China',
+  413: 'China', 414: 'China', 416: 'Taiwan', 417: 'Sri Lanka', 419: 'India',
+  422: 'Iran', 425: 'Iraq', 428: 'Israel', 431: 'Japan', 432: 'Japan',
+  434: 'Turkmenistan', 436: 'Kazakhstan', 437: 'Uzbekistan', 438: 'Jordan',
+  440: 'South Korea', 441: 'South Korea', 443: 'Palestine',
+  445: 'North Korea', 447: 'Kuwait', 450: 'Lebanon', 451: 'Kyrgyzstan',
+  453: 'Macao', 455: 'Maldives', 457: 'Mongolia', 459: 'Nepal', 461: 'Oman',
+  463: 'Pakistan', 466: 'Qatar', 468: 'Syria', 470: 'UAE', 471: 'UAE',
+  472: 'Tajikistan', 473: 'Yemen', 475: 'Yemen', 477: 'Hong Kong',
+  478: 'Bosnia & Herzegovina', 501: 'Adelie Land (FR)', 503: 'Australia',
+  506: 'Myanmar', 508: 'Brunei', 510: 'Micronesia', 511: 'Palau',
+  512: 'New Zealand', 514: 'Cambodia', 515: 'Cambodia', 516: 'Christmas Is.',
+  518: 'Cook Islands', 520: 'Fiji', 523: 'Cocos Islands', 525: 'Indonesia',
+  529: 'Kiribati', 531: 'Laos', 533: 'Malaysia', 536: 'N. Mariana Is.',
+  538: 'Marshall Islands', 540: 'New Caledonia', 542: 'Niue', 544: 'Nauru',
+  546: 'French Polynesia', 548: 'Philippines', 550: 'East Timor',
+  553: 'Papua New Guinea', 555: 'Pitcairn', 557: 'Solomon Islands',
+  559: 'American Samoa', 561: 'Samoa', 563: 'Singapore', 564: 'Singapore',
+  565: 'Singapore', 566: 'Singapore', 567: 'Thailand', 570: 'Tonga',
+  572: 'Tuvalu', 574: 'Vietnam', 576: 'Vanuatu', 577: 'Vanuatu',
+  578: 'Wallis & Futuna', 601: 'South Africa', 603: 'Angola', 605: 'Algeria',
+  607: 'St. Paul & Amsterdam', 608: 'Ascension', 609: 'Burundi',
+  610: 'Benin', 611: 'Botswana', 612: 'Cen. African Rep.', 613: 'Cameroon',
+  615: 'Congo', 616: 'Comoros', 617: 'Cabo Verde', 618: 'Crozet (FR)',
+  619: 'Ivory Coast', 620: 'Comoros', 621: 'Djibouti', 622: 'Egypt',
+  624: 'Ethiopia', 625: 'Eritrea', 626: 'Gabon', 627: 'Ghana',
+  629: 'Gambia', 630: 'Guinea-Bissau', 631: 'Eq. Guinea', 632: 'Guinea',
+  633: 'Burkina Faso', 634: 'Kenya', 635: 'Kerguelen (FR)', 636: 'Liberia',
+  637: 'Liberia', 638: 'South Sudan', 642: 'Libya', 644: 'Lesotho',
+  645: 'Mauritius', 647: 'Madagascar', 649: 'Mali', 650: 'Mozambique',
+  654: 'Mauritania', 655: 'Malawi', 656: 'Niger', 657: 'Nigeria',
+  659: 'Namibia', 660: 'Réunion (FR)', 661: 'Rwanda', 662: 'Sudan',
+  663: 'Senegal', 664: 'Seychelles', 665: 'St. Helena', 666: 'Somalia',
+  667: 'Sierra Leone', 668: 'São Tomé', 669: 'Eswatini', 670: 'Chad',
+  671: 'Togo', 672: 'Tunisia', 674: 'Tanzania', 675: 'Uganda',
+  676: 'DR Congo', 677: 'Tanzania', 678: 'Zambia', 679: 'Zimbabwe',
+  701: 'Argentina', 710: 'Brazil', 720: 'Bolivia', 725: 'Chile',
+  730: 'Colombia', 735: 'Ecuador', 740: 'Falkland Is.', 745: 'Guiana (FR)',
+  750: 'Guyana', 755: 'Paraguay', 760: 'Peru', 765: 'Suriname',
+  770: 'Uruguay', 775: 'Venezuela',
+}
+
+/** Flag state for an MMSI, or null when the prefix is unknown/non-ship. */
+export function flagStateOf(mmsi: number): string | null {
+  const mid = Math.floor(mmsi / 1_000_000)
+  return MID_COUNTRIES[mid] ?? null
+}

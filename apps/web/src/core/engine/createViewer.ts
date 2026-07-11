@@ -71,6 +71,10 @@ export function createOrbitalViewer(container: HTMLElement): Viewer {
 
   const scene = viewer.scene
   scene.globe.enableLighting = true // day/night terminator
+  // Occlude billboards/points behind the globe — Cesium's default (false)
+  // renders far-side objects through the planet. Surface-level icons carry a
+  // small camera-ward eyeOffset in their layers to avoid half-sinking.
+  scene.globe.depthTestAgainstTerrain = true
   scene.globe.showGroundAtmosphere = true
   if (scene.skyAtmosphere !== undefined) {
     scene.skyAtmosphere.show = true

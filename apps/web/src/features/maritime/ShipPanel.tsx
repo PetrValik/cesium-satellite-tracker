@@ -1,6 +1,7 @@
 import { FollowButton } from '../../core/ui/FollowButton'
 import { formatAge, formatDeg, formatLatLon } from '../../lib/format'
 import { useWallClock } from '../../lib/wallClock'
+import { flagStateOf } from './mmsiFlags'
 import { useShips } from './shipsStore'
 
 /** Info panel for the selected vessel (live AIS data, wall-clock based). */
@@ -28,6 +29,12 @@ export function ShipPanel() {
         <dl className="telemetry-grid">
           <dt>MMSI</dt>
           <dd>{ship.mmsi}</dd>
+          {flagStateOf(ship.mmsi) !== null && (
+            <>
+              <dt>FLAG</dt>
+              <dd>{flagStateOf(ship.mmsi)}</dd>
+            </>
+          )}
           <dt>TYPE</dt>
           <dd className={`ship-type ship-${ship.shipType}`}>{ship.shipType.toUpperCase()}</dd>
           <dt>SOG</dt>

@@ -325,8 +325,38 @@ body {
 .group-indicator.ship-passenger { background: #c084fc; border-color: #c084fc; }
 .group-indicator.ship-fishing { background: #7dd87d; border-color: #7dd87d; }
 .group-indicator.ship-highspeed { background: #f0f4f8; border-color: #f0f4f8; }
+.group-indicator.ship-military { background: #f87171; border-color: #f87171; }
 .group-indicator.ship-other { background: #8a93a3; border-color: #8a93a3; }
+
+/* aircraft categories */
+.group-indicator.cat-civil { background: var(--cyan); border-color: var(--cyan); }
+.group-indicator.cat-cargo { background: var(--amber); border-color: var(--amber); }
+.group-indicator.cat-military { background: #f87171; border-color: #f87171; }
+.ship-type.ship-military { color: #f87171; }
+.cat-label-civil { color: var(--cyan); }
+.cat-label-cargo { color: var(--amber); }
+.cat-label-military { color: #f87171; }
+
+.color-mode-row {
+  display: flex;
+  gap: 4px;
+  margin: 6px 0 8px;
+  align-items: center;
+}
+
+.color-mode-label {
+  color: var(--text-dim);
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+  margin-right: 4px;
+}
 .group-row.is-active .group-indicator.infra-port { background: var(--cyan); border-color: var(--cyan); }
+
+/* aircraft altitude bands (match AircraftLayer color coding) */
+.group-row.is-active .group-indicator.band-ground { background: #8a93a3; border-color: #8a93a3; }
+.group-row.is-active .group-indicator.band-low { background: #7dd87d; border-color: #7dd87d; }
+.group-row.is-active .group-indicator.band-mid { background: var(--cyan); border-color: var(--cyan); }
+.group-row.is-active .group-indicator.band-high { background: #f0f4f8; border-color: #f0f4f8; }
 
 .ship-type.ship-cargo { color: var(--cyan); }
 .ship-type.ship-tanker { color: var(--amber); }
@@ -841,6 +871,29 @@ body {
 
 .pass-goto {
   padding: 1px 6px;
+}
+
+/* ---- photo card (aircraft) -------------------------------------- */
+
+.photo-card {
+  margin: 0 0 10px;
+}
+
+.photo-card img {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--hairline);
+}
+
+.photo-card figcaption {
+  margin-top: 3px;
+  font-size: 9px;
+  letter-spacing: var(--ls-label-tight);
+  color: var(--text-dim);
+}
+
+.photo-card figcaption a {
+  color: var(--text-dim);
 }
 
 /* ---- follow + panel actions ------------------------------------ */

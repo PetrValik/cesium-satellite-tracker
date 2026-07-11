@@ -26,12 +26,14 @@ import { useFollow } from '../core/ui/followStore'
 import { ConstellationLayer } from '../features/constellation/ConstellationLayer'
 import { GroundTrackWindow } from '../features/tracking/GroundTrackWindow'
 import { TrackingVisuals } from '../features/tracking/TrackingVisuals'
+import { SHIP_TYPES } from '@orbital-ops/shared'
 import { AircraftLayer } from '../features/airspace/AircraftLayer'
-import { useAircraft } from '../features/airspace/aircraftStore'
+import { AIRCRAFT_CATEGORIES, categoryOf } from '../features/airspace/aircraftCategory'
+import { ALT_BANDS, bandOf, useAircraft, type AircraftState } from '../features/airspace/aircraftStore'
 import { LaunchSitesLayer } from '../features/infra/LaunchSitesLayer'
 import { PortsLayer } from '../features/infra/PortsLayer'
 import { ShipsLayer } from '../features/maritime/ShipsLayer'
-import { useShips } from '../features/maritime/shipsStore'
+import { useShips, type ShipsState } from '../features/maritime/shipsStore'
 import { useCatalog } from '../features/catalog/catalogStore'
 import { useTelemetry } from '../features/tracking/telemetryStore'
 import { useMode } from '../core/ui/modeStore'
@@ -86,16 +88,33 @@ export function GlobeView() {
     })
     const post = (msg: WorkerRequest) => worker.postMessage(msg)
 
-    // --- live domain layers: data + layer visibility ---
-    shipsLayer.setShips(useShips.getState().ships)
-    aircraftLayer.setAircraft(useAircraft.getState().aircraft)
+    // --- live domain layers: data (type/band filtered) + layer visibility ---
+    const filteredShips = (s: ShipsState) =>
+      s.activeTypes.size === SHIP_TYPES.length
+        ? s.ships
+        : s.ships.filter((ship) => s.activeTypes.has(ship.shipType))
+    const filteredAircraft = (s: AircraftState) => {
+      const allBands = s.activeBands.size === ALT_BANDS.length
+      const allCategories = s.activeCategories.size === AIRCRAFT_CATEGORIES.length
+      if (allBands && allCategories) return s.aircraft
+      return s.aircraft.filter(
+        (a) =>
+          (allBands || s.activeBands.has(bandOf(a))) &&
+          (allCategories || s.activeCategories.has(categoryOf(a))),
+      )
+    }
+
+    shipsLayer.setShips(filteredShips(useShips.getState()))
+    aircraftLayer.setAircraft(filteredAircraft(useAircraft.getState()))
     shipsLayer.setVisible(useMode.getState().shipsVisible)
     aircraftLayer.setVisible(useMode.getState().aircraftVisible)
     launchSitesLayer.setVisible(useMode.getState().launchSites)
     portsLayer.setVisible(useMode.getState().ports)
 
     const unsubShips = useShips.subscribe((state, prev) => {
-      if (state.ships !== prev.ships) shipsLayer.setShips(state.ships)
+      if (state.ships !== prev.ships || state.activeTypes !== prev.activeTypes) {
+        shipsLayer.setShips(filteredShips(state))
+      }
       if (state.selectedMmsi !== prev.selectedMmsi) {
         if (state.selectedMmsi !== null) {
           // Selecting a vessel locks the camera onto it (the ask: click → fly & ride).
@@ -106,8 +125,19 @@ export function GlobeView() {
         }
       }
     })
+    aircraftLayer.setColorMode(useAircraft.getState().colorMode)
     const unsubAircraft = useAircraft.subscribe((state, prev) => {
-      if (state.aircraft !== prev.aircraft) aircraftLayer.setAircraft(state.aircraft)
+      if (state.colorMode !== prev.colorMode) {
+        aircraftLayer.setColorMode(state.colorMode)
+        // Tints are applied at set time — re-feed to recolor.
+        aircraftLayer.setAircraft(filteredAircraft(state))
+      } else if (
+        state.aircraft !== prev.aircraft ||
+        state.activeBands !== prev.activeBands ||
+        state.activeCategories !== prev.activeCategories
+      ) {
+        aircraftLayer.setAircraft(filteredAircraft(state))
+      }
       if (state.selectedIcao !== prev.selectedIcao) {
         if (state.selectedIcao !== null) {
           useFollow.getState().setFollowing(true)

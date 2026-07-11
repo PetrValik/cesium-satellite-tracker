@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Ship, ShipType } from '@orbital-ops/shared'
+import { SHIP_TYPES, type Ship, type ShipType } from '@orbital-ops/shared'
 import { api, ApiError } from '../../lib/api'
 
 const POLL_MS = 10_000
@@ -11,10 +11,13 @@ export interface ShipsState {
   byMmsi: Map<number, Ship>
   countsByType: Partial<Record<ShipType, number>>
   selectedMmsi: number | null
+  /** Ship types currently shown on the globe (filter rows in the picture panel). */
+  activeTypes: Set<ShipType>
   /** null = unknown (no successful status yet). */
   configured: boolean | null
   connected: boolean
   select: (mmsi: number | null) => void
+  toggleType: (type: ShipType) => void
 }
 
 export const useShips = create<ShipsState>((set) => ({
@@ -22,9 +25,21 @@ export const useShips = create<ShipsState>((set) => ({
   byMmsi: new Map(),
   countsByType: {},
   selectedMmsi: null,
+  activeTypes: new Set<ShipType>(SHIP_TYPES),
   configured: null,
   connected: false,
   select: (mmsi) => set({ selectedMmsi: mmsi }),
+  toggleType: (type) =>
+    set((s) => {
+      const activeTypes = new Set(s.activeTypes)
+      if (activeTypes.has(type)) activeTypes.delete(type)
+      else activeTypes.add(type)
+      // Deselect a vessel that just got filtered away.
+      const selected = s.selectedMmsi === null ? undefined : s.byMmsi.get(s.selectedMmsi)
+      const selectedMmsi =
+        selected !== undefined && !activeTypes.has(selected.shipType) ? null : s.selectedMmsi
+      return { activeTypes, selectedMmsi }
+    }),
 }))
 
 let timer: ReturnType<typeof setInterval> | undefined

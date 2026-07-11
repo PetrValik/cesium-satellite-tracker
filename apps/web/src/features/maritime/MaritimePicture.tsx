@@ -1,4 +1,8 @@
-/** Left-rail content for MARITIME mode: live vessel totals broken down by AIS type. */
+/**
+ * Left-rail content for MARITIME mode: live vessel totals broken down by
+ * AIS type. The type rows are filter toggles — switching one off hides
+ * those vessels on the globe.
+ */
 import type { ShipType } from '@orbital-ops/shared'
 import { formatCount } from '../../lib/format'
 import { useShips } from './shipsStore'
@@ -9,6 +13,7 @@ const SHIP_TYPE_ORDER: { type: ShipType; label: string }[] = [
   { type: 'passenger', label: 'PASSENGER' },
   { type: 'fishing', label: 'FISHING' },
   { type: 'highspeed', label: 'HIGH-SPEED' },
+  { type: 'military', label: 'MILITARY' },
   { type: 'other', label: 'OTHER' },
 ]
 
@@ -17,6 +22,8 @@ export function MaritimePicture() {
   const configured = useShips((s) => s.configured)
   const countsByType = useShips((s) => s.countsByType)
   const total = useShips((s) => s.ships.length)
+  const activeTypes = useShips((s) => s.activeTypes)
+  const toggleType = useShips((s) => s.toggleType)
 
   return (
     <>
@@ -33,11 +40,15 @@ export function MaritimePicture() {
           <ul className="group-list">
             {SHIP_TYPE_ORDER.map(({ type, label }) => (
               <li key={type}>
-                <div className="group-row is-active">
+                <button
+                  className={`group-row${activeTypes.has(type) ? ' is-active' : ''}`}
+                  onClick={() => toggleType(type)}
+                  title="Toggle this vessel type on the globe"
+                >
                   <span className={`group-indicator ship-${type}`} aria-hidden />
                   <span className="group-name">{label}</span>
                   <span className="group-count">{formatCount(countsByType[type] ?? 0)}</span>
-                </div>
+                </button>
               </li>
             ))}
           </ul>

@@ -10,6 +10,7 @@ const TYPE_COLORS: Record<ShipType, Color> = {
   passenger: Color.fromCssColorString('#c084fc').withAlpha(0.95), // violet
   fishing: Color.fromCssColorString('#7dd87d').withAlpha(0.95), // green
   highspeed: Color.fromCssColorString('#f0f4f8').withAlpha(0.95), // near-white
+  military: Color.fromCssColorString('#f87171').withAlpha(0.95), // red
   other: Color.fromCssColorString('#8a93a3').withAlpha(0.95), // slate
 }
 
@@ -29,14 +30,16 @@ const SCALE_BY_DISTANCE = new NearFarScalar(8e4, 28 / SPRITE_PX, 6e6, 4 / SPRITE
 const SHIP_IMAGE_ID = 'icon:ship'
 
 /**
- * Rotation refresh gate: rewriting Billboard.rotation dirties per-billboard
- * vertex data, and re-rotating 10k billboards every frame while the camera
- * is still is pure waste. The rotation pass therefore only runs when the
- * camera heading has drifted more than this (~1.1°, comfortably below what
- * the eye can read on a 28 px glyph) since the last applied pass, or when
- * setShips changed the data set.
+ * Camera-ward eye offset: with scene.globe.depthTestAgainstTerrain enabled,
+ * surface-level billboards half-sink into the globe and z-fight at grazing
+ * angles. Eye coordinates are left-handed with +z pointing INTO the screen
+ * (Billboard.eyeOffset docs, cesium 1.138), so negative z pulls the sprite
+ * 1.5 km toward the viewer — imperceptible at ship-viewing distances, but
+ * decisively in front of the terrain depth. Shared instance: the Billboard
+ * constructor clones it (Cartesian3.clone in cesium 1.138) and we never
+ * mutate it.
  */
-const HEADING_EPSILON_RAD = 0.02
+const EYE_OFFSET = new Cartesian3(0, 0, -1500)
 
 const KNOTS_TO_MS = 0.514444
 /** Metres per degree of latitude (and of longitude at the equator). */
@@ -60,16 +63,51 @@ const MIN_COS_LAT = 0.01
 // not allocate. Safe to share because Billboard's `position` setter clones
 // the value into its internal Cartesian3 (verified in cesium 1.138).
 const scratchPosition = new Cartesian3()
+// Scratch for the world-space travel axis. Safe to share for the same
+// reason: both the Billboard constructor and the `alignedAxis` setter clone
+// the value into the billboard's internal Cartesian3 (cesium 1.138).
+const scratchAxis = new Cartesian3()
+
+/**
+ * ECEF unit vector of horizontal travel for a bearing (degrees clockwise
+ * from north) at (latDeg, lonDeg), using the local ENU basis
+ *   east  = (-sinLon, cosLon, 0)
+ *   north = (-sinLat·cosLon, -sinLat·sinLon, cosLat)
+ *   dir   = east·sin(brg) + north·cos(brg)
+ * east and north are orthonormal, so dir is unit-length by construction.
+ */
+function travelAxis(
+  latDeg: number,
+  lonDeg: number,
+  bearingDeg: number,
+  result: Cartesian3,
+): Cartesian3 {
+  const latRad = latDeg * RAD_PER_DEG
+  const lonRad = lonDeg * RAD_PER_DEG
+  const bearingRad = bearingDeg * RAD_PER_DEG
+  const sinLat = Math.sin(latRad)
+  const cosLat = Math.cos(latRad)
+  const sinLon = Math.sin(lonRad)
+  const cosLon = Math.cos(lonRad)
+  const sinBrg = Math.sin(bearingRad)
+  const cosBrg = Math.cos(bearingRad)
+  result.x = -sinLon * sinBrg - sinLat * cosLon * cosBrg
+  result.y = cosLon * sinBrg - sinLat * sinLon * cosBrg
+  result.z = cosLat * cosBrg
+  return result
+}
 
 /**
  * The AIS vessel layer: one BillboardCollection, one tinted hull sprite per
  * ship, keyed by MMSI. Between feed polls `advance()` dead-reckons every
  * moving vessel from its last report (constant course/speed, cheap
  * equirectangular step), gated to at most once per 250 ms. Each moving hull
- * is rotated to point along its course over ground; because billboards
- * rotate in screen space, the rotation must compensate the camera heading
- * (rotation = -cogRad - camera.heading) and is refreshed on a heading-gated
- * pass. The selected ship's billboard is hidden — a dedicated marker
+ * points along its course over ground via world-space Billboard.alignedAxis
+ * (the ECEF travel direction; sprite-up follows its screen projection, which
+ * Cesium recomputes every frame, so the heading reads correctly from any
+ * camera angle — no per-frame rotation work). Moored vessels use
+ * alignedAxis = ZERO (plain screen-aligned); rotation stays at its default 0
+ * everywhere. The selected ship's billboard is hidden — a dedicated marker
  * elsewhere represents it.
  *
  * Update strategy: when a poll delivers exactly the working set we already
@@ -83,9 +121,6 @@ export class ShipsLayer {
   private readonly _indexByMmsi = new Map<number, number>()
   private _selectedMmsi: number | null = null
   private _lastAdvanceMs = 0
-  private _rotationsDirty = false
-  /** Infinity → the first rotation pass always applies. */
-  private _lastAppliedHeadingRad = Number.POSITIVE_INFINITY
 
   // Dead-reckoning state in billboard-index order. Positions are re-derived
   // from the *report* each pass (lat0 + vLat * dt), so the reckoning never
@@ -95,7 +130,6 @@ export class ShipsLayer {
   private _vLat = new Float64Array(0) // deg/s northward (0 when moored)
   private _vLon = new Float64Array(0) // deg/s eastward (0 when moored)
   private _tsMs = new Float64Array(0) // report epoch, ms
-  private _cogRad = new Float64Array(0) // course over ground, radians CW from north
 
   constructor(scene: Scene) {
     this._scene = scene
@@ -112,7 +146,8 @@ export class ShipsLayer {
    * positions/velocities/colors; otherwise the collection is rebuilt.
    * An empty array clears the layer. Selection survives either path (the
    * selected billboard stays hidden as long as its MMSI is present).
-   * Rotations are (re)applied by the next advance() pass.
+   * alignedAxis is computed here, at store time only: dead reckoning never
+   * changes the bearing, so advance() carries no orientation work at all.
    */
   setShips(ships: Ship[]): void {
     if (this._isUnusable()) return
@@ -126,9 +161,13 @@ export class ShipsLayer {
         billboard.color = TYPE_COLORS[ship.shipType]
         Cartesian3.fromDegrees(ship.lonDeg, ship.latDeg, 0, undefined, scratchPosition)
         billboard.position = scratchPosition
+        // Moored → COG is noise; ZERO means plain screen-aligned.
+        billboard.alignedAxis =
+          ship.sogKn < MOORED_SOG_KN
+            ? Cartesian3.ZERO
+            : travelAxis(ship.latDeg, ship.lonDeg, ship.cogDeg, scratchAxis)
         billboard.show = ship.mmsi !== this._selectedMmsi
       }
-      this._rotationsDirty = true
       return
     }
 
@@ -142,7 +181,6 @@ export class ShipsLayer {
     this._vLat = new Float64Array(n)
     this._vLon = new Float64Array(n)
     this._tsMs = new Float64Array(n)
-    this._cogRad = new Float64Array(n)
     const sprite = shipIcon()
     for (let i = 0; i < n; i++) {
       const ship = ships[i]
@@ -153,38 +191,32 @@ export class ShipsLayer {
         position: scratchPosition,
         color: TYPE_COLORS[ship.shipType],
         scaleByDistance: SCALE_BY_DISTANCE,
+        // Moored → COG is noise; ZERO means plain screen-aligned.
+        alignedAxis:
+          ship.sogKn < MOORED_SOG_KN
+            ? Cartesian3.ZERO
+            : travelAxis(ship.latDeg, ship.lonDeg, ship.cogDeg, scratchAxis),
+        eyeOffset: EYE_OFFSET,
         show: ship.mmsi !== this._selectedMmsi,
       })
       // Fixed image id → one shared atlas entry for the whole fleet.
       billboard.setImage(SHIP_IMAGE_ID, sprite)
       this._indexByMmsi.set(ship.mmsi, i)
     }
-    this._rotationsDirty = true
     if (this._selectedMmsi !== null && !this._indexByMmsi.has(this._selectedMmsi)) {
       this._selectedMmsi = null
     }
   }
 
   /**
-   * Dead-reckon every moving vessel to wall-clock `wallNowMs`, and refresh
-   * hull rotations when the camera heading (or the data set) changed. The
-   * position pass is a no-op unless at least 250 ms elapsed since the last
-   * one; the rotation pass has its own gate (see HEADING_EPSILON_RAD) and
-   * runs outside the interval gate so the fleet re-orients promptly while
-   * the camera spins. Zero allocations: one shared scratch Cartesian3.
+   * Dead-reckon every moving vessel to wall-clock `wallNowMs`. No-op unless
+   * at least 250 ms elapsed since the last pass. Orientation costs nothing
+   * here: alignedAxis is world-space and set once per feed snapshot, and
+   * Cesium re-projects it to the screen every frame on its own. Zero
+   * allocations: one shared scratch Cartesian3.
    */
   advance(wallNowMs: number): void {
     if (this._isUnusable()) return
-
-    const headingRad = this._scene.camera.heading
-    if (
-      Number.isFinite(headingRad) &&
-      (this._rotationsDirty ||
-        Math.abs(headingRad - this._lastAppliedHeadingRad) > HEADING_EPSILON_RAD)
-    ) {
-      this._refreshRotations(headingRad)
-    }
-
     if (wallNowMs - this._lastAdvanceMs < MIN_ADVANCE_INTERVAL_MS) return
     this._lastAdvanceMs = wallNowMs
 
@@ -209,26 +241,6 @@ export class ShipsLayer {
       )
       billboards.get(i).position = scratchPosition
     }
-  }
-
-  /**
-   * Point every moving hull along its course. Billboard rotation is
-   * counterclockwise in screen space (alignedAxis ZERO) while COG is
-   * clockwise from north, and the camera heading rotates the whole screen —
-   * hence rotation = -cogRad - headingRad. Moored vessels (sog < 0.2 kn,
-   * encoded as zero velocity) are skipped: their COG is noise, so they keep
-   * whatever rotation they last had. Billboard's rotation setter no-ops on
-   * unchanged values, so re-running this pass is cheap when little moved.
-   */
-  private _refreshRotations(headingRad: number): void {
-    const billboards = this._billboards
-    const count = Math.min(billboards.length, this._cogRad.length)
-    for (let i = 0; i < count; i++) {
-      if (this._vLat[i] === 0 && this._vLon[i] === 0) continue
-      billboards.get(i).rotation = -this._cogRad[i] - headingRad
-    }
-    this._lastAppliedHeadingRad = headingRad
-    this._rotationsDirty = false
   }
 
   /**
@@ -300,22 +312,20 @@ export class ShipsLayer {
   }
 
   /**
-   * Record the report, the course (for the rotation pass), and the
-   * precomputed surface velocity in degrees/second (equirectangular:
-   * dLat = v·cos(brg)/111320, dLon = v·sin(brg)/(111320·cos(lat)))
-   * so advance() does no trigonometry.
+   * Record the report and the precomputed surface velocity in
+   * degrees/second (equirectangular: dLat = v·cos(brg)/111320,
+   * dLon = v·sin(brg)/(111320·cos(lat))) so advance() does no trigonometry.
    */
   private _storeState(index: number, ship: Ship): void {
     this._lat0[index] = ship.latDeg
     this._lon0[index] = ship.lonDeg
     this._tsMs[index] = ship.tsMs
-    const bearingRad = ship.cogDeg * RAD_PER_DEG
-    this._cogRad[index] = bearingRad
     if (ship.sogKn < MOORED_SOG_KN) {
       this._vLat[index] = 0
       this._vLon[index] = 0
       return
     }
+    const bearingRad = ship.cogDeg * RAD_PER_DEG
     const speedMs = ship.sogKn * KNOTS_TO_MS
     const cosLat = Math.max(Math.cos(ship.latDeg * RAD_PER_DEG), MIN_COS_LAT)
     this._vLat[index] = (speedMs * Math.cos(bearingRad)) / METERS_PER_DEG
