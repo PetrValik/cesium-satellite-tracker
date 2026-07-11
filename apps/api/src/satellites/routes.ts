@@ -26,6 +26,7 @@ export function satelliteRoutes({ db, refresher }: SatelliteRoutesDeps): Hono {
       updatedAt: g.updatedAt === null ? null : new Date(g.updatedAt).toISOString(),
       stale: refresher.isExpired(g.slug),
     }))
+    c.header('Cache-Control', 'public, max-age=60')
     return c.json(groups)
   })
 
@@ -38,12 +39,17 @@ export function satelliteRoutes({ db, refresher }: SatelliteRoutesDeps): Hono {
     } catch {
       return c.json({ error: 'catalog unavailable: CelesTrak unreachable and no cached data' }, 503)
     }
+    // Large payload (Starlink ≈ 2.4 MB) that only moves on TLE refresh.
+    c.header('Cache-Control', 'public, max-age=300')
     return c.json(db.getGroupSatellites(slug))
   })
 
   app.get('/api/satellites/search', (c) => {
     const q = (c.req.query('q') ?? '').trim()
     if (q.length < 2) return c.json({ error: 'q must be at least 2 characters' }, 400)
+    // Bound the LIKE pattern: an unbounded query string is a cheap CPU DoS.
+    if (q.length > 64) return c.json({ error: 'q must be at most 64 characters' }, 400)
+    c.header('Cache-Control', 'public, max-age=30')
     return c.json(db.search(q, 50))
   })
 
