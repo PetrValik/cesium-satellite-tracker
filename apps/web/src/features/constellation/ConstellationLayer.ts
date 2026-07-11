@@ -24,29 +24,56 @@ const ICON_NEAR_M = 4e5
 const ICON_NEAR_PX = 28
 const ICON_FAR_M = 4e7
 
-function makeStyle(css: string, farDotPx: number): ClassStyle {
-  return {
-    color: Color.fromCssColorString(css).withAlpha(0.9),
+export type SatellitePalette = Record<OrbitClass, string>
+
+/** Default hues (mirrors core/ui/prefsStore DEFAULT_COLORS.satellites). */
+const DEFAULT_PALETTE: SatellitePalette = {
+  LEO: '#ffb454',
+  MEO: '#6ee7ff',
+  GEO: '#c084fc',
+  HEO: '#f87171',
+}
+
+/** Far dot size per class keeps the original pixelSize hierarchy. */
+const FAR_DOT_PX: Record<OrbitClass, number> = { LEO: 1.5, MEO: 2.0, GEO: 2.5, HEO: 2.0 }
+
+/** Indexed by the class byte from the worker; protocol order is authoritative. */
+function buildStyles(palette: SatellitePalette): readonly ClassStyle[] {
+  return ORBIT_CLASSES.map((c) => ({
+    color: Color.fromCssColorString(palette[c]).withAlpha(0.9),
     scaleByDistance: new NearFarScalar(
       ICON_NEAR_M,
       ICON_NEAR_PX / SPRITE_PX,
       ICON_FAR_M,
-      farDotPx / SPRITE_PX,
+      FAR_DOT_PX[c] / SPRITE_PX,
     ),
-  }
+  }))
 }
 
-/** Design tokens per orbit class (far dot size keeps the old pixelSize hierarchy). */
-const CLASS_STYLES: Record<OrbitClass, ClassStyle> = {
-  LEO: makeStyle('#ffb454', 1.5), // signal amber
-  MEO: makeStyle('#6ee7ff', 2.0), // cyan
-  GEO: makeStyle('#c084fc', 2.5), // violet
-  HEO: makeStyle('#f87171', 2.0), // red
-}
+/**
+ * Occlusion sphere for the horizon-culling pre-test: slightly smaller than
+ * Earth so satellites near the limb never pop early — anything the margin
+ * lets through is still hidden by the depth test.
+ */
+const OCCLUSION_RADIUS_M = 6_300_000
+const OCCLUSION_RADIUS_SQ = OCCLUSION_RADIUS_M * OCCLUSION_RADIUS_M
 
-/** Indexed by the class byte from the worker; protocol order is authoritative. */
-const STYLE_BY_CLASS: readonly ClassStyle[] = ORBIT_CLASSES.map((c) => CLASS_STYLES[c])
-const FALLBACK_STYLE = STYLE_BY_CLASS[0]
+/**
+ * True when the segment camera→point passes through the occlusion sphere
+ * (i.e. the point is behind the globe). Pure ray–sphere math, no allocation.
+ */
+function isOccluded(cx: number, cy: number, cz: number, px: number, py: number, pz: number): boolean {
+  const dxr = px - cx
+  const dyr = py - cy
+  const dzr = pz - cz
+  const a = dxr * dxr + dyr * dyr + dzr * dzr
+  const b = cx * dxr + cy * dyr + cz * dzr
+  const c = cx * cx + cy * cy + cz * cz - OCCLUSION_RADIUS_SQ
+  const disc = b * b - a * c
+  if (disc <= 0 || a === 0) return false
+  const s = (-b - Math.sqrt(disc)) / a
+  return s > 0 && s < 1
+}
 
 /**
  * One fixed atlas id shared by the whole catalog. Billboard.setImage(id, …)
@@ -96,6 +123,9 @@ export class ConstellationLayer {
   private readonly _billboards: BillboardCollection
   private readonly _indexByNoradId = new Map<number, number>()
   private _selectedNoradId: number | null = null
+  private _styles: readonly ClassStyle[] = buildStyles(DEFAULT_PALETTE)
+  /** Class byte per billboard (kept for palette swaps). */
+  private _classes = new Uint8Array(0)
 
   // Two most recent worker snapshots; advance() interpolates between them.
   private _prevPositions: Float32Array | null = null
@@ -127,9 +157,11 @@ export class ConstellationLayer {
     this._selectedNoradId = null
     this._prevPositions = null
     this._currPositions = null
+    // Own copy: the caller may reuse or transfer its buffer.
+    this._classes = classes.slice()
     const sprite = satelliteIcon()
     for (let i = 0; i < noradIds.length; i++) {
-      const style = STYLE_BY_CLASS[classes[i]] ?? FALLBACK_STYLE
+      const style = this._styles[classes[i]] ?? this._styles[0]
       const billboard = billboards.add({
         id: noradIds[i],
         position: Cartesian3.ZERO,
@@ -186,6 +218,12 @@ export class ConstellationLayer {
         ? -1
         : (this._indexByNoradId.get(this._selectedNoradId) ?? -1)
 
+    // Camera position for the horizon-culling pre-test (once per call).
+    const cam = this._scene.camera.positionWC
+    const camX = cam.x
+    const camY = cam.y
+    const camZ = cam.z
+
     const prev = this._prevPositions
     const span = this._currEpochMs - this._prevEpochMs
     const interpolate = prev !== null && span !== 0
@@ -202,6 +240,15 @@ export class ConstellationLayer {
       const by = curr[3 * i + 1]
       const bz = curr[3 * i + 2]
       if (Number.isNaN(bx) || Number.isNaN(by) || Number.isNaN(bz)) {
+        billboard.show = false
+        continue
+      }
+
+      // Behind-the-globe satellites would be hidden by the depth test anyway;
+      // skipping them here saves their slerp and the position write (~half
+      // the catalog at any moment). Tested on the snapshot position — within
+      // a few hundred km of the interpolated one, far inside the margin.
+      if (isOccluded(camX, camY, camZ, bx, by, bz)) {
         billboard.show = false
         continue
       }
@@ -246,6 +293,20 @@ export class ConstellationLayer {
       scratchPosition.z = z
       billboard.position = scratchPosition
       billboard.show = i !== selectedIndex
+    }
+  }
+
+  /** Swap the per-class hues and recolor the whole catalog in place. */
+  setPalette(palette: SatellitePalette): void {
+    this._styles = buildStyles(palette)
+    if (this._isUnusable()) return
+    const billboards = this._billboards
+    const count = Math.min(billboards.length, this._classes.length)
+    for (let i = 0; i < count; i++) {
+      const style = this._styles[this._classes[i]] ?? this._styles[0]
+      const billboard = billboards.get(i)
+      billboard.color = style.color
+      billboard.scaleByDistance = style.scaleByDistance
     }
   }
 
