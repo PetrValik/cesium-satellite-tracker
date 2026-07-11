@@ -37,15 +37,19 @@ describe('rateLimit middleware', () => {
     expect((await app.request('/api/health')).status).toBe(200)
   })
 
-  it('uses the first hop of a multi-proxy X-Forwarded-For chain', async () => {
+  it('keys on the LAST X-Forwarded-For hop — the one our proxy appended', async () => {
     const { app } = limitedEnv({ limit: 1, windowMs: 60_000, trustProxy: true })
 
-    expect((await app.request('/api/health', from('1.1.1.1, 10.0.0.1'))).status).toBe(200)
-
-    // same client arriving via a different proxy chain shares the bucket
-    const blocked = await app.request('/api/health', from('1.1.1.1, 10.9.9.9'))
+    // The proxy appends the real client as the last entry; anything before
+    // it is client-supplied. Spoofed first hops must all land in the real
+    // client's bucket — otherwise the limit is a header away from bypassed.
+    expect((await app.request('/api/health', from('6.6.6.6, 1.1.1.1'))).status).toBe(200)
+    const blocked = await app.request('/api/health', from('7.7.7.7, 1.1.1.1'))
     expect(blocked.status).toBe(429)
     expect(blocked.headers.get('retry-after')).toBe('60')
+
+    // and a spoofed victim IP in the first hop cannot exhaust the victim's bucket
+    expect((await app.request('/api/health', from('1.1.1.1, 8.8.8.8'))).status).toBe(200)
   })
 
   it('ignores X-Forwarded-For when trustProxy is off', async () => {

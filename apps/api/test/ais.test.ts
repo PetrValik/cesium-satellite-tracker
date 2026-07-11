@@ -49,7 +49,7 @@ class FakeSocket implements AisSocket {
 }
 
 // null = "no API key" (an explicit `undefined` argument would trigger the default)
-function feedEnv(apiKey: string | null = 'test-key') {
+function feedEnv(apiKey: string | null = 'test-key', log: (msg: string) => void = () => {}) {
   const sockets: FakeSocket[] = []
   let clock = T0
   const feed = new AisFeed({
@@ -60,7 +60,7 @@ function feedEnv(apiKey: string | null = 'test-key') {
       return socket
     },
     now: () => clock,
-    log: () => {},
+    log,
   })
   return {
     feed,
@@ -123,7 +123,7 @@ describe('AisFeed connection', () => {
     feed.stop()
   })
 
-  it('reconnects after close with exponential backoff, reset on open', () => {
+  it('reconnects with exponential backoff, reset only by a valid data frame', () => {
     vi.useFakeTimers()
     const { feed, sockets } = feedEnv()
     feed.start()
@@ -140,10 +140,35 @@ describe('AisFeed connection', () => {
     vi.advanceTimersByTime(5_000)
     expect(sockets).toHaveLength(3)
 
-    sockets[2]!.open() // success resets the backoff
+    // A bare open must NOT reset the backoff: aisstream validates the key
+    // only after the subscription message, so an invalid key opens then
+    // closes — resetting here would loop tightly at 5 s forever.
+    sockets[2]!.open()
     sockets[2]!.emit('close')
+    vi.advanceTimersByTime(15_000) // backoff had doubled to 20 s — not yet
+    expect(sockets).toHaveLength(3)
     vi.advanceTimersByTime(5_000)
     expect(sockets).toHaveLength(4)
+
+    // A real data frame proves the subscription was accepted → reset to 5 s.
+    sockets[3]!.open()
+    sockets[3]!.message(positionReport(244_123_456, 51.9, 4.1))
+    sockets[3]!.emit('close')
+    vi.advanceTimersByTime(5_000)
+    expect(sockets).toHaveLength(5)
+    feed.stop()
+  })
+
+  it('logs an unrecognized upstream frame once per connection', () => {
+    const logs: string[] = []
+    const { feed, sockets } = feedEnv('test-key', (msg) => logs.push(msg))
+    feed.start()
+    sockets[0]!.open()
+    sockets[0]!.message({ error: 'Api Key Is Not Valid' })
+    sockets[0]!.message({ error: 'Api Key Is Not Valid' })
+    const unknownLogs = logs.filter((l) => l.includes('unrecognized upstream frame'))
+    expect(unknownLogs).toHaveLength(1)
+    expect(unknownLogs[0]).toContain('Api Key Is Not Valid')
     feed.stop()
   })
 

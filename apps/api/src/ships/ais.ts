@@ -75,8 +75,11 @@ interface AisEnvelope {
  * Live vessel positions from the aisstream.io WebSocket feed.
  *
  * Keeps the latest report per MMSI in memory; reconnects with exponential
- * backoff (5 s doubling to 60 s max, reset on a successful open) and never
- * throws out of socket handlers — a dead feed degrades to an empty snapshot.
+ * backoff (5 s doubling to 60 s max). The backoff resets only once a valid
+ * data frame arrives — aisstream.io accepts the socket BEFORE validating the
+ * API key, so resetting on 'open' would turn a bad key into a tight
+ * reconnect loop. Handlers never throw — a dead feed degrades to an empty
+ * snapshot.
  */
 export class AisFeed {
   readonly configured: boolean
@@ -89,6 +92,8 @@ export class AisFeed {
   private connected = false
   private running = false
   private backoffMs = AIS_RECONNECT_MIN_MS
+  /** One unrecognized-frame log per connection — enough to expose a bad key. */
+  private loggedUnknownFrame = false
   private sweepTimer: ReturnType<typeof setInterval> | undefined
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -168,9 +173,12 @@ export class AisFeed {
       }
     }
 
+    this.loggedUnknownFrame = false
+
     socket.addEventListener('open', () => {
       if (settled || this.socket !== socket) return
-      this.backoffMs = AIS_RECONNECT_MIN_MS
+      // NOTE: no backoff reset here — the key is only validated after the
+      // subscription message, and a rejected key still opens the socket.
       this.connected = true
       this.log('[ais] connected to aisstream.io')
       try {
@@ -222,8 +230,17 @@ export class AisFeed {
     } catch {
       return
     }
-    if (msg?.MessageType === 'PositionReport') this.handlePositionReport(msg)
-    else if (msg?.MessageType === 'ShipStaticData') this.handleShipStaticData(msg)
+    if (msg?.MessageType === 'PositionReport' || msg?.MessageType === 'ShipStaticData') {
+      // A valid data frame proves the subscription was accepted — only now
+      // is it safe to treat the connection as healthy.
+      this.backoffMs = AIS_RECONNECT_MIN_MS
+      if (msg.MessageType === 'PositionReport') this.handlePositionReport(msg)
+      else this.handleShipStaticData(msg)
+    } else if (msg !== null && !this.loggedUnknownFrame) {
+      this.loggedUnknownFrame = true
+      // Most commonly an auth-error frame for a bad/revoked API key.
+      this.log(`[ais] unrecognized upstream frame (bad API key?): ${JSON.stringify(msg).slice(0, 200)}`)
+    }
   }
 
   private handlePositionReport(msg: AisEnvelope): void {
