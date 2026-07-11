@@ -141,7 +141,7 @@ export class AisFeed {
   }
 
   /** Latest reports, newest first, capped at `limit`. */
-  snapshot(limit = 10_000): Ship[] {
+  snapshot(limit = 20_000): Ship[] {
     return [...this.ships.values()].sort((a, b) => b.tsMs - a.tsMs).slice(0, limit)
   }
 

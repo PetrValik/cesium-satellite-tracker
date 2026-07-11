@@ -75,7 +75,15 @@ export function createOrbitalViewer(container: HTMLElement): Viewer {
   // renders far-side objects through the planet. Surface-level icons carry a
   // small camera-ward eyeOffset in their layers to avoid half-sinking.
   scene.globe.depthTestAgainstTerrain = true
-  scene.globe.showGroundAtmosphere = true
+  // Ground atmosphere bleaches the surface into "frosted glass" at grazing
+  // angles (read as a transparent planet). The sky-atmosphere limb halo
+  // below carries the look on its own.
+  scene.globe.showGroundAtmosphere = false
+  // Fog both washes out grazing-angle terrain AND culls far tiles from
+  // rendering — culled tiles write no depth, so billboards/labels BEYOND the
+  // horizon showed through the planet. With fog off the globe renders (and
+  // occludes) all the way to the limb.
+  scene.fog.enabled = false
   if (scene.skyAtmosphere !== undefined) {
     scene.skyAtmosphere.show = true
   }

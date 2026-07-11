@@ -76,6 +76,11 @@ export function GlobeView() {
       return
     }
 
+    // Dev-only escape hatch for live debugging in the browser console.
+    if (import.meta.env.DEV) {
+      ;(window as unknown as { __opsViewer?: unknown }).__opsViewer = viewer
+    }
+
     const constellation = new ConstellationLayer(viewer.scene)
     const tracking = new TrackingVisuals(viewer)
     const rig = new CameraRig(viewer)
