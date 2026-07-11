@@ -29,9 +29,13 @@ function load(): StoredMode {
 }
 
 export interface ModeState extends StoredMode {
+  /** Help overlay visibility (not persisted). */
+  helpOpen: boolean
   setMode: (mode: OpsMode) => void
   toggleLaunchSites: () => void
   togglePorts: () => void
+  toggleHelp: () => void
+  closeHelp: () => void
 }
 
 function persist(state: StoredMode): void {
@@ -52,6 +56,9 @@ function persist(state: StoredMode): void {
  */
 export const useMode = create<ModeState>((set) => ({
   ...load(),
+  helpOpen: false,
+  toggleHelp: () => set((s) => ({ helpOpen: !s.helpOpen })),
+  closeHelp: () => set({ helpOpen: false }),
   setMode: (mode) =>
     set((s) => {
       const next = { ...s, mode }

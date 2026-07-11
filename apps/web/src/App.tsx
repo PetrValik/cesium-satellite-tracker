@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { GlobeView } from './app/GlobeView'
+import { HelpButton, HelpOverlay } from './app/HelpOverlay'
 import { ModeTabs } from './app/ModeTabs'
 import { StatusLine } from './app/StatusLine'
 import { useMode } from './core/ui/modeStore'
@@ -42,6 +43,8 @@ export default function App() {
           {mode === 'airspace' && <AircraftPanel />}
         </div>
         <TransportBar />
+        <HelpButton />
+        <HelpOverlay />
       </div>
       {booting && (
         <div className="boot-overlay">
