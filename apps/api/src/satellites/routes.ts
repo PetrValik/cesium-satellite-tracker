@@ -1,3 +1,9 @@
+/**
+ * Satellite slice routes: health, curated groups, per-group TLE lists,
+ * search, and single-satellite lookup. Reads go through the SQLite cache;
+ * freshness is the Refresher's stale-while-revalidate policy — a request
+ * only waits on CelesTrak when the cache has nothing to serve.
+ */
 import { Hono } from 'hono'
 import type { GroupInfo } from '@orbital-ops/shared'
 import type { Db } from './db.ts'

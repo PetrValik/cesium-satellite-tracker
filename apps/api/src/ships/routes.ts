@@ -1,3 +1,4 @@
+/** Ships slice routes: snapshot of the live AIS vessel table (503 without a key). */
 import { Hono } from 'hono'
 import type { AisFeed } from './ais.ts'
 

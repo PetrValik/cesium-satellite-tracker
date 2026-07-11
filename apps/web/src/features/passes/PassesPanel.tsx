@@ -1,3 +1,9 @@
+/**
+ * Pass predictions for the selected satellite over the observer: 24 h
+ * window anchored at sim time, recomputed when the satellite, observer, or
+ * window changes (windowExpired flips when sim time warps/scrubs outside
+ * it). The "→" buttons jump sim time to a pass's AOS and start playback.
+ */
 import { useEffect, useState } from 'react'
 import { simClock, useSimClock } from '../../core/sim/simClock'
 import { formatDuration, formatUtcTime } from '../../lib/format'

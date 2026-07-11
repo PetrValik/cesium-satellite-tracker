@@ -12,104 +12,62 @@
   </p>
 </div>
 
-A working real-time satellite tracker: 12,000+ objects propagated with SGP4 in a Web Worker and rendered as GPU point primitives on a CesiumJS globe, fed by a caching TLE backend with a committed offline seed. Time is simulated — play, warp up to ×3600, rewind, scrub — and pass predictions come with a polar sky plot.
+A real-time, multi-domain ops console on a CesiumJS globe: 12,000+ satellites propagated with SGP4 in a Web Worker, plus live aircraft (ADS-B) and ships (AIS), with launch-site and port overlays. Satellites run on a warpable simulation clock with polar-sky-plot pass predictions; aircraft and ships stay wall-clock live. Token-free, and it boots offline from a committed TLE seed.
 
 ## Screenshots
 
 <div align="center">
-  <img src="docs/images/orbital-ops-overview.png" alt="Full catalog — 12,408 tracked objects" width="900"/>
-  <p><em>Full catalog: 12,408 objects including the Starlink shell, day/night terminator, orbit-class colors</em></p>
+  <img src="docs/images/orbital-ops-overview.png" alt="ORBITAL mode — full satellite catalog" width="900"/>
+  <p><em>ORBITAL mode — full catalog: 12,408 objects including the Starlink shell, day/night terminator, orbit-class colors</em></p>
 </div>
 
 <div align="center">
-  <img src="docs/images/orbital-ops-tracking.png" alt="Tracking ISS with pass predictions" width="900"/>
-  <p><em>Tracking ISS (ZARYA): live telemetry, orbit path, ground track, visibility footprint, and 24 h pass predictions with a polar sky plot</em></p>
+  <img src="docs/images/orbital-ops-tracking.png" alt="ORBITAL mode — tracking ISS with pass predictions" width="900"/>
+  <p><em>ORBITAL mode — tracking ISS (ZARYA): live telemetry, orbit path, ground track, visibility footprint, and 24 h pass predictions with a polar sky plot</em></p>
 </div>
 
 ## Features
 
-- **Live TLE catalog** — 12 curated CelesTrak groups (stations, Starlink, OneWeb, GNSS constellations, GEO belt, science, …) served by a small caching API; searchable by name or NORAD id.
-- **Whole-constellation propagation** — a Web Worker runs batch SGP4 (satellite.js) and streams ECEF positions as transferable `Float32Array`s; the globe renders them as a single `PointPrimitiveCollection` colored by orbit class (LEO / MEO / GEO / HEO).
-- **Selected-satellite tracking** — per-frame propagation on the main thread for smooth motion, orbit path, antimeridian-safe ground track, visibility footprint, and a live telemetry panel (altitude, velocity, position, period, inclination).
-- **Simulation time** — one sim clock drives everything: play/pause, warp ×1 – ×3600, rewind, ±12 h scrub, and a NOW reset. The Cesium sun/terminator follows sim time.
-- **Pass prediction** — AOS/LOS windows (bisection-refined to ~1 s) for a configurable observer over the next 24 h, drawn on a polar az/el sky plot; one click jumps sim time to the pass.
-- **Runs without a Cesium Ion token** — falls back to OpenStreetMap imagery + ellipsoid terrain; with `VITE_CESIUM_TOKEN` set you get Cesium World Terrain.
-- **Runs without network** — a committed TLE seed (12,653 records) boots the API offline; live data refreshes stale-while-revalidate with a 6 h TTL and per-group failure cooldown.
-- **Multi-domain ops modes** — MFD-style tabs switch the HUD between ORBITAL, MARITIME, and AIRSPACE. Clicking any object on the globe jumps to its domain.
-- **Live aircraft (ADS-B)** — OpenSky `/states/all` polling (anonymous works out of the box; a free OpenSky account via `OPENSKY_CLIENT_ID`/`OPENSKY_CLIENT_SECRET` speeds polling to 60 s), ~10k aircraft colored by altitude band, dead-reckoned between polls.
-- **Live ships (AIS)** — aisstream.io WebSocket ingest (free key via `AISSTREAM_API_KEY` in `apps/api/.env`, see `.env.example`); vessels colored by type, dead-reckoned along their course. Without a key the panel shows AIS OFFLINE.
-- **Infra overlays** — 26 launch sites and 45 major ports as toggleable markers with zoom-in labels.
+- **Three OPS modes** — MFD-style tabs (`1`/`2`/`3`) switch the HUD between **ORBITAL**, **MARITIME**, and **AIRSPACE**. Clicking any object on the globe jumps to its domain.
+- **Satellite catalog & propagation** — 12 curated CelesTrak groups (stations, Starlink, OneWeb, GNSS constellations, GEO belt, science, …) served by a small caching API; a Web Worker runs batch SGP4 (satellite.js) and the globe renders a single `PointPrimitiveCollection` colored by orbit class (LEO/MEO/GEO/HEO). Search by name or NORAD id.
+- **Selected-satellite tracking** — smooth per-frame motion, orbit path, antimeridian-safe ground track, visibility footprint, and a live telemetry panel.
+- **Pass prediction + sky plot** — AOS/LOS windows over the next 24 h for a configurable observer (edit coordinates or use GPS), drawn on a polar az/el sky plot; one click jumps sim time to the pass.
+- **Live aircraft (ADS-B)** — OpenSky polling (anonymous out of the box; `OPENSKY_CLIENT_ID`/`OPENSKY_CLIENT_SECRET` speed it up), colored by altitude band, dead-reckoned between polls.
+- **Live ships (AIS)** — aisstream.io ingest (free `AISSTREAM_API_KEY` in `apps/api/.env`; without it the panel shows AIS OFFLINE), colored by type, dead-reckoned along their course.
+- **Overlays & layer toggles** — launch sites and major ports as toggleable markers; a LAYERS panel toggles vessels, aircraft, launch sites, and ports independently in any mode.
+- **Camera follow-lock + keyboard** — selecting a ship/aircraft auto-locks the camera; `F` rides a satellite, `ESC` releases then deselects. WASD/arrows orbit, `Q`/`E` zoom, `SPACE` play/pause, `,`/`.` warp, `N` now. Press **H** or **?** in-app for the full cheat sheet.
+- **Simulation time** — one sim clock drives satellites and the day/night terminator: play/pause, warp ×1–×3600, rewind, ±12 h scrub, NOW reset. Ships and aircraft stay wall-clock live and never time-travel with it.
+- **Token-free Cesium** — falls back to OpenStreetMap imagery + ellipsoid terrain; set `VITE_CESIUM_TOKEN` for Cesium World Terrain.
+- **Runs offline** — a committed TLE seed boots the API without network; live data refreshes stale-while-revalidate (6 h TTL, per-group failure cooldown).
 
 ## Architecture
 
-npm-workspaces monorepo:
+npm-workspaces monorepo: `apps/web` (Vite + React 19 + CesiumJS), `apps/api`
+(Hono + `node:sqlite` TLE cache + live feeds on `:8787`), and `packages/shared`
+(zod contracts). Data flows CelesTrak → API cache → `/api/*` → worker SGP4 →
+Cesium point primitives. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the
+vertical-slice layout and dependency rules, and [docs/API.md](docs/API.md) for the
+endpoint reference.
 
-```
-apps/
-├── api/                  # Hono + node:sqlite TLE cache on :8787
-│   ├── src/
-│   │   ├── app.ts        # endpoints (injectable db + fetcher → testable)
-│   │   ├── celestrak.ts  # GP fetcher + 3-line TLE parser (Alpha-5 aware)
-│   │   ├── db.ts         # sqlite schema & queries (zero native deps)
-│   │   ├── refresh.ts    # stale-while-revalidate, TTL, failure cooldown
-│   │   └── seed.ts       # loads the committed snapshot on first boot
-│   └── seed/*.tle        # offline TLE snapshot
-└── web/                  # Vite + React 19 + CesiumJS
-    └── src/
-        ├── core/
-        │   ├── engine/   # non-React Cesium wrapper (token-free fallback)
-        │   └── sim/      # simulation clock (Zustand) — the time authority
-        ├── workers/      # propagation.worker.ts — batch SGP4 → Float32Array
-        ├── features/     # catalog, constellation, tracking, passes, timebar
-        └── lib/          # orbital math, API client, formatters
-packages/
-└── shared/               # zod schemas — the API contract
-```
+## Quickstart
 
-**Data flow:** CelesTrak → API cache (SQLite, 6 h TTL, seed fallback) → `/api/*` → catalog store → worker SGP4 → ECEF positions → point primitives. The selected satellite is propagated on the main thread every frame; the rest of the constellation ticks at 1–4 Hz.
-
-**API:** `GET /api/health` · `/api/groups` · `/api/satellites?group=` · `/api/satellites/search?q=` · `/api/satellites/:noradId`
-
-## Setup & Development
-
-### Prerequisites
-- Node.js **≥ 22.5** (`node:sqlite` is built in — no native dependencies)
-- No Cesium token required (optional: free Ion token for world terrain)
-
-### Run it
 ```bash
 git clone <repository-url>
 cd cesium-satellite-tracker
 npm install          # also copies Cesium static assets
-
-npm run dev          # api on :8787 + web on :5173, proxied together
+npm run dev          # api on :8787 + web on :5173 (open http://localhost:5173)
 ```
 
-Optional Ion terrain:
-```bash
-echo "VITE_CESIUM_TOKEN=your_token_here" > apps/web/.env
-```
+- **Development** (workspace layout, tests, seed regeneration, env files): [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+- **Usage** (modes, controls, follow-lock, passes, sim time): [docs/CONTROLS.md](docs/CONTROLS.md)
+- **Production deploy** (Docker Compose, reverse proxy, CI/CD): [docs/DEPLOY.md](docs/DEPLOY.md)
 
-### Other commands
-```bash
-npm run build              # typecheck + build all workspaces
-npm test                   # 52 tests: API endpoints, orbital math, stores, schemas
-npm run lint               # eslint across the monorepo
-npm run seed:make -w apps/api   # refresh the committed TLE snapshot from CelesTrak
-```
+## Data sources & credits
 
-## Testing
-
-- **`apps/api`** — endpoint tests against an in-memory SQLite DB with an injected fake fetcher and clock: TTL behavior, stale-while-revalidate, offline 503s, failure cooldown, search escaping, Alpha-5 NORAD ids.
-- **`apps/web`** — orbital math pinned to a real ISS TLE (period, altitude, velocity, ground-track bounds, Prague pass windows), sim-clock semantics, formatters.
-- **`packages/shared`** — schema round-trips.
-
-## Learning Resources
-
-- [CesiumJS Tutorials](https://cesium.com/learn/cesiumjs-learn/) · [Sandcastle Examples](https://sandcastle.cesium.com/)
-- [Two-Line Element Format](https://en.wikipedia.org/wiki/Two-line_element_set) · [SGP4 Algorithm](https://en.wikipedia.org/wiki/Simplified_perturbations_models)
-- [satellite.js](https://github.com/shashwatak/satellite-js) — the propagation library used here
-- [CelesTrak](https://celestrak.org/) — TLE data source (please fetch politely; that's what the caching API is for)
+- [CelesTrak](https://celestrak.org/) — satellite TLE data (please fetch politely; the caching API exists for exactly this).
+- [OpenSky Network](https://opensky-network.org/) — live aircraft ADS-B state vectors.
+- [aisstream.io](https://aisstream.io/) — live ship AIS position reports.
+- [OpenStreetMap](https://www.openstreetmap.org/) contributors — token-free imagery tiles.
 
 ## License
 

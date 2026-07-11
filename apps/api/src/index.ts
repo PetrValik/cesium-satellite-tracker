@@ -1,3 +1,9 @@
+/**
+ * Bootstrap: resolve env config, open the SQLite cache (seeding it from the
+ * committed snapshot on first boot), start the live feeds, and serve. This
+ * is the only file that reads process.env — everything below it takes
+ * injected options.
+ */
 import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'

@@ -1,3 +1,10 @@
+/**
+ * App factory — the API's composition root. Wires middleware (secure
+ * headers, optional rate limit, allowlist-only CORS) and mounts the slice
+ * routers; everything is injected so tests run against fakes. Route
+ * mounting order matters only within a slice; middleware here must be
+ * registered before the mounts to cover them.
+ */
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'

@@ -1,3 +1,9 @@
+/**
+ * Typed API client: every response is parsed with the shared zod contract,
+ * so a drifting server shape fails loudly here instead of deep in the UI.
+ * ApiError.status is null for network failures and the HTTP status
+ * otherwise (503 = feed not configured — stores use this to back off).
+ */
 import {
   AircraftListSchema,
   GroupListSchema,

@@ -1,3 +1,10 @@
+/**
+ * SQLite TLE cache (node:sqlite — built into Node ≥22.5, zero native deps).
+ * Satellites are unique by NORAD id with the newest TLE winning; group
+ * membership is a separate table so one satellite can sit in many groups.
+ * All statements are parameterized; LIKE inputs are escaped here, never in
+ * route code.
+ */
 import { DatabaseSync } from 'node:sqlite'
 import type { Satellite } from '@orbital-ops/shared'
 import type { ParsedTle } from './celestrak.ts'

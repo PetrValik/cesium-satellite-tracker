@@ -1,3 +1,8 @@
+/**
+ * Selected-satellite readout: identity from the catalog, live numbers from
+ * the telemetry store (pushed by the render loop at ~5 Hz). Inclination is
+ * parsed straight from TLE line 2 (cols 9–16).
+ */
 import { FollowButton } from '../../core/ui/FollowButton'
 import { useCatalog } from '../catalog/catalogStore'
 import { useTelemetry } from './telemetryStore'

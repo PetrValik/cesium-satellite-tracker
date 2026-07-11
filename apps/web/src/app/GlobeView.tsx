@@ -1,3 +1,20 @@
+/**
+ * GlobeView — the composition root of everything on the globe.
+ *
+ * One mount effect owns the Cesium viewer, all layers, the propagation
+ * worker, the camera rig, keyboard input, picking, and the render loop.
+ * The moving parts and their time bases:
+ *
+ * - SIM TIME (warpable): the rAF loop advances the sim clock, syncs the
+ *   viewer clock, interpolates the constellation between worker snapshots,
+ *   and propagates the selected satellite per frame on the main thread.
+ * - WALL TIME (live): ships and aircraft dead-reckon from their last real
+ *   report — they never time-travel with the sim.
+ *
+ * React renders this component exactly once; all reactivity inside goes
+ * through zustand `subscribe` (transient, no re-renders). Cleanup tears
+ * down in reverse order and every Cesium access is isDestroyed-guarded.
+ */
 import { useEffect, useRef, useState } from 'react'
 import { ScreenSpaceEventHandler, ScreenSpaceEventType, type Cartesian2 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'

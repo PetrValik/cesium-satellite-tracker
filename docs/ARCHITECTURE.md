@@ -8,7 +8,8 @@ enforce.
 
 ```
 src/
-├── app/          # composition root: shell, GlobeView wiring, LeftRail, ModeTabs
+├── app/          # composition root: GlobeView, LeftRail, ModeTabs, StatusLine,
+│   │             #   LayersPanel (cross-domain layer toggles), HelpOverlay
 ├── core/
 │   ├── engine/   # non-React Cesium machinery (viewer, CameraRig)
 │   ├── sim/      # simulation clock

@@ -1,3 +1,9 @@
+/**
+ * Transport bar (tape-deck): play/pause, warp rates, ±12 h scrub against
+ * wall-now, NOW reset, UTC readout. The scrub keeps a transient local value
+ * only while dragging; it must reset on pointer/key release or the slider
+ * freezes at a stale offset.
+ */
 import { useState } from 'react'
 import { SIM_RATES, useSimClock } from '../../core/sim/simClock'
 import { formatRate, formatUtc } from '../../lib/format'

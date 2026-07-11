@@ -1,3 +1,4 @@
+/** Left-rail content for MARITIME mode: live vessel totals broken down by AIS type. */
 import type { ShipType } from '@orbital-ops/shared'
 import { formatCount } from '../../lib/format'
 import { useShips } from './shipsStore'
