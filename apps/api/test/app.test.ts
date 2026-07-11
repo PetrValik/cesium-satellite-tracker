@@ -294,3 +294,53 @@ describe('live feeds: /api/ships, /api/aircraft, /api/live/status', () => {
     adsb.stop()
   })
 })
+
+describe('hardening', () => {
+  it('rejects search queries longer than 64 characters', async () => {
+    const { app } = testEnv(failingFetcher())
+    const long = 'x'.repeat(65)
+    expect((await app.request(`/api/satellites/search?q=${long}`)).status).toBe(400)
+  })
+
+  it('rate-limits per client and recovers after the window', async () => {
+    let clock = T0
+    const db2 = new (await import('../src/satellites/db.ts')).Db(':memory:')
+    db2.ensureGroups((await import('../src/satellites/groups.ts')).GROUPS)
+    const refresher = new (await import('../src/satellites/refresh.ts')).Refresher({
+      db: db2,
+      fetcher: failingFetcher(),
+      now: () => clock,
+      log: () => {},
+    })
+    const app = createApp({
+      db: db2,
+      refresher,
+      rateLimit: { limit: 3, windowMs: 60_000, now: () => clock },
+    })
+
+    expect((await app.request('/api/health')).status).toBe(200)
+    expect((await app.request('/api/health')).status).toBe(200)
+    expect((await app.request('/api/health')).status).toBe(200)
+    const blocked = await app.request('/api/health')
+    expect(blocked.status).toBe(429)
+    expect(blocked.headers.get('retry-after')).not.toBeNull()
+
+    clock += 60_001
+    expect((await app.request('/api/health')).status).toBe(200)
+  })
+
+  it('sends cache headers on catalog reads and no-store on live status', async () => {
+    const fetcher = vi.fn(async () => tleFor(25544, 'ISS (ZARYA)'))
+    const { app } = testEnv(fetcher)
+    const sats = await app.request('/api/satellites?group=stations')
+    expect(sats.headers.get('cache-control')).toBe('public, max-age=300')
+    const status = await app.request('/api/live/status')
+    expect(status.headers.get('cache-control')).toBe('no-store')
+  })
+
+  it('emits no CORS headers unless an allowlist is configured', async () => {
+    const { app } = testEnv(failingFetcher())
+    const res = await app.request('/api/health', { headers: { origin: 'https://evil.example' } })
+    expect(res.headers.get('access-control-allow-origin')).toBeNull()
+  })
+})

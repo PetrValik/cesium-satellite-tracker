@@ -69,9 +69,11 @@ export function GlobeView() {
     })
     const post = (msg: WorkerRequest) => worker.postMessage(msg)
 
-    // --- live domain layers: data + infra visibility ---
+    // --- live domain layers: data + layer visibility ---
     shipsLayer.setShips(useShips.getState().ships)
     aircraftLayer.setAircraft(useAircraft.getState().aircraft)
+    shipsLayer.setVisible(useMode.getState().shipsVisible)
+    aircraftLayer.setVisible(useMode.getState().aircraftVisible)
     launchSitesLayer.setVisible(useMode.getState().launchSites)
     portsLayer.setVisible(useMode.getState().ports)
 
@@ -106,6 +108,16 @@ export function GlobeView() {
     const unsubMode = useMode.subscribe((state, prev) => {
       if (state.launchSites !== prev.launchSites) launchSitesLayer.setVisible(state.launchSites)
       if (state.ports !== prev.ports) portsLayer.setVisible(state.ports)
+      if (state.shipsVisible !== prev.shipsVisible) {
+        shipsLayer.setVisible(state.shipsVisible)
+        // Hiding the layer with a followed/selected vessel would leave a
+        // phantom selection — drop it.
+        if (!state.shipsVisible) useShips.getState().select(null)
+      }
+      if (state.aircraftVisible !== prev.aircraftVisible) {
+        aircraftLayer.setVisible(state.aircraftVisible)
+        if (!state.aircraftVisible) useAircraft.getState().select(null)
+      }
     })
 
     // --- selected satellite (propagated on the main thread every frame) ---

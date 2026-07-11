@@ -9,6 +9,8 @@ interface StoredMode {
   mode: OpsMode
   launchSites: boolean
   ports: boolean
+  shipsVisible: boolean
+  aircraftVisible: boolean
 }
 
 function load(): StoredMode {
@@ -20,12 +22,15 @@ function load(): StoredMode {
         mode: OPS_MODES.includes(parsed.mode as OpsMode) ? (parsed.mode as OpsMode) : 'orbital',
         launchSites: parsed.launchSites === true,
         ports: parsed.ports === true,
+        // Live layers default ON; only an explicit false hides them.
+        shipsVisible: parsed.shipsVisible !== false,
+        aircraftVisible: parsed.aircraftVisible !== false,
       }
     }
   } catch {
     // corrupted storage — defaults below
   }
-  return { mode: 'orbital', launchSites: true, ports: false }
+  return { mode: 'orbital', launchSites: true, ports: false, shipsVisible: true, aircraftVisible: true }
 }
 
 export interface ModeState extends StoredMode {
@@ -34,6 +39,8 @@ export interface ModeState extends StoredMode {
   setMode: (mode: OpsMode) => void
   toggleLaunchSites: () => void
   togglePorts: () => void
+  toggleShips: () => void
+  toggleAircraft: () => void
   toggleHelp: () => void
   closeHelp: () => void
 }
@@ -76,5 +83,17 @@ export const useMode = create<ModeState>((set) => ({
       const next = { ...s, ports: !s.ports }
       persist(next)
       return { ports: next.ports }
+    }),
+  toggleShips: () =>
+    set((s) => {
+      const next = { ...s, shipsVisible: !s.shipsVisible }
+      persist(next)
+      return { shipsVisible: next.shipsVisible }
+    }),
+  toggleAircraft: () =>
+    set((s) => {
+      const next = { ...s, aircraftVisible: !s.aircraftVisible }
+      persist(next)
+      return { aircraftVisible: next.aircraftVisible }
     }),
 }))

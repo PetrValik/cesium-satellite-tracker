@@ -12,7 +12,7 @@ import { loadSeed } from './satellites/seed.ts'
 import { AisFeed } from './ships/ais.ts'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const dataDir = join(here, '..', 'data')
+const dataDir = process.env.DATA_DIR ?? join(here, '..', 'data')
 mkdirSync(dataDir, { recursive: true })
 
 const db = new Db(join(dataDir, 'tle-cache.db'))
@@ -44,7 +44,23 @@ console.log(
     : '[orbital-ops api] ADS-B feed: anonymous OpenSky polling every 600s (set OPENSKY_CLIENT_ID/OPENSKY_CLIENT_SECRET for 60s)',
 )
 
-const app = createApp({ db, refresher, ais, adsb })
+const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter((o) => o.length > 0)
+
+const webDist = process.env.WEB_DIST
+if (webDist) console.log(`[orbital-ops api] serving web app from ${webDist}`)
+
+const app = createApp({
+  db,
+  refresher,
+  ais,
+  adsb,
+  allowedOrigins,
+  rateLimit: { trustProxy: process.env.TRUST_PROXY === '1' },
+  webDist,
+})
 
 const port = Number(process.env.PORT ?? 8787)
 serve({ fetch: app.fetch, port }, (info) => {
