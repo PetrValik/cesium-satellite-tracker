@@ -3,15 +3,25 @@ import type { Billboard, Cartesian2, Scene } from 'cesium'
 import { shipIcon } from '../../core/engine/icons'
 import type { Ship, ShipType } from '@orbital-ops/shared'
 
-/** Design tokens per vessel category (0.95 alpha, mirrors tokens.css hues). */
-const TYPE_COLORS: Record<ShipType, Color> = {
-  cargo: Color.fromCssColorString('#6ee7ff').withAlpha(0.95), // cyan
-  tanker: Color.fromCssColorString('#ffb454').withAlpha(0.95), // signal amber
-  passenger: Color.fromCssColorString('#c084fc').withAlpha(0.95), // violet
-  fishing: Color.fromCssColorString('#7dd87d').withAlpha(0.95), // green
-  highspeed: Color.fromCssColorString('#f0f4f8').withAlpha(0.95), // near-white
-  military: Color.fromCssColorString('#f87171').withAlpha(0.95), // red
-  other: Color.fromCssColorString('#8a93a3').withAlpha(0.95), // slate
+export type ShipPalette = Record<ShipType, string>
+
+/** Default hues (mirrors core/ui/prefsStore DEFAULT_COLORS.ships). */
+const DEFAULT_PALETTE: ShipPalette = {
+  cargo: '#6ee7ff',
+  tanker: '#ffb454',
+  passenger: '#c084fc',
+  fishing: '#7dd87d',
+  highspeed: '#f0f4f8',
+  military: '#f87171',
+  other: '#8a93a3',
+}
+
+function buildColors(palette: ShipPalette): Record<ShipType, Color> {
+  const out = {} as Record<ShipType, Color>
+  for (const key of Object.keys(palette) as ShipType[]) {
+    out[key] = Color.fromCssColorString(palette[key]).withAlpha(0.95)
+  }
+  return out
 }
 
 /**
@@ -86,6 +96,7 @@ export class ShipsLayer {
   private readonly _indexByMmsi = new Map<number, number>()
   private _selectedMmsi: number | null = null
   private _lastAdvanceMs = 0
+  private _colors: Record<ShipType, Color> = buildColors(DEFAULT_PALETTE)
 
   // Dead-reckoning state in billboard-index order. Positions are re-derived
   // from the *report* each pass (lat0 + vLat * dt), so the reckoning never
@@ -123,7 +134,7 @@ export class ShipsLayer {
         if (index === undefined) continue
         this._storeState(index, ship)
         const billboard = this._billboards.get(index)
-        billboard.color = TYPE_COLORS[ship.shipType]
+        billboard.color = this._colors[ship.shipType]
         Cartesian3.fromDegrees(ship.lonDeg, ship.latDeg, 0, undefined, scratchPosition)
         billboard.position = scratchPosition
         // Fixed screen rotation by COG, set once — the glyph never visibly
@@ -152,7 +163,7 @@ export class ShipsLayer {
       const billboard = billboards.add({
         id: ship.mmsi,
         position: scratchPosition,
-        color: TYPE_COLORS[ship.shipType],
+        color: this._colors[ship.shipType],
         scaleByDistance: SCALE_BY_DISTANCE,
         // Fixed screen rotation by COG, set once (see in-place path).
         rotation: ship.sogKn < MOORED_SOG_KN ? 0 : -ship.cogDeg * RAD_PER_DEG,
@@ -246,6 +257,11 @@ export class ShipsLayer {
   }
 
   /** Show or hide the whole layer (billboards keep updating while hidden). */
+  /** Swap the per-type hues; the caller re-feeds the working set to recolor. */
+  setPalette(palette: ShipPalette): void {
+    this._colors = buildColors(palette)
+  }
+
   setVisible(visible: boolean): void {
     if (this._isUnusable()) return
     this._billboards.show = visible

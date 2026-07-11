@@ -4,18 +4,33 @@ import { aircraftIcon } from '../../core/engine/icons'
 import type { Aircraft } from '@orbital-ops/shared'
 import { categoryOf } from './aircraftCategory'
 
-/** Altitude-band colors (0.95 alpha, mirrors tokens.css hues). */
-const COLOR_GROUND = Color.fromCssColorString('#8a93a3').withAlpha(0.95) // slate
-const COLOR_LOW = Color.fromCssColorString('#7dd87d').withAlpha(0.95) // green, < 3000 m
-const COLOR_MID = Color.fromCssColorString('#6ee7ff').withAlpha(0.95) // cyan, 3000–9000 m
-const COLOR_HIGH = Color.fromCssColorString('#f0f4f8').withAlpha(0.95) // near-white, above
+/** On-ground aircraft render flat grey regardless of the category hue. */
+const COLOR_GROUND = Color.fromCssColorString('#8a93a3').withAlpha(0.95)
 
-/** Category colors (heuristic civil/cargo/military classification). */
-const COLOR_CIVIL = Color.fromCssColorString('#6ee7ff').withAlpha(0.95)
-const COLOR_CARGO = Color.fromCssColorString('#ffb454').withAlpha(0.95)
-const COLOR_MILITARY = Color.fromCssColorString('#f87171').withAlpha(0.95)
+/** Altitude drives the shade of the category hue: darker low, full bright high. */
+const BAND_SHADE = { low: 0.55, mid: 0.78, high: 1.0 } as const
 
-export type AircraftColorMode = 'altitude' | 'category'
+export type AircraftPalette = Record<'civil' | 'cargo' | 'military', string>
+
+/** Precomputed tint per category x altitude band. */
+type ShadedPalette = Record<keyof AircraftPalette, { low: Color; mid: Color; high: Color }>
+
+function shade(hex: string, factor: number): Color {
+  const c = Color.fromCssColorString(hex)
+  return new Color(c.red * factor, c.green * factor, c.blue * factor, 0.95)
+}
+
+function buildShadedPalette(palette: AircraftPalette): ShadedPalette {
+  const out = {} as ShadedPalette
+  for (const key of ['civil', 'cargo', 'military'] as const) {
+    out[key] = {
+      low: shade(palette[key], BAND_SHADE.low),
+      mid: shade(palette[key], BAND_SHADE.mid),
+      high: shade(palette[key], BAND_SHADE.high),
+    }
+  }
+  return out
+}
 
 /**
  * Distance scaling: the airliner sprite is 64 px and Billboard.scale
@@ -65,19 +80,18 @@ const MIN_COS_LAT = 0.01
 // the value into its internal Cartesian3 (verified in cesium 1.138).
 const scratchPosition = new Cartesian3()
 
-/** Color for a state vector (chosen at set time, not re-derived per frame). */
-function colorFor(aircraft: Aircraft, mode: AircraftColorMode): Color {
-  if (mode === 'category') {
-    const category = categoryOf(aircraft)
-    if (category === 'military') return COLOR_MILITARY
-    if (category === 'cargo') return COLOR_CARGO
-    return COLOR_CIVIL
-  }
+/**
+ * Color for a state vector (chosen at set time, not re-derived per frame):
+ * hue from the heuristic category, shade from the altitude band — so the
+ * filter toggles never change what a color means.
+ */
+function colorFor(aircraft: Aircraft, palette: ShadedPalette): Color {
   if (aircraft.onGround) return COLOR_GROUND
+  const shades = palette[categoryOf(aircraft)]
   const altM = aircraft.altM ?? 0
-  if (altM < 3000) return COLOR_LOW
-  if (altM <= 9000) return COLOR_MID
-  return COLOR_HIGH
+  if (altM < 3000) return shades.low
+  if (altM <= 9000) return shades.mid
+  return shades.high
 }
 
 /**
@@ -104,7 +118,11 @@ export class AircraftLayer {
   private readonly _indexByIcao24 = new Map<string, number>()
   private _selectedIcao24: string | null = null
   private _lastAdvanceMs = 0
-  private _colorMode: AircraftColorMode = 'altitude'
+  private _palette: ShadedPalette = buildShadedPalette({
+    civil: '#4da6ff',
+    cargo: '#f87171',
+    military: '#7dd87d',
+  })
 
   // Dead-reckoning state in billboard-index order. Positions are re-derived
   // from the *state vector* each pass (lat0 + vLat * dt), so the reckoning
@@ -144,7 +162,7 @@ export class AircraftLayer {
         if (index === undefined) continue
         this._storeState(index, state)
         const billboard = this._billboards.get(index)
-        billboard.color = colorFor(state, this._colorMode)
+        billboard.color = colorFor(state, this._palette)
         Cartesian3.fromDegrees(
           state.lonDeg,
           state.latDeg,
@@ -186,7 +204,7 @@ export class AircraftLayer {
       const billboard = billboards.add({
         id: state.icao24,
         position: scratchPosition,
-        color: colorFor(state, this._colorMode),
+        color: colorFor(state, this._palette),
         scaleByDistance: SCALE_BY_DISTANCE,
         // No reported track → ZERO means plain screen-aligned.
         rotation: state.trackDeg === null ? 0 : -state.trackDeg * RAD_PER_DEG,
@@ -291,11 +309,11 @@ export class AircraftLayer {
 
   /** Show or hide the whole layer (billboards keep updating while hidden). */
   /**
-   * Switch the tint scheme. Colors are applied at set time, so the caller
-   * re-feeds the current working set after switching.
+   * Swap the category hues (user palette). Colors are applied at set time,
+   * so the caller re-feeds the current working set after switching.
    */
-  setColorMode(mode: AircraftColorMode): void {
-    this._colorMode = mode
+  setPalette(palette: AircraftPalette): void {
+    this._palette = buildShadedPalette(palette)
   }
 
   setVisible(visible: boolean): void {

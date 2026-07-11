@@ -19,8 +19,6 @@ const POLL_MS = 30_000
 /** While the feed reports "not configured", only re-check occasionally. */
 const UNCONFIGURED_RECHECK_TICKS = 10
 
-export type AircraftColorMode = 'altitude' | 'category'
-
 export interface AircraftState {
   aircraft: Aircraft[]
   byIcao: Map<string, Aircraft>
@@ -29,15 +27,12 @@ export interface AircraftState {
   activeBands: Set<AltBand>
   /** Heuristic categories currently shown on the globe (ANDed with bands). */
   activeCategories: Set<AircraftCategory>
-  /** What the glyph tint encodes. */
-  colorMode: AircraftColorMode
   /** null = unknown (no successful status yet). */
   available: boolean | null
   lastPollMs: number | null
   select: (icao24: string | null) => void
   toggleBand: (band: AltBand) => void
   toggleCategory: (category: AircraftCategory) => void
-  setColorMode: (mode: AircraftColorMode) => void
 }
 
 export const useAircraft = create<AircraftState>((set) => ({
@@ -46,7 +41,6 @@ export const useAircraft = create<AircraftState>((set) => ({
   selectedIcao: null,
   activeBands: new Set<AltBand>(ALT_BANDS),
   activeCategories: new Set<AircraftCategory>(AIRCRAFT_CATEGORIES),
-  colorMode: 'altitude',
   available: null,
   lastPollMs: null,
   select: (icao24) => set({ selectedIcao: icao24 }),
@@ -72,7 +66,6 @@ export const useAircraft = create<AircraftState>((set) => ({
           : s.selectedIcao
       return { activeCategories, selectedIcao }
     }),
-  setColorMode: (colorMode) => set({ colorMode }),
 }))
 
 let timer: ReturnType<typeof setInterval> | undefined

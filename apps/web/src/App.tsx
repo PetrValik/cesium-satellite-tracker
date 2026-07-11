@@ -6,6 +6,7 @@
 import { useEffect } from 'react'
 import { GlobeView } from './app/GlobeView'
 import { HelpButton, HelpOverlay } from './app/HelpOverlay'
+import { SettingsButton, SettingsPanel } from './app/SettingsPanel'
 import { LeftRail } from './app/LeftRail'
 import { ModeTabs } from './app/ModeTabs'
 import { StatusLine } from './app/StatusLine'
@@ -49,7 +50,9 @@ export default function App() {
         </div>
         <TransportBar />
         <HelpButton />
+        <SettingsButton />
         <HelpOverlay />
+        <SettingsPanel />
       </div>
       {booting && (
         <div className="boot-overlay">

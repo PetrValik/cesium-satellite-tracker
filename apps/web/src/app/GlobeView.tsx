@@ -23,6 +23,7 @@ import { CameraRig } from '../core/engine/CameraRig'
 import { createOrbitalViewer, syncViewerClock } from '../core/engine/createViewer'
 import { simClock, SIM_RATES } from '../core/sim/simClock'
 import { useFollow } from '../core/ui/followStore'
+import { usePrefs } from '../core/ui/prefsStore'
 import { ConstellationLayer } from '../features/constellation/ConstellationLayer'
 import { GroundTrackWindow } from '../features/tracking/GroundTrackWindow'
 import { TrackingVisuals } from '../features/tracking/TrackingVisuals'
@@ -81,6 +82,19 @@ export function GlobeView() {
       ;(window as unknown as { __opsViewer?: unknown }).__opsViewer = viewer
     }
 
+    // Reopen where the user left off (free camera only; follow overrides).
+    const savedCamera = usePrefs.getState().lastCamera
+    if (savedCamera !== null) {
+      viewer.camera.setView({
+        destination: new Cartesian3(savedCamera.x, savedCamera.y, savedCamera.z),
+        orientation: {
+          heading: savedCamera.headingRad,
+          pitch: savedCamera.pitchRad,
+          roll: savedCamera.rollRad,
+        },
+      })
+    }
+
     const constellation = new ConstellationLayer(viewer.scene)
     const tracking = new TrackingVisuals(viewer)
     const rig = new CameraRig(viewer)
@@ -116,6 +130,21 @@ export function GlobeView() {
     launchSitesLayer.setVisible(useMode.getState().launchSites)
     portsLayer.setVisible(useMode.getState().ports)
 
+    // --- user palettes (persisted prefs) ---
+    const applyPalettes = () => {
+      const { colors } = usePrefs.getState()
+      aircraftLayer.setPalette(colors.aircraft)
+      shipsLayer.setPalette(colors.ships)
+      constellation.setPalette(colors.satellites)
+      // Live layers tint at set time — re-feed to recolor.
+      aircraftLayer.setAircraft(filteredAircraft(useAircraft.getState()))
+      shipsLayer.setShips(filteredShips(useShips.getState()))
+    }
+    applyPalettes()
+    const unsubPrefs = usePrefs.subscribe((state, prev) => {
+      if (state.colors !== prev.colors) applyPalettes()
+    })
+
     const unsubShips = useShips.subscribe((state, prev) => {
       if (state.ships !== prev.ships || state.activeTypes !== prev.activeTypes) {
         shipsLayer.setShips(filteredShips(state))
@@ -130,13 +159,8 @@ export function GlobeView() {
         }
       }
     })
-    aircraftLayer.setColorMode(useAircraft.getState().colorMode)
     const unsubAircraft = useAircraft.subscribe((state, prev) => {
-      if (state.colorMode !== prev.colorMode) {
-        aircraftLayer.setColorMode(state.colorMode)
-        // Tints are applied at set time — re-feed to recolor.
-        aircraftLayer.setAircraft(filteredAircraft(state))
-      } else if (
+      if (
         state.aircraft !== prev.aircraft ||
         state.activeBands !== prev.activeBands ||
         state.activeCategories !== prev.activeCategories
@@ -404,6 +428,7 @@ export function GlobeView() {
           break
         case 'Escape':
           if (useMode.getState().helpOpen) useMode.getState().closeHelp()
+          else if (useMode.getState().settingsOpen) useMode.getState().closeSettings()
           else if (useFollow.getState().following) useFollow.getState().setFollowing(false)
           else deselectCurrentMode()
           break
@@ -489,6 +514,7 @@ export function GlobeView() {
     let rafId = 0
     let lastFrame = performance.now()
     let lastTelemetry = 0
+    let lastCameraSave = 0
 
     const frame = (now: number) => {
       const dt = Math.min(now - lastFrame, 500) // clamp tab-suspend jumps
@@ -534,6 +560,21 @@ export function GlobeView() {
         }
       }
       rig.update(dt)
+      // Persist the free camera every few seconds so the next session
+      // reopens at the same spot (skipped while follow-locked: the camera
+      // lives in a moving target-local frame there).
+      if (now - lastCameraSave > 5000 && !rig.isFollowing()) {
+        lastCameraSave = now
+        const cam = viewer.camera
+        usePrefs.getState().saveCamera({
+          x: cam.positionWC.x,
+          y: cam.positionWC.y,
+          z: cam.positionWC.z,
+          headingRad: cam.heading,
+          pitchRad: cam.pitch,
+          rollRad: cam.roll,
+        })
+      }
       rafId = requestAnimationFrame(frame)
     }
     rafId = requestAnimationFrame(frame)
@@ -552,6 +593,7 @@ export function GlobeView() {
       unsubAircraft()
       unsubMode()
       unsubFollow()
+      unsubPrefs()
       pickHandler.destroy()
       worker.terminate()
       constellation.dispose()

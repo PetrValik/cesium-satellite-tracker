@@ -1,11 +1,12 @@
 /**
- * Left-rail content for AIRSPACE mode: live aircraft count, feed age,
- * altitude-band and category rows that double as globe filters, and a
- * COLOR BY toggle switching what the glyph tint encodes.
+ * Left-rail content for AIRSPACE mode: live aircraft count, feed age, and
+ * altitude-band + category rows that double as globe filters. Colors are
+ * unified: category = hue, altitude = shade (see AircraftLayer).
  */
 import { formatAge, formatCount } from '../../lib/format'
 import { useWallClock } from '../../lib/wallClock'
 import { AIRCRAFT_CATEGORIES, categoryOf, type AircraftCategory } from './aircraftCategory'
+import { usePrefs } from '../../core/ui/prefsStore'
 import { ALT_BANDS, bandOf, useAircraft, type AltBand } from './aircraftStore'
 
 const BAND_LABELS: Record<AltBand, string> = {
@@ -27,11 +28,10 @@ export function AirPicture() {
   const lastPollMs = useAircraft((s) => s.lastPollMs)
   const activeBands = useAircraft((s) => s.activeBands)
   const activeCategories = useAircraft((s) => s.activeCategories)
-  const colorMode = useAircraft((s) => s.colorMode)
   const toggleBand = useAircraft((s) => s.toggleBand)
   const toggleCategory = useAircraft((s) => s.toggleCategory)
-  const setColorMode = useAircraft((s) => s.setColorMode)
   const nowMs = useWallClock((s) => s.nowMs)
+  const aircraftColors = usePrefs((s) => s.colors.aircraft)
 
   const countsByBand: Record<AltBand, number> = { ground: 0, low: 0, mid: 0, high: 0 }
   const countsByCategory: Record<AircraftCategory, number> = { civil: 0, cargo: 0, military: 0 }
@@ -55,21 +55,6 @@ export function AirPicture() {
           {lastPollMs !== null && (
             <div className="live-meta">DATA AGE {formatAge(Math.max(0, nowMs - lastPollMs))}</div>
           )}
-          <div className="color-mode-row">
-            <span className="color-mode-label">COLOR BY</span>
-            <button
-              className={`hud-button${colorMode === 'altitude' ? ' is-active' : ''}`}
-              onClick={() => setColorMode('altitude')}
-            >
-              ALT
-            </button>
-            <button
-              className={`hud-button${colorMode === 'category' ? ' is-active' : ''}`}
-              onClick={() => setColorMode('category')}
-            >
-              TYPE
-            </button>
-          </div>
           <ul className="group-list">
             {ALT_BANDS.map((band) => (
               <li key={band}>
@@ -93,7 +78,15 @@ export function AirPicture() {
                   onClick={() => toggleCategory(category)}
                   title="Toggle this category on the globe (heuristic classification)"
                 >
-                  <span className={`group-indicator cat-${category}`} aria-hidden />
+                  <span
+                    className="group-indicator"
+                    style={
+                      activeCategories.has(category)
+                        ? { background: aircraftColors[category], borderColor: aircraftColors[category] }
+                        : undefined
+                    }
+                    aria-hidden
+                  />
                   <span className="group-name">{CATEGORY_LABELS[category]}</span>
                   <span className="group-count">{formatCount(countsByCategory[category])}</span>
                 </button>

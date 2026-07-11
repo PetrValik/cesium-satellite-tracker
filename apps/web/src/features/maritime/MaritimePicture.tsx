@@ -5,6 +5,7 @@
  */
 import type { ShipType } from '@orbital-ops/shared'
 import { formatCount } from '../../lib/format'
+import { usePrefs } from '../../core/ui/prefsStore'
 import { useShips } from './shipsStore'
 
 const SHIP_TYPE_ORDER: { type: ShipType; label: string }[] = [
@@ -24,6 +25,7 @@ export function MaritimePicture() {
   const total = useShips((s) => s.ships.length)
   const activeTypes = useShips((s) => s.activeTypes)
   const toggleType = useShips((s) => s.toggleType)
+  const shipColors = usePrefs((s) => s.colors.ships)
 
   return (
     <>
@@ -45,7 +47,15 @@ export function MaritimePicture() {
                   onClick={() => toggleType(type)}
                   title="Toggle this vessel type on the globe"
                 >
-                  <span className={`group-indicator ship-${type}`} aria-hidden />
+                  <span
+                    className="group-indicator"
+                    style={
+                      activeTypes.has(type)
+                        ? { background: shipColors[type], borderColor: shipColors[type] }
+                        : undefined
+                    }
+                    aria-hidden
+                  />
                   <span className="group-name">{label}</span>
                   <span className="group-count">{formatCount(countsByType[type] ?? 0)}</span>
                 </button>

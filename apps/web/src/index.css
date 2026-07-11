@@ -921,6 +921,45 @@ body {
   background: var(--panel-bg);
 }
 
+.settings-button {
+  position: absolute;
+  bottom: 14px;
+  left: 96px;
+  z-index: 15;
+  color: var(--text-dim);
+  background: var(--panel-bg);
+}
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px 16px;
+}
+
+.color-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.color-row-label {
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+  color: var(--text-dim);
+}
+
+.color-row input[type='color'] {
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+}
+
 .help-backdrop {
   position: absolute;
   inset: 0;
