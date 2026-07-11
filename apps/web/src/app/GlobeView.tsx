@@ -20,6 +20,8 @@ import { ScreenSpaceEventHandler, ScreenSpaceEventType, type Cartesian2 } from '
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 import { Cartesian3 } from 'cesium'
 import { CameraRig } from '../core/engine/CameraRig'
+import { aircraftIcon, shipIcon } from '../core/engine/icons'
+import { WorldDecal } from '../core/engine/WorldDecal'
 import { createOrbitalViewer, syncViewerClock } from '../core/engine/createViewer'
 import { simClock, SIM_RATES } from '../core/sim/simClock'
 import { useFollow } from '../core/ui/followStore'
@@ -100,6 +102,11 @@ export function GlobeView() {
     const rig = new CameraRig(viewer)
     const shipsLayer = new ShipsLayer(viewer.scene)
     const aircraftLayer = new AircraftLayer(viewer.scene)
+    // World-oriented flat markers for the selected ship/aircraft: the
+    // camera-facing layer billboard is hidden while selected and this decal
+    // (lying in the map plane, nose along the course) represents it instead.
+    const shipDecal = new WorldDecal(viewer.scene, shipIcon(), '#ffb454')
+    const aircraftDecal = new WorldDecal(viewer.scene, aircraftIcon(), '#ffb454')
     const launchSitesLayer = new LaunchSitesLayer(viewer.scene, launchSites)
     const portsLayer = new PortsLayer(viewer.scene, ports)
     const worker = new Worker(new URL('../workers/propagation.worker.ts', import.meta.url), {
@@ -150,12 +157,14 @@ export function GlobeView() {
         shipsLayer.setShips(filteredShips(state))
       }
       if (state.selectedMmsi !== prev.selectedMmsi) {
+        shipsLayer.setSelected(state.selectedMmsi)
         if (state.selectedMmsi !== null) {
           // Selecting a vessel locks the camera onto it (the ask: click → fly & ride).
           useFollow.getState().setFollowing(true)
           engageFollow()
-        } else if (useMode.getState().mode === 'maritime') {
-          useFollow.getState().setFollowing(false)
+        } else {
+          shipDecal.hide()
+          if (useMode.getState().mode === 'maritime') useFollow.getState().setFollowing(false)
         }
       }
     })
@@ -168,11 +177,13 @@ export function GlobeView() {
         aircraftLayer.setAircraft(filteredAircraft(state))
       }
       if (state.selectedIcao !== prev.selectedIcao) {
+        aircraftLayer.setSelected(state.selectedIcao)
         if (state.selectedIcao !== null) {
           useFollow.getState().setFollowing(true)
           engageFollow()
-        } else if (useMode.getState().mode === 'airspace') {
-          useFollow.getState().setFollowing(false)
+        } else {
+          aircraftDecal.hide()
+          if (useMode.getState().mode === 'airspace') useFollow.getState().setFollowing(false)
         }
       }
     })
@@ -559,6 +570,37 @@ export function GlobeView() {
           }
         }
       }
+      // Selected ship/aircraft world decals: dead-reckoned to wall-now,
+      // world-oriented (nose along course), screen-proportional size.
+      const selMmsi = useShips.getState().selectedMmsi
+      if (selMmsi !== null) {
+        const ship = useShips.getState().byMmsi.get(selMmsi)
+        if (ship) {
+          const dtS = Math.min((Date.now() - ship.tsMs) / 1000, 1800)
+          const v = ship.sogKn >= 0.2 ? ship.sogKn * 0.514444 : 0
+          const brg = ship.cogDeg * DEG
+          const lat = ship.latDeg + (v * Math.cos(brg) * dtS) / 111_320
+          const lon =
+            ship.lonDeg +
+            (v * Math.sin(brg) * dtS) / (111_320 * Math.max(0.01, Math.cos(ship.latDeg * DEG)))
+          shipDecal.setPose(lon, lat, 50, ship.cogDeg, viewer.camera.positionWC)
+        }
+      }
+      const selIcao = useAircraft.getState().selectedIcao
+      if (selIcao !== null) {
+        const a = useAircraft.getState().byIcao.get(selIcao)
+        if (a) {
+          const dtS = Math.min((Date.now() - a.tsMs) / 1000, 900)
+          const v = a.velocityMs ?? 0
+          const brg = (a.trackDeg ?? 0) * DEG
+          const lat = a.latDeg + (v * Math.cos(brg) * dtS) / 111_320
+          const lon =
+            a.lonDeg +
+            (v * Math.sin(brg) * dtS) / (111_320 * Math.max(0.01, Math.cos(a.latDeg * DEG)))
+          const alt = Math.max(50, (a.altM ?? 0) + (a.verticalRateMs ?? 0) * dtS)
+          aircraftDecal.setPose(lon, lat, alt, a.trackDeg ?? 0, viewer.camera.positionWC)
+        }
+      }
       rig.update(dt)
       // Persist the free camera every few seconds so the next session
       // reopens at the same spot (skipped while follow-locked: the camera
@@ -598,6 +640,8 @@ export function GlobeView() {
       worker.terminate()
       constellation.dispose()
       tracking.dispose()
+      shipDecal.dispose()
+      aircraftDecal.dispose()
       shipsLayer.dispose()
       aircraftLayer.dispose()
       launchSitesLayer.dispose()
