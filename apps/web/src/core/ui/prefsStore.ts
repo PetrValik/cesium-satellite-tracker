@@ -30,6 +30,9 @@ export const DEFAULT_COLORS: ColorPrefs = {
   satellites: { LEO: '#ffb454', MEO: '#6ee7ff', GEO: '#c084fc', HEO: '#f87171' },
 }
 
+export const BASEMAPS = ['streets', 'topo', 'satellite'] as const
+export type Basemap = (typeof BASEMAPS)[number]
+
 export interface SavedCamera {
   x: number
   y: number
@@ -42,6 +45,7 @@ export interface SavedCamera {
 interface StoredPrefs {
   colors: ColorPrefs
   lastCamera: SavedCamera | null
+  basemap: Basemap
 }
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/
@@ -72,19 +76,26 @@ function load(): StoredPrefs {
         [cam.x, cam.y, cam.z, cam.headingRad, cam.pitchRad, cam.rollRad].every(Number.isFinite)
           ? cam
           : null
-      return { colors: mergeColors(parsed.colors), lastCamera }
+      const basemap = BASEMAPS.includes(parsed.basemap as Basemap)
+        ? (parsed.basemap as Basemap)
+        : 'streets'
+      return { colors: mergeColors(parsed.colors), lastCamera, basemap }
     }
   } catch {
     // corrupted storage — defaults below
   }
-  return { colors: structuredClone(DEFAULT_COLORS), lastCamera: null }
+  return { colors: structuredClone(DEFAULT_COLORS), lastCamera: null, basemap: 'streets' }
 }
 
 function persist(state: StoredPrefs): void {
   try {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ colors: state.colors, lastCamera: state.lastCamera }),
+      JSON.stringify({
+        colors: state.colors,
+        lastCamera: state.lastCamera,
+        basemap: state.basemap,
+      }),
     )
   } catch {
     // storage unavailable — prefs still work in-memory
@@ -94,6 +105,7 @@ function persist(state: StoredPrefs): void {
 export interface PrefsState extends StoredPrefs {
   setColor: (domain: keyof ColorPrefs, key: string, hex: string) => void
   resetColors: () => void
+  setBasemap: (basemap: Basemap) => void
   /** Persist the free camera so the next session opens where the user left off. */
   saveCamera: (camera: SavedCamera) => void
 }
@@ -105,19 +117,23 @@ export const usePrefs = create<PrefsState>((set) => ({
       if (!HEX_RE.test(hex)) return s
       const colors: ColorPrefs = structuredClone(s.colors)
       ;(colors[domain] as Record<string, string>)[key] = hex
-      const next = { colors, lastCamera: s.lastCamera }
-      persist(next)
+      persist({ colors, lastCamera: s.lastCamera, basemap: s.basemap })
       return { colors }
     }),
   resetColors: () =>
     set((s) => {
       const colors = structuredClone(DEFAULT_COLORS)
-      persist({ colors, lastCamera: s.lastCamera })
+      persist({ colors, lastCamera: s.lastCamera, basemap: s.basemap })
       return { colors }
+    }),
+  setBasemap: (basemap) =>
+    set((s) => {
+      persist({ colors: s.colors, lastCamera: s.lastCamera, basemap })
+      return { basemap }
     }),
   saveCamera: (lastCamera) =>
     set((s) => {
-      persist({ colors: s.colors, lastCamera })
+      persist({ colors: s.colors, lastCamera, basemap: s.basemap })
       return { lastCamera }
     }),
 }))

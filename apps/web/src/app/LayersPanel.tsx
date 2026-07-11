@@ -1,4 +1,5 @@
 import { useMode } from '../core/ui/modeStore'
+import { BASEMAPS, usePrefs, type Basemap } from '../core/ui/prefsStore'
 import { useAircraft } from '../features/airspace/aircraftStore'
 import { useShips } from '../features/maritime/shipsStore'
 import { formatCount } from '../lib/format'
@@ -62,9 +63,29 @@ export function LayersPanel() {
     },
   ]
 
+  const basemap = usePrefs((s) => s.basemap)
+  const setBasemap = usePrefs((s) => s.setBasemap)
+  const basemapLabels: Record<Basemap, string> = {
+    streets: 'MAP',
+    topo: 'TOPO',
+    satellite: 'SAT',
+  }
+
   return (
     <>
       <h2 className="hud-title infra-title">LAYERS</h2>
+      <div className="color-mode-row">
+        <span className="color-mode-label">BASEMAP</span>
+        {BASEMAPS.map((b) => (
+          <button
+            key={b}
+            className={`hud-button${b === basemap ? ' is-active' : ''}`}
+            onClick={() => setBasemap(b)}
+          >
+            {basemapLabels[b]}
+          </button>
+        ))}
+      </div>
       <ul className="group-list">
         {rows.map((row) => (
           <li key={row.key}>

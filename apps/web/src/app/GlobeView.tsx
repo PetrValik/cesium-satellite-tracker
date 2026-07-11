@@ -22,7 +22,7 @@ import { Cartesian3 } from 'cesium'
 import { CameraRig } from '../core/engine/CameraRig'
 import { aircraftIcon, shipIcon } from '../core/engine/icons'
 import { WorldDecal } from '../core/engine/WorldDecal'
-import { createOrbitalViewer, syncViewerClock } from '../core/engine/createViewer'
+import { createOrbitalViewer, setViewerBasemap, syncViewerClock } from '../core/engine/createViewer'
 import { simClock, SIM_RATES } from '../core/sim/simClock'
 import { useFollow } from '../core/ui/followStore'
 import { usePrefs } from '../core/ui/prefsStore'
@@ -71,7 +71,7 @@ export function GlobeView() {
 
     let viewer
     try {
-      viewer = createOrbitalViewer(container)
+      viewer = createOrbitalViewer(container, usePrefs.getState().basemap)
     } catch (err) {
       // Init failure is only observable from inside this effect.
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -150,6 +150,7 @@ export function GlobeView() {
     applyPalettes()
     const unsubPrefs = usePrefs.subscribe((state, prev) => {
       if (state.colors !== prev.colors) applyPalettes()
+      if (state.basemap !== prev.basemap) setViewerBasemap(viewer, state.basemap)
     })
 
     const unsubShips = useShips.subscribe((state, prev) => {

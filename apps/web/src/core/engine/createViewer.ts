@@ -7,8 +7,45 @@ import {
   JulianDate,
   OpenStreetMapImageryProvider,
   Terrain,
+  UrlTemplateImageryProvider,
   Viewer,
 } from 'cesium'
+
+export type Basemap = 'streets' | 'topo' | 'satellite'
+
+/**
+ * Keyless basemap providers. TOPO carries hillshaded relief ("mountains"),
+ * SATELLITE is Esri World Imagery — both work without any token; a Cesium
+ * Ion token additionally enables true 3D terrain underneath.
+ */
+function basemapProvider(basemap: Basemap) {
+  switch (basemap) {
+    case 'topo':
+      return new UrlTemplateImageryProvider({
+        url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+        subdomains: ['a', 'b', 'c'],
+        maximumLevel: 16,
+        credit: 'Map data © OpenStreetMap contributors, SRTM · Style © OpenTopoMap (CC-BY-SA)',
+      })
+    case 'satellite':
+      return new UrlTemplateImageryProvider({
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        maximumLevel: 18,
+        credit: 'Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+      })
+    default:
+      return new OpenStreetMapImageryProvider({ url: 'https://tile.openstreetmap.org/' })
+  }
+}
+
+/** Swap the base imagery layer in place (satellite/topo/streets). */
+export function setViewerBasemap(viewer: Viewer, basemap: Basemap): void {
+  if (viewer.isDestroyed()) return
+  const layers = viewer.imageryLayers
+  const oldBase = layers.length > 0 ? layers.get(0) : undefined
+  layers.add(new ImageryLayer(basemapProvider(basemap)), 0)
+  if (oldBase !== undefined) layers.remove(oldBase, true)
+}
 
 /**
  * Engine-layer viewer factory for Orbital Ops. No React in here — components
@@ -20,7 +57,7 @@ import {
  *   ellipsoid terrain, and Ion is never touched (no token set, no Ion asset
  *   requests, no console error spam).
  */
-export function createOrbitalViewer(container: HTMLElement): Viewer {
+export function createOrbitalViewer(container: HTMLElement, basemap: Basemap = 'streets'): Viewer {
   const token = import.meta.env.VITE_CESIUM_TOKEN as string | undefined
 
   // Attribution must stay visible for legal compliance (OSM/Ion credits), so
@@ -54,17 +91,18 @@ export function createOrbitalViewer(container: HTMLElement): Viewer {
 
   let viewer: Viewer
   if (token) {
+    // Token adds true 3D terrain; imagery still comes from the keyless
+    // basemap choice so the look is consistent with the token-free mode.
     Ion.defaultAccessToken = token
     viewer = new Viewer(container, {
       ...baseOptions,
+      baseLayer: new ImageryLayer(basemapProvider(basemap)),
       terrain: Terrain.fromWorldTerrain(),
     })
   } else {
     viewer = new Viewer(container, {
       ...baseOptions,
-      baseLayer: new ImageryLayer(
-        new OpenStreetMapImageryProvider({ url: 'https://tile.openstreetmap.org/' }),
-      ),
+      baseLayer: new ImageryLayer(basemapProvider(basemap)),
       terrainProvider: new EllipsoidTerrainProvider(),
     })
   }
