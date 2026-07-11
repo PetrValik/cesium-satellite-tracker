@@ -1,5 +1,8 @@
 services:
   orbital-ops:
+    # `docker compose pull` grabs the CI-built image; `docker compose up
+    # --build` still builds locally when you want to.
+    image: ghcr.io/petrvalik/cesium-satellite-tracker:latest
     build: .
     restart: unless-stopped
     ports:
