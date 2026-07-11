@@ -6,8 +6,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { fetchCelestrakGroup, parseTleText } from '../src/celestrak.ts'
-import { GROUPS } from '../src/groups.ts'
+import { fetchCelestrakGroup, parseTleText } from '../src/satellites/celestrak.ts'
+import { GROUPS } from '../src/satellites/groups.ts'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const seedDir = join(here, '..', 'seed')

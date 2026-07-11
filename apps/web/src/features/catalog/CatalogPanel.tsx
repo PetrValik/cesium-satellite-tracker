@@ -1,28 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Satellite, ShipType } from '@orbital-ops/shared'
+import type { Satellite } from '@orbital-ops/shared'
 import { api } from '../../lib/api'
-import { formatAge, formatCount } from '../../lib/format'
-import { useWallClock } from '../../lib/wallClock'
-import { useMode } from '../../core/ui/modeStore'
-import { useAircraft } from '../airspace/aircraftStore'
-import { useShips } from '../maritime/shipsStore'
-import launchSites from '../../data/launchSites.json'
-import ports from '../../data/ports.json'
+import { formatCount } from '../../lib/format'
 import { useCatalog } from './catalogStore'
 
+/** Left-rail content for ORBITAL mode: satellite groups + search. */
 export function CatalogPanel() {
-  const mode = useMode((s) => s.mode)
-  return (
-    <section className="hud-panel catalog-panel">
-      {mode === 'orbital' && <OrbitalCatalog />}
-      {mode === 'maritime' && <MaritimeCatalog />}
-      {mode === 'airspace' && <AirspaceCatalog />}
-      <InfraSection />
-    </section>
-  )
-}
-
-function OrbitalCatalog() {
   const groups = useCatalog((s) => s.groups)
   const activeSlugs = useCatalog((s) => s.activeSlugs)
   const loadingGroups = useCatalog((s) => s.loadingGroups)
@@ -53,108 +36,6 @@ function OrbitalCatalog() {
             </li>
           )
         })}
-      </ul>
-    </>
-  )
-}
-
-const SHIP_TYPE_ORDER: { type: ShipType; label: string }[] = [
-  { type: 'cargo', label: 'CARGO' },
-  { type: 'tanker', label: 'TANKER' },
-  { type: 'passenger', label: 'PASSENGER' },
-  { type: 'fishing', label: 'FISHING' },
-  { type: 'highspeed', label: 'HIGH-SPEED' },
-  { type: 'other', label: 'OTHER' },
-]
-
-function MaritimeCatalog() {
-  const configured = useShips((s) => s.configured)
-  const countsByType = useShips((s) => s.countsByType)
-  const total = useShips((s) => s.ships.length)
-
-  return (
-    <>
-      <h2 className="hud-title">MARITIME PICTURE</h2>
-      {configured === false && (
-        <div className="passes-empty">
-          AIS OFFLINE — REGISTER AT AISSTREAM.IO AND SET AISSTREAM_API_KEY FOR THE API
-        </div>
-      )}
-      {configured === null && <div className="passes-empty">CONNECTING…</div>}
-      {configured === true && (
-        <>
-          <div className="live-count">{formatCount(total)} VESSELS LIVE</div>
-          <ul className="group-list">
-            {SHIP_TYPE_ORDER.map(({ type, label }) => (
-              <li key={type}>
-                <div className="group-row is-active">
-                  <span className={`group-indicator ship-${type}`} aria-hidden />
-                  <span className="group-name">{label}</span>
-                  <span className="group-count">{formatCount(countsByType[type] ?? 0)}</span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </>
-  )
-}
-
-function AirspaceCatalog() {
-  const available = useAircraft((s) => s.available)
-  const total = useAircraft((s) => s.aircraft.length)
-  const lastPollMs = useAircraft((s) => s.lastPollMs)
-  const nowMs = useWallClock((s) => s.nowMs)
-
-  return (
-    <>
-      <h2 className="hud-title">AIR PICTURE</h2>
-      {available === false && (
-        <div className="passes-empty">
-          ADS-B OFFLINE — OPENSKY UNREACHABLE (OPTIONAL OPENSKY_CLIENT_ID SPEEDS UP POLLING)
-        </div>
-      )}
-      {available === null && <div className="passes-empty">CONNECTING…</div>}
-      {available === true && (
-        <>
-          <div className="live-count">{formatCount(total)} AIRCRAFT LIVE</div>
-          {lastPollMs !== null && (
-            <div className="live-meta">DATA AGE {formatAge(Math.max(0, nowMs - lastPollMs))}</div>
-          )}
-        </>
-      )}
-    </>
-  )
-}
-
-function InfraSection() {
-  const launchSitesOn = useMode((s) => s.launchSites)
-  const portsOn = useMode((s) => s.ports)
-  const toggleLaunchSites = useMode((s) => s.toggleLaunchSites)
-  const togglePorts = useMode((s) => s.togglePorts)
-
-  return (
-    <>
-      <h2 className="hud-title infra-title">INFRA</h2>
-      <ul className="group-list">
-        <li>
-          <button
-            className={`group-row${launchSitesOn ? ' is-active' : ''}`}
-            onClick={toggleLaunchSites}
-          >
-            <span className="group-indicator" aria-hidden />
-            <span className="group-name">LAUNCH SITES</span>
-            <span className="group-count">{launchSites.length}</span>
-          </button>
-        </li>
-        <li>
-          <button className={`group-row${portsOn ? ' is-active' : ''}`} onClick={togglePorts}>
-            <span className="group-indicator infra-port" aria-hidden />
-            <span className="group-name">MAJOR PORTS</span>
-            <span className="group-count">{ports.length}</span>
-          </button>
-        </li>
       </ul>
     </>
   )

@@ -6,7 +6,7 @@ import {
   OPENSKY_STATES_URL,
   OPENSKY_TOKEN_URL,
   parseStates,
-} from '../src/adsb.ts'
+} from '../src/aircraft/adsb.ts'
 import { T0 } from './helpers.ts'
 
 const T_POS = 1_749_999_990

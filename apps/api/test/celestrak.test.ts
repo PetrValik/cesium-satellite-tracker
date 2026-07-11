@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseNoradId, parseTleText } from '../src/celestrak.ts'
+import { parseNoradId, parseTleText } from '../src/satellites/celestrak.ts'
 import { T1, T2, tleFor } from './helpers.ts'
 
 describe('parseNoradId', () => {

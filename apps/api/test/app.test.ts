@@ -5,11 +5,11 @@ import {
   SatelliteListSchema,
   SatelliteSchema,
 } from '@orbital-ops/shared'
-import { DEFAULT_FAILURE_COOLDOWN_MS, DEFAULT_TTL_MS } from '../src/refresh.ts'
+import { DEFAULT_FAILURE_COOLDOWN_MS, DEFAULT_TTL_MS } from '../src/satellites/refresh.ts'
 import { failingFetcher, testEnv, tleFor } from './helpers.ts'
 import { AircraftListSchema, LiveStatusSchema, ShipListSchema } from '@orbital-ops/shared'
-import { AdsbFeed } from '../src/adsb.ts'
-import { AisFeed } from '../src/ais.ts'
+import { AdsbFeed } from '../src/aircraft/adsb.ts'
+import { AisFeed } from '../src/ships/ais.ts'
 import { createApp } from '../src/app.ts'
 import { T0 } from './helpers.ts'
 

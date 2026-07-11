@@ -6,7 +6,7 @@ import {
   AisFeed,
   mapShipType,
   type AisSocket,
-} from '../src/ais.ts'
+} from '../src/ships/ais.ts'
 import { T0 } from './helpers.ts'
 
 type SocketListener = (event: { data?: unknown }) => void

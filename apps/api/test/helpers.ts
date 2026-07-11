@@ -1,8 +1,8 @@
 import { vi } from 'vitest'
-import type { TleFetcher } from '../src/celestrak.ts'
-import { Db } from '../src/db.ts'
-import { GROUPS } from '../src/groups.ts'
-import { Refresher } from '../src/refresh.ts'
+import type { TleFetcher } from '../src/satellites/celestrak.ts'
+import { Db } from '../src/satellites/db.ts'
+import { GROUPS } from '../src/satellites/groups.ts'
+import { Refresher } from '../src/satellites/refresh.ts'
 import { createApp } from '../src/app.ts'
 
 // Canonical ISS TLE (69-char lines); tleFor splices a different id into cols 3–7.
