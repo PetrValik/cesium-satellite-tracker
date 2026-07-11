@@ -35,6 +35,9 @@ export function mapShipType(code: number | undefined): ShipType {
   if (code >= 70 && code <= 79) return 'cargo'
   if (code >= 80 && code <= 89) return 'tanker'
   if (code === 30) return 'fishing'
+  // 35 = military ops, 55 = law enforcement. Warships often sail dark
+  // (AIS off), so this only catches the ones that choose to broadcast.
+  if (code === 35 || code === 55) return 'military'
   if (code >= 40 && code <= 49) return 'highspeed'
   return 'other'
 }

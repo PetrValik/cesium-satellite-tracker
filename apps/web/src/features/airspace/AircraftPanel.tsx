@@ -1,9 +1,44 @@
+import { useEffect, useState } from 'react'
 import { FollowButton } from '../../core/ui/FollowButton'
 import { formatAge, formatDeg, formatLatLon } from '../../lib/format'
 import { useWallClock } from '../../lib/wallClock'
+import { categoryOf } from './aircraftCategory'
 import { useAircraft } from './aircraftStore'
+import { fetchPlanePhoto, type PlanePhoto } from './planePhotos'
 
 const MS_TO_KN = 1.94384
+
+/** Airframe photo with the attribution planespotters.net requires. */
+function PhotoCard({ icao24 }: { icao24: string }) {
+  // undefined = loading, null = no photo for this airframe
+  const [photo, setPhoto] = useState<PlanePhoto | null | undefined>(undefined)
+
+  useEffect(() => {
+    let alive = true
+    setPhoto(undefined)
+    void fetchPlanePhoto(icao24).then((result) => {
+      if (alive) setPhoto(result)
+    })
+    return () => {
+      alive = false
+    }
+  }, [icao24])
+
+  if (photo === undefined || photo === null) return null
+  return (
+    <figure className="photo-card">
+      <a href={photo.link} target="_blank" rel="noreferrer noopener">
+        <img src={photo.thumbUrl} alt="Aircraft photo" loading="lazy" />
+      </a>
+      <figcaption>
+        © {photo.photographer} ·{' '}
+        <a href={photo.link} target="_blank" rel="noreferrer noopener">
+          Planespotters.net
+        </a>
+      </figcaption>
+    </figure>
+  )
+}
 
 /** Info panel for the selected aircraft (live ADS-B data, wall-clock based). */
 export function AircraftPanel() {
@@ -28,10 +63,15 @@ export function AircraftPanel() {
         </span>
       </header>
       <div className="telemetry-name">{aircraft?.callsign || selectedIcao.toUpperCase()}</div>
+      <PhotoCard icao24={selectedIcao} />
       {aircraft ? (
         <dl className="telemetry-grid">
           <dt>ICAO24</dt>
           <dd>{aircraft.icao24.toUpperCase()}</dd>
+          <dt>CATEGORY</dt>
+          <dd className={`cat-label-${categoryOf(aircraft)}`}>
+            {categoryOf(aircraft).toUpperCase()}
+          </dd>
           <dt>ALT</dt>
           <dd>{aircraft.onGround ? 'GROUND' : aircraft.altM === null ? '—' : `${Math.round(aircraft.altM)} M`}</dd>
           <dt>GS</dt>

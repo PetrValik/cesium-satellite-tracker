@@ -134,7 +134,10 @@ export class TrackingVisuals {
         // would thrash the async geometry batcher instead).
         semiMajorAxis: new CallbackProperty(() => this._footprintRadiusM, false),
         semiMinorAxis: new CallbackProperty(() => this._footprintRadiusM, false),
-        height: 0,
+        // Slightly above the surface: with globe.depthTestAgainstTerrain on,
+        // a height-0 disk z-fights the globe. 5 km is invisible at footprint
+        // scale (thousands of km across).
+        height: 5_000,
         material: FOOTPRINT_FILL,
         outline: true,
         outlineColor: FOOTPRINT_OUTLINE,

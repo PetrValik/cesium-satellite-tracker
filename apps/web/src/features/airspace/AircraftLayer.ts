@@ -2,12 +2,20 @@ import { BillboardCollection, BlendOption, Cartesian3, Color, NearFarScalar } fr
 import type { Billboard, Cartesian2, Scene } from 'cesium'
 import { aircraftIcon } from '../../core/engine/icons'
 import type { Aircraft } from '@orbital-ops/shared'
+import { categoryOf } from './aircraftCategory'
 
 /** Altitude-band colors (0.95 alpha, mirrors tokens.css hues). */
 const COLOR_GROUND = Color.fromCssColorString('#8a93a3').withAlpha(0.95) // slate
 const COLOR_LOW = Color.fromCssColorString('#7dd87d').withAlpha(0.95) // green, < 3000 m
 const COLOR_MID = Color.fromCssColorString('#6ee7ff').withAlpha(0.95) // cyan, 3000–9000 m
 const COLOR_HIGH = Color.fromCssColorString('#f0f4f8').withAlpha(0.95) // near-white, above
+
+/** Category colors (heuristic civil/cargo/military classification). */
+const COLOR_CIVIL = Color.fromCssColorString('#6ee7ff').withAlpha(0.95)
+const COLOR_CARGO = Color.fromCssColorString('#ffb454').withAlpha(0.95)
+const COLOR_MILITARY = Color.fromCssColorString('#f87171').withAlpha(0.95)
+
+export type AircraftColorMode = 'altitude' | 'category'
 
 /**
  * Distance scaling: the airliner sprite is 64 px and Billboard.scale
@@ -25,13 +33,16 @@ const SCALE_BY_DISTANCE = new NearFarScalar(8e4, 28 / SPRITE_PX, 6e6, 4 / SPRITE
 const AIRCRAFT_IMAGE_ID = 'icon:aircraft'
 
 /**
- * Rotation refresh gate: rewriting Billboard.rotation dirties per-billboard
- * vertex data, and re-rotating thousands of billboards every frame while the
- * camera is still is pure waste. The rotation pass therefore only runs when
- * the camera heading has drifted more than this (~1.1°) since the last
- * applied pass, or when setAircraft changed the data set.
+ * Camera-ward eye offset: with scene.globe.depthTestAgainstTerrain enabled,
+ * near-surface billboards (taxiing and low-flying aircraft) half-sink into
+ * the terrain and z-fight at grazing angles. Eye coordinates are left-handed
+ * with +z pointing INTO the screen (Billboard.eyeOffset docs, cesium 1.138),
+ * so negative z pulls the sprite 1 km toward the viewer — imperceptible at
+ * aircraft-viewing distances, but decisively in front of the terrain depth.
+ * Shared instance: the Billboard constructor clones it (Cartesian3.clone in
+ * cesium 1.138) and we never mutate it.
  */
-const HEADING_EPSILON_RAD = 0.02
+const EYE_OFFSET = new Cartesian3(0, 0, -1000)
 
 /** Metres per degree of latitude (and of longitude at the equator). */
 const METERS_PER_DEG = 111_320
@@ -53,9 +64,48 @@ const MIN_COS_LAT = 0.01
 // not allocate. Safe to share because Billboard's `position` setter clones
 // the value into its internal Cartesian3 (verified in cesium 1.138).
 const scratchPosition = new Cartesian3()
+// Scratch for the world-space travel axis. Safe to share for the same
+// reason: both the Billboard constructor and the `alignedAxis` setter clone
+// the value into the billboard's internal Cartesian3 (cesium 1.138).
+const scratchAxis = new Cartesian3()
 
-/** Band color for a state vector (band chosen at set time, not re-derived per frame). */
-function colorFor(aircraft: Aircraft): Color {
+/**
+ * ECEF unit vector of horizontal travel for a bearing (degrees clockwise
+ * from north) at (latDeg, lonDeg), using the local ENU basis
+ *   east  = (-sinLon, cosLon, 0)
+ *   north = (-sinLat·cosLon, -sinLat·sinLon, cosLat)
+ *   dir   = east·sin(brg) + north·cos(brg)
+ * east and north are orthonormal, so dir is unit-length by construction.
+ */
+function travelAxis(
+  latDeg: number,
+  lonDeg: number,
+  bearingDeg: number,
+  result: Cartesian3,
+): Cartesian3 {
+  const latRad = latDeg * RAD_PER_DEG
+  const lonRad = lonDeg * RAD_PER_DEG
+  const bearingRad = bearingDeg * RAD_PER_DEG
+  const sinLat = Math.sin(latRad)
+  const cosLat = Math.cos(latRad)
+  const sinLon = Math.sin(lonRad)
+  const cosLon = Math.cos(lonRad)
+  const sinBrg = Math.sin(bearingRad)
+  const cosBrg = Math.cos(bearingRad)
+  result.x = -sinLon * sinBrg - sinLat * cosLon * cosBrg
+  result.y = cosLon * sinBrg - sinLat * sinLon * cosBrg
+  result.z = cosLat * cosBrg
+  return result
+}
+
+/** Color for a state vector (chosen at set time, not re-derived per frame). */
+function colorFor(aircraft: Aircraft, mode: AircraftColorMode): Color {
+  if (mode === 'category') {
+    const category = categoryOf(aircraft)
+    if (category === 'military') return COLOR_MILITARY
+    if (category === 'cargo') return COLOR_CARGO
+    return COLOR_CIVIL
+  }
   if (aircraft.onGround) return COLOR_GROUND
   const altM = aircraft.altM ?? 0
   if (altM < 3000) return COLOR_LOW
@@ -69,11 +119,13 @@ function colorFor(aircraft: Aircraft): Color {
  * `advance()` dead-reckons every aircraft with a usable velocity/track along
  * its track (cheap equirectangular step) plus vertical rate on altitude,
  * gated to at most once per 250 ms and clamped to 15 minutes of
- * extrapolation. Each glyph is rotated to point along its reported track;
- * because billboards rotate in screen space, the rotation must compensate
- * the camera heading (rotation = -trackRad - camera.heading) and is
- * refreshed on a heading-gated pass. The selected aircraft's billboard is
- * hidden — a dedicated marker elsewhere represents it.
+ * extrapolation. Each glyph points along its reported track via world-space
+ * Billboard.alignedAxis (the ECEF travel direction; sprite-up follows its
+ * screen projection, which Cesium recomputes every frame, so the heading
+ * reads correctly from any camera angle — no per-frame rotation work).
+ * Null-track aircraft use alignedAxis = ZERO (plain screen-aligned);
+ * rotation stays at its default 0 everywhere. The selected aircraft's
+ * billboard is hidden — a dedicated marker elsewhere represents it.
  *
  * Update strategy: when a poll delivers exactly the working set we already
  * hold (same ICAO set), billboards and dead-reckoning state are updated in
@@ -86,9 +138,7 @@ export class AircraftLayer {
   private readonly _indexByIcao24 = new Map<string, number>()
   private _selectedIcao24: string | null = null
   private _lastAdvanceMs = 0
-  private _rotationsDirty = false
-  /** Infinity → the first rotation pass always applies. */
-  private _lastAppliedHeadingRad = Number.POSITIVE_INFINITY
+  private _colorMode: AircraftColorMode = 'altitude'
 
   // Dead-reckoning state in billboard-index order. Positions are re-derived
   // from the *state vector* each pass (lat0 + vLat * dt), so the reckoning
@@ -100,7 +150,6 @@ export class AircraftLayer {
   private _vLon = new Float64Array(0) // deg/s eastward (0 when not reckonable)
   private _vAlt = new Float64Array(0) // m/s vertical (0 when not reckonable)
   private _tsMs = new Float64Array(0) // state-vector epoch, ms
-  private _trackRad = new Float64Array(0) // track, radians CW from north (NaN = no track)
 
   constructor(scene: Scene) {
     this._scene = scene
@@ -117,7 +166,8 @@ export class AircraftLayer {
    * positions/velocities/colors; otherwise the collection is rebuilt.
    * An empty array clears the layer. Selection survives either path (the
    * selected billboard stays hidden as long as its ICAO is present).
-   * Rotations are (re)applied by the next advance() pass.
+   * alignedAxis is computed here, at store time only: dead reckoning never
+   * changes the track, so advance() carries no orientation work at all.
    */
   setAircraft(aircraft: Aircraft[]): void {
     if (this._isUnusable()) return
@@ -128,7 +178,7 @@ export class AircraftLayer {
         if (index === undefined) continue
         this._storeState(index, state)
         const billboard = this._billboards.get(index)
-        billboard.color = colorFor(state)
+        billboard.color = colorFor(state, this._colorMode)
         Cartesian3.fromDegrees(
           state.lonDeg,
           state.latDeg,
@@ -137,9 +187,13 @@ export class AircraftLayer {
           scratchPosition,
         )
         billboard.position = scratchPosition
+        // No reported track → ZERO means plain screen-aligned.
+        billboard.alignedAxis =
+          state.trackDeg === null
+            ? Cartesian3.ZERO
+            : travelAxis(state.latDeg, state.lonDeg, state.trackDeg, scratchAxis)
         billboard.show = state.icao24 !== this._selectedIcao24
       }
-      this._rotationsDirty = true
       return
     }
 
@@ -155,7 +209,6 @@ export class AircraftLayer {
     this._vLon = new Float64Array(n)
     this._vAlt = new Float64Array(n)
     this._tsMs = new Float64Array(n)
-    this._trackRad = new Float64Array(n)
     const sprite = aircraftIcon()
     for (let i = 0; i < n; i++) {
       const state = aircraft[i]
@@ -170,42 +223,36 @@ export class AircraftLayer {
       const billboard = billboards.add({
         id: state.icao24,
         position: scratchPosition,
-        color: colorFor(state),
+        color: colorFor(state, this._colorMode),
         scaleByDistance: SCALE_BY_DISTANCE,
+        // No reported track → ZERO means plain screen-aligned.
+        alignedAxis:
+          state.trackDeg === null
+            ? Cartesian3.ZERO
+            : travelAxis(state.latDeg, state.lonDeg, state.trackDeg, scratchAxis),
+        eyeOffset: EYE_OFFSET,
         show: state.icao24 !== this._selectedIcao24,
       })
       // Fixed image id → one shared atlas entry for the whole picture.
       billboard.setImage(AIRCRAFT_IMAGE_ID, sprite)
       this._indexByIcao24.set(state.icao24, i)
     }
-    this._rotationsDirty = true
     if (this._selectedIcao24 !== null && !this._indexByIcao24.has(this._selectedIcao24)) {
       this._selectedIcao24 = null
     }
   }
 
   /**
-   * Dead-reckon every reckonable aircraft to wall-clock `wallNowMs`, and
-   * refresh glyph rotations when the camera heading (or the data set)
-   * changed. The position pass is a no-op unless at least 250 ms elapsed
-   * since the last one; extrapolation is clamped to 15 minutes past the
-   * state vector. The rotation pass has its own gate (see
-   * HEADING_EPSILON_RAD) and runs outside the interval gate so the picture
-   * re-orients promptly while the camera spins. Zero allocations: one
-   * shared scratch Cartesian3 is reused for every billboard.
+   * Dead-reckon every reckonable aircraft to wall-clock `wallNowMs`. No-op
+   * unless at least 250 ms elapsed since the last pass; extrapolation is
+   * clamped to 15 minutes past the state vector. Orientation costs nothing
+   * here: alignedAxis is world-space and set once per feed snapshot, and
+   * Cesium re-projects it to the screen every frame on its own. Zero
+   * allocations: one shared scratch Cartesian3 is reused for every
+   * billboard.
    */
   advance(wallNowMs: number): void {
     if (this._isUnusable()) return
-
-    const headingRad = this._scene.camera.heading
-    if (
-      Number.isFinite(headingRad) &&
-      (this._rotationsDirty ||
-        Math.abs(headingRad - this._lastAppliedHeadingRad) > HEADING_EPSILON_RAD)
-    ) {
-      this._refreshRotations(headingRad)
-    }
-
     if (wallNowMs - this._lastAdvanceMs < MIN_ADVANCE_INTERVAL_MS) return
     this._lastAdvanceMs = wallNowMs
 
@@ -238,25 +285,6 @@ export class AircraftLayer {
       )
       billboards.get(i).position = scratchPosition
     }
-  }
-
-  /**
-   * Point every glyph along its reported track. Billboard rotation is
-   * counterclockwise in screen space (alignedAxis ZERO) while track is
-   * clockwise from north, and the camera heading rotates the whole screen —
-   * hence rotation = -trackRad - headingRad. A null track (stored as NaN)
-   * renders upright (rotation 0). Billboard's rotation setter no-ops on
-   * unchanged values, so re-running this pass is cheap when little moved.
-   */
-  private _refreshRotations(headingRad: number): void {
-    const billboards = this._billboards
-    const count = Math.min(billboards.length, this._trackRad.length)
-    for (let i = 0; i < count; i++) {
-      const trackRad = this._trackRad[i]
-      billboards.get(i).rotation = Number.isNaN(trackRad) ? 0 : -trackRad - headingRad
-    }
-    this._lastAppliedHeadingRad = headingRad
-    this._rotationsDirty = false
   }
 
   /**
@@ -302,6 +330,14 @@ export class AircraftLayer {
   }
 
   /** Show or hide the whole layer (billboards keep updating while hidden). */
+  /**
+   * Switch the tint scheme. Colors are applied at set time, so the caller
+   * re-feeds the current working set after switching.
+   */
+  setColorMode(mode: AircraftColorMode): void {
+    this._colorMode = mode
+  }
+
   setVisible(visible: boolean): void {
     if (this._isUnusable()) return
     this._billboards.show = visible
@@ -328,8 +364,7 @@ export class AircraftLayer {
   }
 
   /**
-   * Record the state vector, the track (for the rotation pass; NaN when the
-   * feed reports none), and the precomputed surface velocity in
+   * Record the state vector and the precomputed surface velocity in
    * degrees/second (equirectangular: dLat = v·cos(trk)/111320,
    * dLon = v·sin(trk)/(111320·cos(lat))) so advance() does no trigonometry.
    * Null velocity or track disables reckoning for this aircraft entirely.
@@ -339,8 +374,6 @@ export class AircraftLayer {
     this._lon0[index] = aircraft.lonDeg
     this._alt0[index] = aircraft.altM ?? 0
     this._tsMs[index] = aircraft.tsMs
-    this._trackRad[index] =
-      aircraft.trackDeg === null ? Number.NaN : aircraft.trackDeg * RAD_PER_DEG
     if (aircraft.velocityMs === null || aircraft.trackDeg === null) {
       this._vLat[index] = 0
       this._vLon[index] = 0

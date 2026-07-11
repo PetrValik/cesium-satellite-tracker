@@ -45,6 +45,19 @@ const LABEL_OFFSET = new Cartesian2(8, -8)
  */
 const LABEL_DISPLAY_CONDITION = new DistanceDisplayCondition(0, 12_000_000)
 
+/**
+ * Camera-ward eye offset: with scene.globe.depthTestAgainstTerrain enabled,
+ * surface-level billboards half-sink into the terrain and z-fight at
+ * grazing angles. Eye coordinates are left-handed with +z pointing INTO the
+ * screen (Billboard.eyeOffset docs, cesium 1.138), so negative z pulls the
+ * sprite (and label) 3 km toward the viewer — imperceptible at the
+ * continental distances this layer is viewed from, but decisively in front
+ * of the terrain depth. Shared instance: the Billboard and Label
+ * constructors clone it (Cartesian3.clone in cesium 1.138) and we never
+ * mutate it.
+ */
+const EYE_OFFSET = new Cartesian3(0, 0, -3000)
+
 // Constructor-only scratch (the layer is static; nothing runs per frame).
 // Safe to share because Billboard/Label position handling clones the value
 // rather than retaining our reference (verified in cesium 1.138).
@@ -76,6 +89,7 @@ export class LaunchSitesLayer {
         position: scratchPosition,
         color: ICON_COLOR,
         scaleByDistance: SCALE_BY_DISTANCE,
+        eyeOffset: EYE_OFFSET,
       })
       // Fixed image id → one shared atlas entry for all sites.
       billboard.setImage(ROCKET_IMAGE_ID, sprite)
@@ -87,6 +101,7 @@ export class LaunchSitesLayer {
         fillColor: LABEL_FILL,
         pixelOffset: LABEL_OFFSET,
         distanceDisplayCondition: LABEL_DISPLAY_CONDITION,
+        eyeOffset: EYE_OFFSET,
       })
     }
   }

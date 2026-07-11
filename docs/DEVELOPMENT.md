@@ -5,8 +5,8 @@ app, Hono API, shared zod contracts).
 
 ## Prerequisites
 
-- **Node.js ≥ 22.5** — `node:sqlite` is built in, so there are no native
-  dependencies. CI runs on Node 24.
+- **Node.js ≥ 22.12** — `node:sqlite` and `--env-file-if-exists` are built
+  in, so there are no native dependencies. CI runs on Node 24.
 - No Cesium Ion token required. The globe falls back to OpenStreetMap imagery +
   ellipsoid terrain; set `VITE_CESIUM_TOKEN` for Cesium World Terrain.
 

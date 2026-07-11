@@ -309,3 +309,12 @@ describe('AisFeed vessel state', () => {
     feed.stop()
   })
 })
+
+describe('mapShipType — military codes', () => {
+  it('maps AIS 35 (military ops) and 55 (law enforcement) to military', async () => {
+    const { mapShipType } = await import('../src/ships/ais.ts')
+    expect(mapShipType(35)).toBe('military')
+    expect(mapShipType(55)).toBe('military')
+    expect(mapShipType(36)).toBe('other') // pleasure craft stays other
+  })
+})

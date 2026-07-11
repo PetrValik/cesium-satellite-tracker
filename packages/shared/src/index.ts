@@ -35,7 +35,15 @@ export const ApiErrorSchema = z.object({
 })
 
 /** Coarse vessel category derived from the AIS ship-type code. */
-export const SHIP_TYPES = ['cargo', 'tanker', 'passenger', 'fishing', 'highspeed', 'other'] as const
+export const SHIP_TYPES = [
+  'cargo',
+  'tanker',
+  'passenger',
+  'fishing',
+  'highspeed',
+  'military',
+  'other',
+] as const
 export const ShipTypeSchema = z.enum(SHIP_TYPES)
 
 /** One vessel's latest AIS position report. */
