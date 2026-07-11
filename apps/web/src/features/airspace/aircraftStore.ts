@@ -1,8 +1,10 @@
 import { create } from 'zustand'
 import type { Aircraft } from '@orbital-ops/shared'
-import { api } from '../../lib/api'
+import { api, ApiError } from '../../lib/api'
 
 const POLL_MS = 30_000
+/** While the feed reports "not configured", only re-check occasionally. */
+const UNCONFIGURED_RECHECK_TICKS = 10
 
 export interface AircraftState {
   aircraft: Aircraft[]
@@ -24,8 +26,13 @@ export const useAircraft = create<AircraftState>((set) => ({
 }))
 
 let timer: ReturnType<typeof setInterval> | undefined
+let unconfiguredBackoff = 0
 
 async function poll(): Promise<void> {
+  if (unconfiguredBackoff > 0) {
+    unconfiguredBackoff--
+    return
+  }
   try {
     const aircraft = await api.aircraft()
     useAircraft.setState({
@@ -34,8 +41,11 @@ async function poll(): Promise<void> {
       available: true,
       lastPollMs: Date.now(),
     })
-  } catch {
+  } catch (err) {
     useAircraft.setState({ available: false })
+    if (err instanceof ApiError && err.status === 503) {
+      unconfiguredBackoff = UNCONFIGURED_RECHECK_TICKS
+    }
   }
 }
 

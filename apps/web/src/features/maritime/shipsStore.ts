@@ -1,8 +1,10 @@
 import { create } from 'zustand'
 import type { Ship, ShipType } from '@orbital-ops/shared'
-import { api } from '../../lib/api'
+import { api, ApiError } from '../../lib/api'
 
 const POLL_MS = 10_000
+/** While the feed reports "not configured", only re-check occasionally. */
+const UNCONFIGURED_RECHECK_TICKS = 30
 
 export interface ShipsState {
   ships: Ship[]
@@ -26,17 +28,25 @@ export const useShips = create<ShipsState>((set) => ({
 }))
 
 let timer: ReturnType<typeof setInterval> | undefined
+let unconfiguredBackoff = 0
 
 async function poll(): Promise<void> {
+  if (unconfiguredBackoff > 0) {
+    unconfiguredBackoff--
+    return
+  }
   try {
     const ships = await api.ships()
     const byMmsi = new Map(ships.map((s) => [s.mmsi, s]))
     const countsByType: Partial<Record<ShipType, number>> = {}
     for (const s of ships) countsByType[s.shipType] = (countsByType[s.shipType] ?? 0) + 1
     useShips.setState({ ships, byMmsi, countsByType, configured: true, connected: true })
-  } catch {
-    // 503 = feed not configured; network error = api down. Either way: no data.
+  } catch (err) {
     useShips.setState({ configured: false, connected: false })
+    // 503 = feed not configured server-side: back off instead of spamming.
+    if (err instanceof ApiError && err.status === 503) {
+      unconfiguredBackoff = UNCONFIGURED_RECHECK_TICKS
+    }
   }
 }
 

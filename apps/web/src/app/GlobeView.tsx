@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { ScreenSpaceEventHandler, ScreenSpaceEventType, type Cartesian2 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
+import { Cartesian3 } from 'cesium'
+import { CameraRig } from '../core/engine/CameraRig'
 import { createOrbitalViewer, syncViewerClock } from '../core/engine/createViewer'
-import { simClock } from '../core/sim/simClock'
+import { simClock, SIM_RATES } from '../core/sim/simClock'
+import { useFollow } from '../core/ui/followStore'
 import { ConstellationLayer } from '../features/constellation/ConstellationLayer'
 import { GroundTrackWindow } from '../features/tracking/GroundTrackWindow'
 import { TrackingVisuals } from '../features/tracking/TrackingVisuals'
@@ -56,6 +59,7 @@ export function GlobeView() {
 
     const constellation = new ConstellationLayer(viewer.scene)
     const tracking = new TrackingVisuals(viewer)
+    const rig = new CameraRig(viewer)
     const shipsLayer = new ShipsLayer(viewer.scene)
     const aircraftLayer = new AircraftLayer(viewer.scene)
     const launchSitesLayer = new LaunchSitesLayer(viewer.scene, launchSites)
@@ -73,9 +77,31 @@ export function GlobeView() {
 
     const unsubShips = useShips.subscribe((state, prev) => {
       if (state.ships !== prev.ships) shipsLayer.setShips(state.ships)
+      if (state.selectedMmsi !== prev.selectedMmsi) {
+        if (state.selectedMmsi !== null) {
+          // Selecting a vessel locks the camera onto it (the ask: click → fly & ride).
+          useFollow.getState().setFollowing(true)
+          engageFollow()
+        } else if (useMode.getState().mode === 'maritime') {
+          useFollow.getState().setFollowing(false)
+        }
+      }
     })
     const unsubAircraft = useAircraft.subscribe((state, prev) => {
       if (state.aircraft !== prev.aircraft) aircraftLayer.setAircraft(state.aircraft)
+      if (state.selectedIcao !== prev.selectedIcao) {
+        if (state.selectedIcao !== null) {
+          useFollow.getState().setFollowing(true)
+          engageFollow()
+        } else if (useMode.getState().mode === 'airspace') {
+          useFollow.getState().setFollowing(false)
+        }
+      }
+    })
+    const unsubFollow = useFollow.subscribe((state, prev) => {
+      if (state.following === prev.following) return
+      if (state.following) engageFollow()
+      else rig.unfollow()
     })
     const unsubMode = useMode.subscribe((state, prev) => {
       if (state.launchSites !== prev.launchSites) launchSitesLayer.setVisible(state.launchSites)
@@ -88,6 +114,69 @@ export function GlobeView() {
     let groundWindow: GroundTrackWindow | null = null
     let trackAnchorMs = 0
     let trackPeriodMs = 0
+
+    // --- camera follow-lock targets ---
+    const DEG = Math.PI / 180
+    const followSatPos = new Cartesian3()
+    let followSatValid = false
+    let lastAltKm = 400
+    const liveTargetScratch = new Cartesian3()
+
+    /** Selected ship, dead-reckoned to wall-now (mirrors ShipsLayer motion). */
+    const shipTarget = (): Cartesian3 | null => {
+      const st = useShips.getState()
+      const ship = st.selectedMmsi === null ? undefined : st.byMmsi.get(st.selectedMmsi)
+      if (!ship) return null
+      const dt = Math.min((Date.now() - ship.tsMs) / 1000, 1800)
+      const v = ship.sogKn >= 0.2 ? ship.sogKn * 0.514444 : 0
+      const bearing = ship.cogDeg * DEG
+      const lat = ship.latDeg + (v * Math.cos(bearing) * dt) / 111_320
+      const lon =
+        ship.lonDeg +
+        (v * Math.sin(bearing) * dt) / (111_320 * Math.max(0.01, Math.cos(ship.latDeg * DEG)))
+      return Cartesian3.fromDegrees(lon, lat, 0, undefined, liveTargetScratch)
+    }
+
+    /** Selected aircraft, dead-reckoned to wall-now. */
+    const aircraftTarget = (): Cartesian3 | null => {
+      const st = useAircraft.getState()
+      const a = st.selectedIcao === null ? undefined : st.byIcao.get(st.selectedIcao)
+      if (!a) return null
+      const dt = Math.min((Date.now() - a.tsMs) / 1000, 900)
+      const v = a.velocityMs ?? 0
+      const bearing = (a.trackDeg ?? 0) * DEG
+      const lat = a.latDeg + (v * Math.cos(bearing) * dt) / 111_320
+      const lon =
+        a.lonDeg +
+        (v * Math.sin(bearing) * dt) / (111_320 * Math.max(0.01, Math.cos(a.latDeg * DEG)))
+      const alt = Math.max(0, (a.altM ?? 0) + (a.verticalRateMs ?? 0) * dt)
+      return Cartesian3.fromDegrees(lon, lat, alt, undefined, liveTargetScratch)
+    }
+
+    /** Point the rig at the current mode's selection (idempotent). */
+    const engageFollow = () => {
+      const mode = useMode.getState().mode
+      if (mode === 'orbital') {
+        if (selectedSatrec === null) {
+          useFollow.getState().setFollowing(false)
+          return
+        }
+        const range = Math.min(Math.max(lastAltKm * 3000, 150_000), 80_000_000)
+        rig.follow(() => (followSatValid ? followSatPos : null), range)
+      } else if (mode === 'maritime') {
+        if (useShips.getState().selectedMmsi === null) {
+          useFollow.getState().setFollowing(false)
+          return
+        }
+        rig.follow(shipTarget, 60_000)
+      } else {
+        if (useAircraft.getState().selectedIcao === null) {
+          useFollow.getState().setFollowing(false)
+          return
+        }
+        rig.follow(aircraftTarget, 120_000)
+      }
+    }
 
     const refreshTrack = (epochMs: number) => {
       if (!selectedSatrec) return
@@ -107,10 +196,14 @@ export function GlobeView() {
       // Always drop the previous satellite's visuals/telemetry first, so a
       // failed TLE can't leave them displayed under the new selection.
       selectedSatrec = null
+      followSatValid = false
       groundWindow = null
       tracking.clear()
       useTelemetry.getState().clear()
-      if (noradId === null) return
+      if (noradId === null) {
+        if (useMode.getState().mode === 'orbital') useFollow.getState().setFollowing(false)
+        return
+      }
       const sat = useCatalog.getState().byId.get(noradId)
       if (!sat) return
       const satrec = createSatrec(sat.tle1, sat.tle2)
@@ -125,6 +218,8 @@ export function GlobeView() {
         periodMinutes: orbitalPeriodMinutes(satrec),
       })
       refreshTrack(simClock.get().epochMs)
+      // Following a previous satellite → carry the lock over to the new one.
+      if (useFollow.getState().following && useMode.getState().mode === 'orbital') engageFollow()
     }
 
     // --- worker wiring: bulk constellation propagation ---
@@ -193,6 +288,98 @@ export function GlobeView() {
       }
     })
 
+    // --- keyboard: camera movement + shortcuts ---
+    const isTypingTarget = (t: EventTarget | null) =>
+      t instanceof HTMLElement &&
+      (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
+
+    const clearAllSelections = () => {
+      useCatalog.getState().select(null)
+      useShips.getState().select(null)
+      useAircraft.getState().select(null)
+    }
+
+    const switchMode = (mode: 'orbital' | 'maritime' | 'airspace') => {
+      if (useMode.getState().mode === mode) return
+      clearAllSelections()
+      useMode.getState().setMode(mode)
+    }
+
+    const stepRate = (direction: 1 | -1) => {
+      const clock = simClock.get()
+      const index = SIM_RATES.indexOf(clock.rate as (typeof SIM_RATES)[number])
+      const next = SIM_RATES[Math.max(0, Math.min(SIM_RATES.length - 1, index + direction))]
+      if (next !== undefined) clock.setRate(next)
+    }
+
+    const deselectCurrentMode = () => {
+      const mode = useMode.getState().mode
+      if (mode === 'orbital') useCatalog.getState().select(null)
+      else if (mode === 'maritime') useShips.getState().select(null)
+      else useAircraft.getState().select(null)
+    }
+
+    const hasSelectionInMode = () => {
+      const mode = useMode.getState().mode
+      if (mode === 'orbital') return useCatalog.getState().selectedId !== null
+      if (mode === 'maritime') return useShips.getState().selectedMmsi !== null
+      return useAircraft.getState().selectedIcao !== null
+    }
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isTypingTarget(e.target)) return
+      if (CameraRig.isMovementKey(e.code)) {
+        rig.press(e.code)
+        e.preventDefault()
+        return
+      }
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return
+      switch (e.code) {
+        case 'KeyF':
+          if (hasSelectionInMode()) useFollow.getState().toggle()
+          break
+        case 'Escape':
+          if (useMode.getState().helpOpen) useMode.getState().closeHelp()
+          else if (useFollow.getState().following) useFollow.getState().setFollowing(false)
+          else deselectCurrentMode()
+          break
+        case 'Digit1':
+          switchMode('orbital')
+          break
+        case 'Digit2':
+          switchMode('maritime')
+          break
+        case 'Digit3':
+          switchMode('airspace')
+          break
+        case 'Space':
+          simClock.get().togglePlay()
+          e.preventDefault()
+          break
+        case 'KeyN':
+          simClock.get().resetToNow()
+          break
+        case 'Comma':
+          stepRate(-1)
+          break
+        case 'Period':
+          stepRate(1)
+          break
+        case 'KeyH':
+          useMode.getState().toggleHelp()
+          break
+        default:
+          if (e.key === '?') useMode.getState().toggleHelp()
+      }
+    }
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (CameraRig.isMovementKey(e.code)) rig.release(e.code)
+    }
+    const onWindowBlur = () => rig.releaseAll()
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', onWindowBlur)
+
     // --- picking: current mode's layer first, cross-domain hits switch mode ---
     const pickHandler = new ScreenSpaceEventHandler(viewer.scene.canvas)
     pickHandler.setInputAction((movement: { position: Cartesian2 }) => {
@@ -260,6 +447,11 @@ export function GlobeView() {
         if (groundWindow) tracking.setGroundTrack(groundWindow.update(epochMs))
         const live = propagateEcef(selectedSatrec, epochMs)
         if (live) {
+          followSatPos.x = live.positionEcefM[0]
+          followSatPos.y = live.positionEcefM[1]
+          followSatPos.z = live.positionEcefM[2]
+          followSatValid = true
+          lastAltKm = live.altKm
           tracking.updateLive({
             positionEcefM: live.positionEcefM,
             footprintRadiusM: footprintRadiusM(live.altKm),
@@ -277,6 +469,7 @@ export function GlobeView() {
           }
         }
       }
+      rig.update(dt)
       rafId = requestAnimationFrame(frame)
     }
     rafId = requestAnimationFrame(frame)
@@ -284,11 +477,17 @@ export function GlobeView() {
     return () => {
       cancelAnimationFrame(rafId)
       clearInterval(tickTimer)
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('blur', onWindowBlur)
+      useFollow.getState().setFollowing(false)
+      rig.dispose()
       unsubCatalog()
       unsubClock()
       unsubShips()
       unsubAircraft()
       unsubMode()
+      unsubFollow()
       pickHandler.destroy()
       worker.terminate()
       constellation.dispose()

@@ -843,6 +843,99 @@ body {
   padding: 1px 6px;
 }
 
+/* ---- follow + panel actions ------------------------------------ */
+
+.panel-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.hud-button.is-active {
+  border-color: var(--amber);
+  color: var(--amber);
+  box-shadow: 0 0 8px var(--amber-glow);
+}
+
+/* ---- help overlay ------------------------------------------------ */
+
+.help-button {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  z-index: 15;
+  color: var(--text-dim);
+  background: var(--panel-bg);
+}
+
+.help-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: rgba(3, 5, 9, 0.6);
+  pointer-events: auto;
+}
+
+.help-panel {
+  width: min(520px, calc(100vw - 40px));
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  padding: 14px 18px 16px;
+}
+
+.help-section {
+  margin-top: 12px;
+}
+
+.help-section-title {
+  margin: 0 0 6px;
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-wide);
+  color: var(--amber);
+  font-weight: 600;
+}
+
+.help-grid {
+  margin: 0;
+}
+
+.help-row {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: 10px;
+  padding: 3px 0;
+}
+
+.help-row dt,
+.help-row dd {
+  margin: 0;
+}
+
+.help-row dd {
+  color: var(--text-dim);
+  font-size: var(--fs-label-lg);
+}
+
+.help-row kbd {
+  font-family: var(--mono);
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label-tight);
+  color: var(--text);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius);
+  padding: 1px 6px;
+  background: var(--input-bg);
+}
+
+.help-footnote {
+  margin: 14px 0 0;
+  color: var(--text-dim);
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+}
+
 /* ---- boot overlay ---------------------------------------------- */
 
 .boot-overlay {

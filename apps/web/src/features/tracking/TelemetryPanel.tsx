@@ -1,3 +1,4 @@
+import { FollowButton } from '../../core/ui/FollowButton'
 import { useCatalog } from '../catalog/catalogStore'
 import { useTelemetry } from './telemetryStore'
 import { formatDeg, formatKm, formatLatLon } from '../../lib/format'
@@ -20,9 +21,12 @@ export function TelemetryPanel() {
     <section className="hud-panel telemetry-panel">
       <header className="telemetry-header">
         <h2 className="hud-title">TRACKING</h2>
-        <button className="hud-button" onClick={() => select(null)} title="Deselect">
-          ✕
-        </button>
+        <span className="panel-actions">
+          <FollowButton />
+          <button className="hud-button" onClick={() => select(null)} title="Deselect (Esc)">
+            ✕
+          </button>
+        </span>
       </header>
       <div className="telemetry-name">{name}</div>
       <dl className="telemetry-grid">
