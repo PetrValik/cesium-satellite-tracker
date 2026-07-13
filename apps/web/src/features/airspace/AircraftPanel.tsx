@@ -10,21 +10,23 @@ const MS_TO_KN = 1.94384
 
 /** Airframe photo with the attribution planespotters.net requires. */
 function PhotoCard({ icao24 }: { icao24: string }) {
-  // undefined = loading, null = no photo for this airframe
-  const [photo, setPhoto] = useState<PlanePhoto | null | undefined>(undefined)
+  // Tag the fetched photo with its airframe so a stale result — or the previous
+  // aircraft's photo — never renders while a new fetch is in flight.
+  // photo null = no photo for this airframe.
+  const [loaded, setLoaded] = useState<{ icao24: string; photo: PlanePhoto | null } | null>(null)
 
   useEffect(() => {
     let alive = true
-    setPhoto(undefined)
     void fetchPlanePhoto(icao24).then((result) => {
-      if (alive) setPhoto(result)
+      if (alive) setLoaded({ icao24, photo: result })
     })
     return () => {
       alive = false
     }
   }, [icao24])
 
-  if (photo === undefined || photo === null) return null
+  const photo = loaded?.icao24 === icao24 ? loaded.photo : null
+  if (!photo) return null
   return (
     <figure className="photo-card">
       <a href={photo.link} target="_blank" rel="noreferrer noopener">
