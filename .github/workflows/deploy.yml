@@ -58,8 +58,30 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy:
+  # Only attempt a server deploy when DEPLOY_HOST is configured. This skips the
+  # deploy job cleanly (neutral, not a red failure) on a repo with no server,
+  # and — because a skipped job resolves no actions — sidesteps flaky
+  # marketplace resolution of the SSH action when there is nothing to deploy to.
+  gate:
     needs: build-and-push
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          if [ -n "$DEPLOY_HOST" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::DEPLOY_HOST secret not set — skipping deploy."
+          fi
+
+  deploy:
+    needs: gate
+    if: needs.gate.outputs.configured == 'true'
     runs-on: ubuntu-latest
     environment: production
     steps:
