@@ -55,6 +55,10 @@ jobs:
           tags: |
             ${{ steps.image.outputs.name }}:latest
             ${{ steps.image.outputs.name }}:${{ github.sha }}
+          # Optional public Cesium Ion client token (domain-restricted in the Ion
+          # dashboard); unset secret = token-free OSM/ellipsoid build.
+          build-args: |
+            VITE_CESIUM_TOKEN=${{ secrets.VITE_CESIUM_TOKEN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

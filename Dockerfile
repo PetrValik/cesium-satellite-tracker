@@ -8,6 +8,11 @@ COPY packages/shared/package.json packages/shared/
 # postinstall (cesium asset copy) needs the sources; install deps first without scripts
 RUN npm ci --ignore-scripts
 COPY . .
+# Optional Cesium Ion token — baked into the web bundle by Vite at build time (it is a
+# PUBLIC client token; restrict it to the serving domain in the Ion dashboard). Empty
+# arg = the default token-free build (OSM imagery + ellipsoid terrain).
+ARG VITE_CESIUM_TOKEN=
+ENV VITE_CESIUM_TOKEN=$VITE_CESIUM_TOKEN
 RUN node apps/web/scripts/copy-cesium-assets.js \
   && npm run build -w packages/shared -w apps/api -w apps/web
 
