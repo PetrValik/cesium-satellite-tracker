@@ -14,6 +14,7 @@ type SocketListener = (event: { data?: unknown }) => void
 class FakeSocket implements AisSocket {
   readonly url: string
   readonly sent: string[] = []
+  binaryType: string | undefined
   closed = false
   private readonly listeners = new Map<string, SocketListener[]>()
 
@@ -45,6 +46,11 @@ class FakeSocket implements AisSocket {
 
   message(payload: unknown): void {
     this.emit('message', { data: typeof payload === 'string' ? payload : JSON.stringify(payload) })
+  }
+
+  /** Emit a frame payload verbatim (binary frames arrive as ArrayBuffer/Buffer/Blob). */
+  messageRaw(payload: unknown): void {
+    this.emit('message', { data: payload })
   }
 }
 
@@ -184,6 +190,70 @@ describe('AisFeed connection', () => {
       sockets[0]!.message({ MessageType: 'PositionReport', MetaData: { MMSI: 1 }, Message: {} })
     }).not.toThrow()
     expect(feed.snapshot()).toEqual([])
+    feed.stop()
+  })
+})
+
+describe('AisFeed binary frames', () => {
+  // aisstream.io delivers BINARY WebSocket frames — these must parse too.
+  it('sets binaryType to arraybuffer on the socket', () => {
+    const { feed, sockets } = feedEnv()
+    feed.start()
+    expect(sockets[0]!.binaryType).toBe('arraybuffer')
+    feed.stop()
+  })
+
+  it('parses a PositionReport delivered as an ArrayBuffer', () => {
+    const { feed, sockets } = feedEnv()
+    feed.start()
+    sockets[0]!.open()
+    const bytes = new TextEncoder().encode(JSON.stringify(positionReport(244_123_456, 51.9, 4.1)))
+    sockets[0]!.messageRaw(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
+    expect(feed.snapshot().map((s) => s.mmsi)).toEqual([244_123_456])
+    feed.stop()
+  })
+
+  it('parses a PositionReport delivered as a Buffer/Uint8Array', () => {
+    const { feed, sockets } = feedEnv()
+    feed.start()
+    sockets[0]!.open()
+    sockets[0]!.messageRaw(Buffer.from(JSON.stringify(positionReport(244_123_456, 51.9, 4.1))))
+    expect(feed.snapshot().map((s) => s.mmsi)).toEqual([244_123_456])
+    feed.stop()
+  })
+
+  it('parses a PositionReport delivered as a Blob-like object', async () => {
+    const { feed, sockets } = feedEnv()
+    feed.start()
+    sockets[0]!.open()
+    const json = JSON.stringify(positionReport(244_123_456, 51.9, 4.1))
+    sockets[0]!.messageRaw({ text: async () => json })
+    await new Promise((resolve) => setTimeout(resolve, 0)) // let the async .text() path settle
+    expect(feed.snapshot().map((s) => s.mmsi)).toEqual([244_123_456])
+    feed.stop()
+  })
+
+  it('logs an undecodable frame type once per connection instead of dropping silently', () => {
+    const logs: string[] = []
+    const { feed, sockets } = feedEnv('test-key', (msg) => logs.push(msg))
+    feed.start()
+    sockets[0]!.open()
+    sockets[0]!.messageRaw(12345)
+    sockets[0]!.messageRaw(12345)
+    expect(logs.filter((l) => l.includes('undecodable frame type'))).toHaveLength(1)
+    expect(feed.snapshot()).toEqual([])
+    feed.stop()
+  })
+
+  it('reports lastMessageMs only after a successfully parsed data frame', () => {
+    const { feed, sockets } = feedEnv()
+    feed.start()
+    sockets[0]!.open()
+    expect(feed.status().lastMessageMs).toBeUndefined()
+    sockets[0]!.message({ error: 'Api Key Is Not Valid' }) // non-data frame does not count
+    expect(feed.status().lastMessageMs).toBeUndefined()
+    sockets[0]!.message(positionReport(244_123_456, 51.9, 4.1))
+    expect(feed.status().lastMessageMs).toBe(T0)
     feed.stop()
   })
 })

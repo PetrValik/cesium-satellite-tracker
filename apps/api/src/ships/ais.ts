@@ -12,6 +12,8 @@ export const AIS_RECONNECT_MAX_MS = 60 * 1000
 
 /** The slice of the WebSocket API the feed uses (satisfied by the Node >=22 global). */
 export interface AisSocket {
+  /** How binary frames are surfaced ('blob' | 'arraybuffer' on the global WebSocket). */
+  binaryType?: string
   addEventListener(
     type: 'open' | 'message' | 'close' | 'error',
     listener: (event: { data?: unknown }) => void,
@@ -44,6 +46,14 @@ export function mapShipType(code: number | undefined): ShipType {
 
 function num(v: unknown): number | undefined {
   return typeof v === 'number' && Number.isFinite(v) ? v : undefined
+}
+
+/** Shared decoder for binary frames (UTF-8). */
+const frameDecoder = new TextDecoder()
+
+/** Blob-like: any object exposing a `.text(): Promise<string>` method. */
+function isBlobLike(v: unknown): v is { text: () => Promise<string> } {
+  return typeof v === 'object' && v !== null && typeof (v as { text?: unknown }).text === 'function'
 }
 
 /** AIS names are '@'-padded fixed-width fields; strip the padding. */
@@ -81,8 +91,11 @@ interface AisEnvelope {
  * backoff (5 s doubling to 60 s max). The backoff resets only once a valid
  * data frame arrives — aisstream.io accepts the socket BEFORE validating the
  * API key, so resetting on 'open' would turn a bad key into a tight
- * reconnect loop. Handlers never throw — a dead feed degrades to an empty
- * snapshot.
+ * reconnect loop. aisstream.io delivers its frames as BINARY WebSocket
+ * messages — the socket is switched to 'arraybuffer' and frames are decoded
+ * from ArrayBuffer / typed-array / Blob payloads before JSON parsing; a frame
+ * of any other type is logged once per connection instead of being dropped
+ * silently. Handlers never throw — a dead feed degrades to an empty snapshot.
  */
 export class AisFeed {
   readonly configured: boolean
@@ -97,6 +110,10 @@ export class AisFeed {
   private backoffMs = AIS_RECONNECT_MIN_MS
   /** One unrecognized-frame log per connection — enough to expose a bad key. */
   private loggedUnknownFrame = false
+  /** One undecodable-frame-type log per connection — a silent-drop canary. */
+  private loggedUndecodableFrame = false
+  /** Epoch ms of the last successfully parsed data frame; undefined until one arrives. */
+  private lastMessageMs: number | undefined
   private sweepTimer: ReturnType<typeof setInterval> | undefined
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -145,8 +162,18 @@ export class AisFeed {
     return [...this.ships.values()].sort((a, b) => b.tsMs - a.tsMs).slice(0, limit)
   }
 
-  status(): { configured: boolean; connected: boolean; ships: number } {
-    return { configured: this.configured, connected: this.connected, ships: this.ships.size }
+  status(): {
+    configured: boolean
+    connected: boolean
+    ships: number
+    lastMessageMs: number | undefined
+  } {
+    return {
+      configured: this.configured,
+      connected: this.connected,
+      ships: this.ships.size,
+      lastMessageMs: this.lastMessageMs,
+    }
   }
 
   private connect(): void {
@@ -160,6 +187,13 @@ export class AisFeed {
       return
     }
     this.socket = socket
+    try {
+      // aisstream.io sends BINARY frames; undici's default binaryType 'blob'
+      // would surface them as Blobs. ArrayBuffer keeps decoding synchronous.
+      socket.binaryType = 'arraybuffer'
+    } catch {
+      // a socket that rejects the property still works via the Blob fallback
+    }
 
     // close and error often both fire for one failure — settle only once.
     let settled = false
@@ -177,6 +211,7 @@ export class AisFeed {
     }
 
     this.loggedUnknownFrame = false
+    this.loggedUndecodableFrame = false
 
     socket.addEventListener('open', () => {
       if (settled || this.socket !== socket) return
@@ -226,10 +261,48 @@ export class AisFeed {
     this.reconnectTimer.unref?.()
   }
 
+  /** Normalize a frame to text: strings pass through, binary frames are decoded. */
   private handleMessage(raw: unknown): void {
+    if (typeof raw === 'string') {
+      this.handleText(raw)
+      return
+    }
+    if (raw instanceof ArrayBuffer) {
+      this.handleText(frameDecoder.decode(raw))
+      return
+    }
+    if (ArrayBuffer.isView(raw)) {
+      // Covers Buffer and every typed array; re-viewed as Uint8Array for decode().
+      this.handleText(frameDecoder.decode(new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength)))
+      return
+    }
+    if (isBlobLike(raw)) {
+      // Fallback for sockets that ignore binaryType and surface Blobs anyway.
+      raw.text().then(
+        (text) => {
+          try {
+            this.handleText(text)
+          } catch {
+            // handlers never throw, even asynchronously
+          }
+        },
+        () => {
+          // unreadable Blob — drop the frame
+        },
+      )
+      return
+    }
+    if (!this.loggedUndecodableFrame) {
+      this.loggedUndecodableFrame = true
+      // Without this log, an unexpected frame type silently empties the feed.
+      this.log(`[ais] undecodable frame type (dropped): ${Object.prototype.toString.call(raw)}`)
+    }
+  }
+
+  private handleText(text: string): void {
     let msg: AisEnvelope | null
     try {
-      msg = JSON.parse(typeof raw === 'string' ? raw : String(raw)) as AisEnvelope | null
+      msg = JSON.parse(text) as AisEnvelope | null
     } catch {
       return
     }
@@ -237,6 +310,7 @@ export class AisFeed {
       // A valid data frame proves the subscription was accepted — only now
       // is it safe to treat the connection as healthy.
       this.backoffMs = AIS_RECONNECT_MIN_MS
+      this.lastMessageMs = this.now()
       if (msg.MessageType === 'PositionReport') this.handlePositionReport(msg)
       else this.handleShipStaticData(msg)
     } else if (msg !== null && !this.loggedUnknownFrame) {
