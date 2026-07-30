@@ -24,7 +24,7 @@ function basemapProvider(basemap: Basemap) {
       return new UrlTemplateImageryProvider({
         url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
         subdomains: ['a', 'b', 'c'],
-        maximumLevel: 16,
+        maximumLevel: 17,
         credit: 'Map data © OpenStreetMap contributors, SRTM · Style © OpenTopoMap (CC-BY-SA)',
       })
     case 'satellite':
@@ -106,6 +106,12 @@ export function createOrbitalViewer(container: HTMLElement, basemap: Basemap = '
       terrainProvider: new EllipsoidTerrainProvider(),
     })
   }
+
+  // Render at native device pixels. The default (true) renders at CSS
+  // resolution, which on a Retina/hi-DPI display upscales the whole scene
+  // 2× — basemap tiles and their labels read as blurry. Native-DPR rendering
+  // also makes imagery LOD pick one level deeper, so tiles arrive sharp.
+  viewer.useBrowserRecommendedResolution = false
 
   const scene = viewer.scene
   scene.globe.enableLighting = true // day/night terminator
