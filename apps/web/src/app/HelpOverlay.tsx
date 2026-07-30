@@ -20,11 +20,11 @@ const SECTIONS: { title: string; rows: [string, string][] }[] = [
     ],
   },
   {
-    title: 'MODES & TIME',
+    title: 'LAYERS & TIME',
     rows: [
-      ['1 / 2 / 3', 'ORBITAL / MARITIME / AIRSPACE'],
-      ['SPACE', 'Play / pause simulation time'],
-      [', / .', 'Slower / faster time warp'],
+      ['1 / 2 / 3', 'Toggle ORBITAL / MARITIME / AIRSPACE layer'],
+      ['SPACE', 'Play / pause simulation time (ORBITAL on)'],
+      [', / .', 'Slower / faster time warp (ORBITAL on)'],
       ['N', 'Reset simulation to NOW'],
       ['H or ?', 'Toggle this help'],
     ],

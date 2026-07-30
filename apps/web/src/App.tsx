@@ -24,6 +24,7 @@ export default function App() {
   const booting = useCatalog((s) => s.booting)
   const init = useCatalog((s) => s.init)
   const mode = useMode((s) => s.mode)
+  const satellitesOn = useMode((s) => s.satellitesVisible)
 
   useEffect(() => {
     void init()
@@ -48,7 +49,9 @@ export default function App() {
           {mode === 'maritime' && <ShipPanel />}
           {mode === 'airspace' && <AircraftPanel />}
         </div>
-        <TransportBar />
+        {/* Time warp only moves satellites (live feeds suspend under warp),
+            so the transport controls travel with the ORBITAL layer. */}
+        {satellitesOn && <TransportBar />}
         <HelpButton />
         <SettingsButton />
         <HelpOverlay />

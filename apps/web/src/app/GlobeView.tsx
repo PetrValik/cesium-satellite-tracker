@@ -222,7 +222,13 @@ export function GlobeView() {
         // Hiding the layer with a selected satellite would leave phantom
         // tracking visuals/telemetry — drop it (applySelection cleans up
         // via the catalog subscription, mirroring the ships path below).
-        if (!state.satellitesVisible) useCatalog.getState().select(null)
+        if (!state.satellitesVisible) {
+          useCatalog.getState().select(null)
+          // The transport bar unmounts with the ORBITAL layer. A clock left
+          // warped/paused would keep the live feeds suspended with no
+          // visible way back — snap it to real time instead.
+          if (!isSimLive(simClock.get())) simClock.get().resetToNow()
+        }
       }
       if (state.shipsVisible !== prev.shipsVisible) {
         applyLiveVisibility()
@@ -426,24 +432,17 @@ export function GlobeView() {
       t instanceof HTMLElement &&
       (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
 
-    const clearAllSelections = () => {
-      useCatalog.getState().select(null)
-      useShips.getState().select(null)
-      useAircraft.getState().select(null)
-    }
-
-    const switchMode = (mode: 'orbital' | 'maritime' | 'airspace') => {
-      if (useMode.getState().mode === mode) return
-      clearAllSelections()
-      useMode.getState().setMode(mode)
-    }
-
     const stepRate = (direction: 1 | -1) => {
       const clock = simClock.get()
       const index = SIM_RATES.indexOf(clock.rate as (typeof SIM_RATES)[number])
       const next = SIM_RATES[Math.max(0, Math.min(SIM_RATES.length - 1, index + direction))]
       if (next !== undefined) clock.setRate(next)
     }
+
+    // Transport controls travel with the ORBITAL layer (the bar itself is
+    // unmounted then) — the keyboard equivalents must go quiet with it, or
+    // an invisible warp would silently suspend the live feeds.
+    const timeControlsActive = () => useMode.getState().satellitesVisible
 
     const deselectCurrentMode = () => {
       const mode = useMode.getState().mode
@@ -478,26 +477,28 @@ export function GlobeView() {
           else deselectCurrentMode()
           break
         case 'Digit1':
-          switchMode('orbital')
+          useMode.getState().toggleDomain('orbital')
           break
         case 'Digit2':
-          switchMode('maritime')
+          useMode.getState().toggleDomain('maritime')
           break
         case 'Digit3':
-          switchMode('airspace')
+          useMode.getState().toggleDomain('airspace')
           break
         case 'Space':
-          simClock.get().togglePlay()
-          e.preventDefault()
+          if (timeControlsActive()) {
+            simClock.get().togglePlay()
+            e.preventDefault()
+          }
           break
         case 'KeyN':
-          simClock.get().resetToNow()
+          if (timeControlsActive()) simClock.get().resetToNow()
           break
         case 'Comma':
-          stepRate(-1)
+          if (timeControlsActive()) stepRate(-1)
           break
         case 'Period':
-          stepRate(1)
+          if (timeControlsActive()) stepRate(1)
           break
         case 'KeyH':
           useMode.getState().toggleHelp()

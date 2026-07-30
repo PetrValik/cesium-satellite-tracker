@@ -151,3 +151,51 @@ describe('modeStore persistence', () => {
     })
   })
 })
+
+describe('toggleDomain (tab clicks)', () => {
+  it('enabling a domain shows its layer and focuses it', async () => {
+    const { useMode, backing } = await loadStore()
+    useMode.getState().toggleDomain('airspace')
+    expect(useMode.getState()).toMatchObject({ mode: 'airspace', aircraftVisible: true })
+    expect(JSON.parse(backing.get(STORAGE_KEY)!)).toMatchObject({
+      mode: 'airspace',
+      aircraftVisible: true,
+    })
+  })
+
+  it('disabling the focused domain drops focus to the first visible one', async () => {
+    const { useMode } = await loadStore()
+    useMode.getState().toggleDomain('maritime') // ships on, focus maritime
+    expect(useMode.getState().mode).toBe('maritime')
+
+    useMode.getState().toggleDomain('maritime') // ships off again
+    expect(useMode.getState().shipsVisible).toBe(false)
+    // Satellites are still on (calm default) → focus falls to orbital.
+    expect(useMode.getState().mode).toBe('orbital')
+  })
+
+  it('disabling a background domain leaves focus alone', async () => {
+    const { useMode } = await loadStore()
+    useMode.getState().toggleDomain('airspace') // focus airspace
+    useMode.getState().toggleDomain('orbital') // hide satellites (background)
+    expect(useMode.getState()).toMatchObject({ mode: 'airspace', satellitesVisible: false })
+  })
+
+  it('keeps focus when the last visible domain is disabled', async () => {
+    const { useMode } = await loadStore()
+    useMode.getState().toggleDomain('orbital') // satellites off — nothing visible
+    expect(useMode.getState().satellitesVisible).toBe(false)
+    expect(useMode.getState().mode).toBe('orbital')
+
+    // All domains may be active at once — tabs are independent toggles.
+    useMode.getState().toggleDomain('orbital')
+    useMode.getState().toggleDomain('maritime')
+    useMode.getState().toggleDomain('airspace')
+    expect(useMode.getState()).toMatchObject({
+      satellitesVisible: true,
+      shipsVisible: true,
+      aircraftVisible: true,
+      mode: 'airspace',
+    })
+  })
+})

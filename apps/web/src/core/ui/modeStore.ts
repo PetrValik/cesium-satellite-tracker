@@ -52,6 +52,8 @@ export interface ModeState extends StoredMode {
   /** Color settings panel visibility (not persisted). */
   settingsOpen: boolean
   setMode: (mode: OpsMode) => void
+  /** Tab click: toggle a domain's layer; enabling also focuses its panels. */
+  toggleDomain: (mode: OpsMode) => void
   toggleLaunchSites: () => void
   togglePorts: () => void
   toggleSatellites: () => void
@@ -91,6 +93,18 @@ function modeLayerOn(mode: OpsMode): Partial<StoredMode> {
   return { aircraftVisible: true }
 }
 
+const DOMAIN_FLAG = {
+  orbital: 'satellitesVisible',
+  maritime: 'shipsVisible',
+  airspace: 'aircraftVisible',
+} as const satisfies Record<OpsMode, keyof StoredMode>
+
+/** First visible domain in tab order — where focus falls when the focused one hides. */
+function firstVisibleDomain(s: StoredMode): OpsMode | null {
+  for (const m of OPS_MODES) if (s[DOMAIN_FLAG[m]]) return m
+  return null
+}
+
 /**
  * MFD-style ops mode: which domain the HUD focuses on. Layers may render
  * simultaneously; the mode drives which catalog/tracking panels are shown
@@ -111,6 +125,20 @@ export const useMode = create<ModeState>((set) => ({
       const next = { ...s, mode, ...enable }
       persist(next)
       return { mode, ...enable }
+    }),
+  toggleDomain: (m) =>
+    set((s) => {
+      const flag = DOMAIN_FLAG[m]
+      const visible = !s[flag]
+      // Enabling a domain focuses its panels; hiding the focused domain
+      // drops focus to the first still-visible one (tabs read left-to-right
+      // as a priority order). Hiding a background domain leaves focus alone.
+      let mode = s.mode
+      if (visible) mode = m
+      else if (s.mode === m) mode = firstVisibleDomain({ ...s, [flag]: false }) ?? s.mode
+      const next = { ...s, [flag]: visible, mode }
+      persist(next)
+      return { [flag]: visible, mode }
     }),
   toggleSatellites: () =>
     set((s) => {
