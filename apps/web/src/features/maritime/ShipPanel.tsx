@@ -1,7 +1,7 @@
 import { FollowButton } from '../../core/ui/FollowButton'
 import { formatAge, formatDeg, formatLatLon } from '../../lib/format'
 import { useWallClock } from '../../lib/wallClock'
-import { flagStateOf } from './mmsiFlags'
+import { flagEmojiOf, flagStateOf } from './mmsiFlags'
 import { ShipSilhouette } from './ShipSilhouette'
 import { useShips } from './shipsStore'
 
@@ -15,6 +15,7 @@ export function ShipPanel() {
   if (selectedMmsi === null) return null
 
   const flag = ship === undefined ? null : flagStateOf(ship.mmsi)
+  const flagEmoji = ship === undefined ? null : flagEmojiOf(ship.mmsi)
 
   return (
     <section className="hud-panel telemetry-panel">
@@ -33,7 +34,14 @@ export function ShipPanel() {
           <ShipSilhouette type={ship.shipType} />
           <figcaption className="vessel-card-caption">
             <span>SIDE PROFILE</span>
-            {flag !== null && <span>{flag.toUpperCase()}</span>}
+            {flag !== null && (
+              <span>
+                {flagEmoji !== null && (
+                  <span style={{ marginRight: '0.4em', letterSpacing: 0 }}>{flagEmoji}</span>
+                )}
+                {flag.toUpperCase()}
+              </span>
+            )}
           </figcaption>
         </figure>
       )}
