@@ -12,6 +12,8 @@
   </p>
 </div>
 
+**Live at [orbit.irminsul.uk](https://orbit.irminsul.uk)** — running with Cesium World Terrain and live AIS + ADS-B feeds.
+
 A real-time, multi-domain ops console on a CesiumJS globe: 12,000+ satellites propagated with SGP4 in a Web Worker, plus live aircraft (ADS-B) and ships (AIS), with launch-site and port overlays. Satellites run on a warpable simulation clock with polar-sky-plot pass predictions; aircraft and ships stay wall-clock live. Token-free, and it boots offline from a committed TLE seed.
 
 ## Screenshots
