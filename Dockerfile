@@ -1,3 +1,9 @@
+# check=skip=SecretsUsedInArgOrEnv
+# (^ must stay the first line: parser directives stop being recognized after any
+# ordinary comment.) VITE_CESIUM_TOKEN is a PUBLIC client token — domain-restricted
+# and baked into the public JS bundle regardless, so hiding it from image layers
+# gains nothing.
+
 # ---- build stage: install workspaces, build web static + typecheck api ----
 FROM node:24-alpine AS build
 WORKDIR /app
