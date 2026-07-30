@@ -7,6 +7,7 @@ import { formatAge, formatCount } from '../../lib/format'
 import { useWallClock } from '../../lib/wallClock'
 import { AIRCRAFT_CATEGORIES, categoryOf, type AircraftCategory } from './aircraftCategory'
 import { usePrefs } from '../../core/ui/prefsStore'
+import { useSimLive } from '../../core/sim/simLive'
 import { ALT_BANDS, bandOf, useAircraft, type AltBand } from './aircraftStore'
 
 const BAND_LABELS: Record<AltBand, string> = {
@@ -32,6 +33,9 @@ export function AirPicture() {
   const toggleCategory = useAircraft((s) => s.toggleCategory)
   const nowMs = useWallClock((s) => s.nowMs)
   const aircraftColors = usePrefs((s) => s.colors.aircraft)
+  // Aircraft dead-reckon on wall time, so the layer hides while sim time is
+  // warped away from NOW — say so instead of showing a misleading count.
+  const simLive = useSimLive()
 
   const countsByBand: Record<AltBand, number> = { ground: 0, low: 0, mid: 0, high: 0 }
   const countsByCategory: Record<AircraftCategory, number> = { civil: 0, cargo: 0, military: 0 }
@@ -51,8 +55,12 @@ export function AirPicture() {
       {available === null && <div className="passes-empty">CONNECTING…</div>}
       {available === true && (
         <>
-          <div className="live-count">{formatCount(aircraft.length)} AIRCRAFT LIVE</div>
-          {lastPollMs !== null && (
+          {simLive ? (
+            <div className="live-count">{formatCount(aircraft.length)} AIRCRAFT LIVE</div>
+          ) : (
+            <div className="live-count live-suspended">SUSPENDED — TIME WARP</div>
+          )}
+          {simLive && lastPollMs !== null && (
             <div className="live-meta">DATA AGE {formatAge(Math.max(0, nowMs - lastPollMs))}</div>
           )}
           <ul className="group-list">

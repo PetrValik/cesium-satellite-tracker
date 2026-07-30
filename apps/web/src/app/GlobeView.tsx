@@ -9,7 +9,8 @@
  *   viewer clock, interpolates the constellation between worker snapshots,
  *   and propagates the selected satellite per frame on the main thread.
  * - WALL TIME (live): ships and aircraft dead-reckon from their last real
- *   report — they never time-travel with the sim.
+ *   report — they never time-travel with the sim. Whenever sim time leaves
+ *   NOW (warp/pause/scrub) the live layers suspend: hidden, selection kept.
  *
  * React renders this component exactly once; all reactivity inside goes
  * through zustand `subscribe` (transient, no re-renders). Cleanup tears
@@ -23,7 +24,7 @@ import { CameraRig } from '../core/engine/CameraRig'
 import { aircraftIcon, shipIcon } from '../core/engine/icons'
 import { WorldDecal } from '../core/engine/WorldDecal'
 import { createOrbitalViewer, setViewerBasemap, syncViewerClock } from '../core/engine/createViewer'
-import { simClock, SIM_RATES } from '../core/sim/simClock'
+import { isSimLive, simClock, SIM_RATES } from '../core/sim/simClock'
 import { useFollow } from '../core/ui/followStore'
 import { usePrefs } from '../core/ui/prefsStore'
 import { ConstellationLayer } from '../features/constellation/ConstellationLayer'
@@ -132,8 +133,28 @@ export function GlobeView() {
 
     shipsLayer.setShips(filteredShips(useShips.getState()))
     aircraftLayer.setAircraft(filteredAircraft(useAircraft.getState()))
-    shipsLayer.setVisible(useMode.getState().shipsVisible)
-    aircraftLayer.setVisible(useMode.getState().aircraftVisible)
+
+    // Ships/aircraft dead-reckon on WALL time, so once the sim clock is
+    // warped, paused, or scrubbed away from now their positions are
+    // meaningless against the scene. All ships/aircraft visibility routes
+    // through this one gate: (user layer toggle) AND (clock live).
+    let clockLive = isSimLive(simClock.get())
+    const applyLiveVisibility = () => {
+      const { shipsVisible, aircraftVisible } = useMode.getState()
+      shipsLayer.setVisible(shipsVisible && clockLive)
+      aircraftLayer.setVisible(aircraftVisible && clockLive)
+      if (!clockLive) {
+        // The selected-object decals suspend too (their per-frame updates
+        // in the render loop are skipped while not live). Deliberately NOT
+        // clearing the ship/aircraft selection here — unlike a user layer
+        // toggle, a warp-driven hide must restore everything (selection,
+        // follow lock, decal) when time returns to NOW.
+        shipDecal.hide()
+        aircraftDecal.hide()
+      }
+    }
+    applyLiveVisibility()
+    constellation.setVisible(useMode.getState().satellitesVisible)
     launchSitesLayer.setVisible(useMode.getState().launchSites)
     portsLayer.setVisible(useMode.getState().ports)
 
@@ -196,14 +217,22 @@ export function GlobeView() {
     const unsubMode = useMode.subscribe((state, prev) => {
       if (state.launchSites !== prev.launchSites) launchSitesLayer.setVisible(state.launchSites)
       if (state.ports !== prev.ports) portsLayer.setVisible(state.ports)
+      if (state.satellitesVisible !== prev.satellitesVisible) {
+        constellation.setVisible(state.satellitesVisible)
+        // Hiding the layer with a selected satellite would leave phantom
+        // tracking visuals/telemetry — drop it (applySelection cleans up
+        // via the catalog subscription, mirroring the ships path below).
+        if (!state.satellitesVisible) useCatalog.getState().select(null)
+      }
       if (state.shipsVisible !== prev.shipsVisible) {
-        shipsLayer.setVisible(state.shipsVisible)
+        applyLiveVisibility()
         // Hiding the layer with a followed/selected vessel would leave a
-        // phantom selection — drop it.
+        // phantom selection — drop it. (User toggles only: warp-driven
+        // hides inside applyLiveVisibility keep the selection alive.)
         if (!state.shipsVisible) useShips.getState().select(null)
       }
       if (state.aircraftVisible !== prev.aircraftVisible) {
-        aircraftLayer.setVisible(state.aircraftVisible)
+        applyLiveVisibility()
         if (!state.aircraftVisible) useAircraft.getState().select(null)
       }
     })
@@ -529,11 +558,25 @@ export function GlobeView() {
     let lastCameraSave = 0
 
     const frame = (now: number) => {
-      const dt = Math.min(now - lastFrame, 500) // clamp tab-suspend jumps
+      // Clamp tab-suspend jumps only while warping (a 30 s gap at ×3600
+      // would leap 30 h). At ×1 the full wall delta is exact — dropping it
+      // would let a playing clock drift behind real time across tab
+      // suspensions and wrongly suspend the live feeds.
+      const rawDt = now - lastFrame
+      const dt = simClock.get().rate === 1 ? rawDt : Math.min(rawDt, 500)
       lastFrame = now
       simClock.get().advance(dt)
       const epochMs = simClock.get().epochMs
       syncViewerClock(viewer, epochMs)
+      // Liveness edge detection: a boolean compare per frame, layer
+      // visibility re-applied only when it flips (warp engaged / back to
+      // NOW). Per-frame (not event-driven) because a paused or suspended-
+      // tab clock drifts past the epsilon without any store event.
+      const liveNow = isSimLive(simClock.get())
+      if (liveNow !== clockLive) {
+        clockLive = liveNow
+        applyLiveVisibility()
+      }
       constellation.advance(epochMs)
       // Live domains dead-reckon on wall time (they can't time-travel);
       // both layers self-gate to one update per ~250 ms.
@@ -573,33 +616,37 @@ export function GlobeView() {
       }
       // Selected ship/aircraft world decals: dead-reckoned to wall-now,
       // world-oriented (nose along course), screen-proportional size.
-      const selMmsi = useShips.getState().selectedMmsi
-      if (selMmsi !== null) {
-        const ship = useShips.getState().byMmsi.get(selMmsi)
-        if (ship) {
-          const dtS = Math.min((Date.now() - ship.tsMs) / 1000, 1800)
-          const v = ship.sogKn >= 0.2 ? ship.sogKn * 0.514444 : 0
-          const brg = ship.cogDeg * DEG
-          const lat = ship.latDeg + (v * Math.cos(brg) * dtS) / 111_320
-          const lon =
-            ship.lonDeg +
-            (v * Math.sin(brg) * dtS) / (111_320 * Math.max(0.01, Math.cos(ship.latDeg * DEG)))
-          shipDecal.setPose(lon, lat, 50, ship.cogDeg, viewer.camera.positionWC)
+      // Skipped entirely while the clock is not live — applyLiveVisibility
+      // hid them, and setPose re-shows them on the first live frame.
+      if (clockLive) {
+        const selMmsi = useShips.getState().selectedMmsi
+        if (selMmsi !== null) {
+          const ship = useShips.getState().byMmsi.get(selMmsi)
+          if (ship) {
+            const dtS = Math.min((Date.now() - ship.tsMs) / 1000, 1800)
+            const v = ship.sogKn >= 0.2 ? ship.sogKn * 0.514444 : 0
+            const brg = ship.cogDeg * DEG
+            const lat = ship.latDeg + (v * Math.cos(brg) * dtS) / 111_320
+            const lon =
+              ship.lonDeg +
+              (v * Math.sin(brg) * dtS) / (111_320 * Math.max(0.01, Math.cos(ship.latDeg * DEG)))
+            shipDecal.setPose(lon, lat, 50, ship.cogDeg, viewer.camera.positionWC)
+          }
         }
-      }
-      const selIcao = useAircraft.getState().selectedIcao
-      if (selIcao !== null) {
-        const a = useAircraft.getState().byIcao.get(selIcao)
-        if (a) {
-          const dtS = Math.min((Date.now() - a.tsMs) / 1000, 900)
-          const v = a.velocityMs ?? 0
-          const brg = (a.trackDeg ?? 0) * DEG
-          const lat = a.latDeg + (v * Math.cos(brg) * dtS) / 111_320
-          const lon =
-            a.lonDeg +
-            (v * Math.sin(brg) * dtS) / (111_320 * Math.max(0.01, Math.cos(a.latDeg * DEG)))
-          const alt = Math.max(50, (a.altM ?? 0) + (a.verticalRateMs ?? 0) * dtS)
-          aircraftDecal.setPose(lon, lat, alt, a.trackDeg ?? 0, viewer.camera.positionWC)
+        const selIcao = useAircraft.getState().selectedIcao
+        if (selIcao !== null) {
+          const a = useAircraft.getState().byIcao.get(selIcao)
+          if (a) {
+            const dtS = Math.min((Date.now() - a.tsMs) / 1000, 900)
+            const v = a.velocityMs ?? 0
+            const brg = (a.trackDeg ?? 0) * DEG
+            const lat = a.latDeg + (v * Math.cos(brg) * dtS) / 111_320
+            const lon =
+              a.lonDeg +
+              (v * Math.sin(brg) * dtS) / (111_320 * Math.max(0.01, Math.cos(a.latDeg * DEG)))
+            const alt = Math.max(50, (a.altM ?? 0) + (a.verticalRateMs ?? 0) * dtS)
+            aircraftDecal.setPose(lon, lat, alt, a.trackDeg ?? 0, viewer.camera.positionWC)
+          }
         }
       }
       rig.update(dt)

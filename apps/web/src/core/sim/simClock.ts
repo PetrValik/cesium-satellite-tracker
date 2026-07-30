@@ -43,3 +43,24 @@ export const simClock = {
   get: useSimClock.getState,
   subscribe: useSimClock.subscribe,
 }
+
+/**
+ * Sim time within this margin of wall time still counts as "now". Live
+ * feeds (ships/aircraft) dead-reckon on WALL time, so beyond this margin
+ * their positions are meaningless against the warped scene and they hide.
+ */
+export const LIVE_EPSILON_MS = 10_000
+
+/**
+ * True when the sim clock is indistinguishable from real time: playing at
+ * 1× within LIVE_EPSILON_MS of the wall clock. A paused clock is not live
+ * (its epoch freezes while wall time runs on), and neither is a playing 1×
+ * clock that drifted past the epsilon — advance()'s tab-suspend dt clamp
+ * can silently drop wall time, so the epoch check is not redundant.
+ */
+export function isSimLive(
+  state: Pick<SimClockState, 'epochMs' | 'rate' | 'playing'>,
+  nowMs: number = Date.now(),
+): boolean {
+  return state.playing && state.rate === 1 && Math.abs(state.epochMs - nowMs) < LIVE_EPSILON_MS
+}

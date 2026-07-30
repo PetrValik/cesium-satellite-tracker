@@ -123,6 +123,7 @@ export class ConstellationLayer {
   private readonly _billboards: BillboardCollection
   private readonly _indexByNoradId = new Map<number, number>()
   private _selectedNoradId: number | null = null
+  private _visible = true
   private _styles: readonly ClassStyle[] = buildStyles(DEFAULT_PALETTE)
   /** Class byte per billboard (kept for palette swaps). */
   private _classes = new Uint8Array(0)
@@ -209,6 +210,10 @@ export class ConstellationLayer {
    */
   advance(simEpochMs: number): void {
     if (this._isUnusable()) return
+    // Hidden layer: the collection-level show flag already blanks every
+    // billboard, so the per-satellite interpolation loop is pure waste.
+    // Positions catch up on the first advance() after re-show.
+    if (!this._visible) return
     const curr = this._currPositions
     if (curr === null) return
     const billboards = this._billboards
@@ -308,6 +313,18 @@ export class ConstellationLayer {
       billboard.color = style.color
       billboard.scaleByDistance = style.scaleByDistance
     }
+  }
+
+  /**
+   * Show or hide the whole catalog. One collection-level flag rather than
+   * 12k+ per-billboard writes: the per-billboard show bits keep encoding
+   * occlusion/selection/NaN state underneath (see advance/setSelected), so
+   * they must not be overwritten here and re-showing is O(1).
+   */
+  setVisible(visible: boolean): void {
+    this._visible = visible
+    if (this._isUnusable()) return
+    this._billboards.show = visible
   }
 
   /**

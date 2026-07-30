@@ -313,6 +313,17 @@ body {
   margin-bottom: 6px;
 }
 
+/* Live feeds (vessels/aircraft) suspend while sim time is off NOW:
+   the count line dims and layer rows fade without losing their toggle. */
+.live-count.live-suspended {
+  color: var(--text-dim);
+}
+
+.group-row.is-suspended .group-name,
+.group-row.is-suspended .group-indicator {
+  opacity: 0.45;
+}
+
 .infra-title {
   margin-top: 14px;
   padding-top: 10px;

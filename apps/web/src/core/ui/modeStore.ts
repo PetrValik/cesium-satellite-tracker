@@ -9,6 +9,7 @@ interface StoredMode {
   mode: OpsMode
   launchSites: boolean
   ports: boolean
+  satellitesVisible: boolean
   shipsVisible: boolean
   aircraftVisible: boolean
 }
@@ -22,15 +23,27 @@ function load(): StoredMode {
         mode: OPS_MODES.includes(parsed.mode as OpsMode) ? (parsed.mode as OpsMode) : 'orbital',
         launchSites: parsed.launchSites === true,
         ports: parsed.ports === true,
-        // Live layers default ON; only an explicit false hides them.
-        shipsVisible: parsed.shipsVisible !== false,
-        aircraftVisible: parsed.aircraftVisible !== false,
+        // Satellites default ON (the boot mode is ORBITAL and must not open
+        // on an empty globe); only an explicit false hides them.
+        satellitesVisible: parsed.satellitesVisible !== false,
+        // Live layers default OFF — all three domains at once made the
+        // first load unreadably busy. Only an explicit true shows them
+        // (setMode re-enables the domain layer when its tab is opened).
+        shipsVisible: parsed.shipsVisible === true,
+        aircraftVisible: parsed.aircraftVisible === true,
       }
     }
   } catch {
     // corrupted storage — defaults below
   }
-  return { mode: 'orbital', launchSites: true, ports: false, shipsVisible: true, aircraftVisible: true }
+  return {
+    mode: 'orbital',
+    launchSites: true,
+    ports: false,
+    satellitesVisible: true,
+    shipsVisible: false,
+    aircraftVisible: false,
+  }
 }
 
 export interface ModeState extends StoredMode {
@@ -41,6 +54,7 @@ export interface ModeState extends StoredMode {
   setMode: (mode: OpsMode) => void
   toggleLaunchSites: () => void
   togglePorts: () => void
+  toggleSatellites: () => void
   toggleShips: () => void
   toggleAircraft: () => void
   toggleHelp: () => void
@@ -53,11 +67,28 @@ function persist(state: StoredMode): void {
   try {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ mode: state.mode, launchSites: state.launchSites, ports: state.ports }),
+      JSON.stringify({
+        mode: state.mode,
+        launchSites: state.launchSites,
+        ports: state.ports,
+        satellitesVisible: state.satellitesVisible,
+        shipsVisible: state.shipsVisible,
+        aircraftVisible: state.aircraftVisible,
+      }),
     )
   } catch {
     // storage unavailable — mode still works in-memory
   }
+}
+
+/**
+ * The layer a mode is about: switching to a tab force-shows that layer so a
+ * mode never presents an empty world because it was toggled off earlier.
+ */
+function modeLayerOn(mode: OpsMode): Partial<StoredMode> {
+  if (mode === 'orbital') return { satellitesVisible: true }
+  if (mode === 'maritime') return { shipsVisible: true }
+  return { aircraftVisible: true }
 }
 
 /**
@@ -75,9 +106,17 @@ export const useMode = create<ModeState>((set) => ({
   closeSettings: () => set({ settingsOpen: false }),
   setMode: (mode) =>
     set((s) => {
-      const next = { ...s, mode }
+      // Auto-enable the domain's own layer (see modeLayerOn) and persist it.
+      const enable = modeLayerOn(mode)
+      const next = { ...s, mode, ...enable }
       persist(next)
-      return { mode }
+      return { mode, ...enable }
+    }),
+  toggleSatellites: () =>
+    set((s) => {
+      const next = { ...s, satellitesVisible: !s.satellitesVisible }
+      persist(next)
+      return { satellitesVisible: next.satellitesVisible }
     }),
   toggleLaunchSites: () =>
     set((s) => {

@@ -6,6 +6,7 @@
 import type { ShipType } from '@orbital-ops/shared'
 import { formatCount } from '../../lib/format'
 import { usePrefs } from '../../core/ui/prefsStore'
+import { useSimLive } from '../../core/sim/simLive'
 import { useShips } from './shipsStore'
 
 const SHIP_TYPE_ORDER: { type: ShipType; label: string }[] = [
@@ -26,6 +27,9 @@ export function MaritimePicture() {
   const activeTypes = useShips((s) => s.activeTypes)
   const toggleType = useShips((s) => s.toggleType)
   const shipColors = usePrefs((s) => s.colors.ships)
+  // Vessels dead-reckon on wall time, so the layer hides while sim time is
+  // warped away from NOW — say so instead of showing a misleading count.
+  const simLive = useSimLive()
 
   return (
     <>
@@ -38,7 +42,11 @@ export function MaritimePicture() {
       {configured === null && <div className="passes-empty">CONNECTING…</div>}
       {configured === true && (
         <>
-          <div className="live-count">{formatCount(total)} VESSELS LIVE</div>
+          {simLive ? (
+            <div className="live-count">{formatCount(total)} VESSELS LIVE</div>
+          ) : (
+            <div className="live-count live-suspended">SUSPENDED — TIME WARP</div>
+          )}
           <ul className="group-list">
             {SHIP_TYPE_ORDER.map(({ type, label }) => (
               <li key={type}>
