@@ -101,5 +101,15 @@ jobs:
             docker compose pull
             docker compose up -d
             docker image prune -f
-            sleep 3
-            curl -fsS http://127.0.0.1:8787/api/health
+            # The server exposes no host port (Caddy proxies over the shared
+            # `web` docker network), so probe from inside the container — and
+            # retry, the API takes ~20-30 s to boot its satellite DB.
+            for i in $(seq 1 12); do
+              if docker exec orbital-ops wget -qO- http://localhost:8787/api/health 2>/dev/null; then
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "health check failed after 60s"
+            docker logs orbital-ops --since 2m | tail -20
+            exit 1
