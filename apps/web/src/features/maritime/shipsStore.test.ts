@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Ship } from '@orbital-ops/shared'
+import { ShipListSchema, type Ship } from '@orbital-ops/shared'
 
 const h = vi.hoisted(() => {
   /** Mirror of lib/api's ApiError; stable identity across module resets. */
@@ -26,6 +26,7 @@ const ship = (mmsi: number, shipType: Ship['shipType']): Ship => ({
   lonDeg: 4.1,
   sogKn: 12.3,
   cogDeg: 245.1,
+  hdgDeg: 243,
   shipType,
   tsMs: 0,
 })
@@ -57,6 +58,7 @@ describe('shipsStore polling', () => {
     const s = mod.useShips.getState()
     expect(s.ships).toHaveLength(3)
     expect(s.byMmsi.get(2)?.shipType).toBe('tanker')
+    expect(s.byMmsi.get(2)?.hdgDeg).toBe(243)
     expect(s.countsByType).toEqual({ cargo: 2, tanker: 1 })
     expect(s.configured).toBe(true)
     expect(s.connected).toBe(true)
@@ -92,5 +94,16 @@ describe('shipsStore polling', () => {
     expect(h.ships).toHaveBeenCalledTimes(2)
     await vi.advanceTimersByTimeAsync(POLL_MS)
     expect(h.ships).toHaveBeenCalledTimes(3)
+  })
+})
+
+describe('ship fixtures', () => {
+  // The real feed path validates with ShipListSchema (lib/api). Parsing the
+  // fixture through the same schema guards these tests against contract
+  // drift — a Ship field added to packages/shared fails here, not silently.
+  it('satisfy ShipListSchema, including nullable hdgDeg', () => {
+    const parsed = ShipListSchema.parse([ship(1, 'cargo'), { ...ship(2, 'tanker'), hdgDeg: null }])
+    expect(parsed[0].hdgDeg).toBe(243)
+    expect(parsed[1].hdgDeg).toBeNull()
   })
 })

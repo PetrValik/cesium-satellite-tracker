@@ -108,17 +108,35 @@ function travelAxis(
 }
 
 /**
+ * World-space alignedAxis for a ship's glyph. Bearing priority: AIS true
+ * heading (bow direction) when broadcast — anchored ships point their bow
+ * somewhere real, so heading is meaningful even at sog 0 — else COG, but
+ * only when the vessel is making way: below steerageway COG is noise (and
+ * ingest defaults never-reported COG to 0). No heading sensor and moored →
+ * Cartesian3.ZERO, i.e. plain screen-aligned. May return the shared scratch
+ * axis: callers must hand the result straight to a billboard, which clones
+ * it (cesium 1.138).
+ */
+function glyphAxis(ship: Ship): Cartesian3 {
+  const bearing = ship.hdgDeg ?? (ship.sogKn >= MOORED_SOG_KN ? ship.cogDeg : null)
+  if (bearing === null) return Cartesian3.ZERO
+  return travelAxis(ship.latDeg, ship.lonDeg, bearing, scratchAxis)
+}
+
+/**
  * The AIS vessel layer: one BillboardCollection, one tinted hull sprite per
  * ship, keyed by MMSI. Between feed polls `advance()` dead-reckons every
  * moving vessel from its last report (constant course/speed, cheap
  * equirectangular step), gated to at most once per 250 ms. Each moving hull
- * points along its course over ground via world-space Billboard.alignedAxis
- * (the ECEF travel direction; sprite-up follows its screen projection, which
- * Cesium recomputes every frame, so the heading reads correctly from any
- * camera angle — no per-frame rotation work). Moored vessels use
- * alignedAxis = ZERO (plain screen-aligned); rotation stays at its default 0
- * everywhere. The selected ship's billboard is hidden — a dedicated marker
- * elsewhere represents it.
+ * points along its bearing via world-space Billboard.alignedAxis (an ECEF
+ * unit direction; sprite-up follows its screen projection, which Cesium
+ * recomputes every frame, so the bearing reads correctly from any camera
+ * angle — no per-frame rotation work). Bearing rule (see glyphAxis): AIS
+ * true heading first — an anchored ship's bow still points somewhere real —
+ * then COG, but only above steerageway (COG is noise below it); a moored
+ * vessel with no heading sensor gets alignedAxis = ZERO (plain
+ * screen-aligned). rotation stays at its default 0 everywhere. The selected
+ * ship's billboard is hidden — a dedicated marker elsewhere represents it.
  *
  * Update strategy: when a poll delivers exactly the working set we already
  * hold (same MMSIs), billboards and dead-reckoning state are updated in
@@ -157,10 +175,10 @@ export class ShipsLayer {
    * positions/velocities/colors; otherwise the collection is rebuilt.
    * An empty array clears the layer. Selection survives either path (the
    * selected billboard stays hidden as long as its MMSI is present).
-   * alignedAxis is computed here, at store time only: dead reckoning never
-   * changes the bearing, and the axis's lat/lon dependence drifts negligibly
-   * within one poll interval, so advance() carries no orientation work at
-   * all.
+   * alignedAxis is computed here, at store time only, via glyphAxis (true
+   * heading first, COG only when making way): dead reckoning never changes
+   * the bearing, and the axis's lat/lon dependence drifts negligibly within
+   * one poll interval, so advance() carries no orientation work at all.
    */
   setShips(ships: Ship[]): void {
     if (this._isUnusable()) return
@@ -174,11 +192,7 @@ export class ShipsLayer {
         billboard.color = this._colors[ship.shipType]
         Cartesian3.fromDegrees(ship.lonDeg, ship.latDeg, 0, undefined, scratchPosition)
         billboard.position = scratchPosition
-        // Moored → COG is noise; ZERO means plain screen-aligned.
-        billboard.alignedAxis =
-          ship.sogKn < MOORED_SOG_KN
-            ? Cartesian3.ZERO
-            : travelAxis(ship.latDeg, ship.lonDeg, ship.cogDeg, scratchAxis)
+        billboard.alignedAxis = glyphAxis(ship)
         billboard.show = ship.mmsi !== this._selectedMmsi
       }
       return
@@ -204,11 +218,7 @@ export class ShipsLayer {
         position: scratchPosition,
         color: this._colors[ship.shipType],
         scaleByDistance: SCALE_BY_DISTANCE,
-        // Moored → COG is noise; ZERO means plain screen-aligned.
-        alignedAxis:
-          ship.sogKn < MOORED_SOG_KN
-            ? Cartesian3.ZERO
-            : travelAxis(ship.latDeg, ship.lonDeg, ship.cogDeg, scratchAxis),
+        alignedAxis: glyphAxis(ship),
         eyeOffset: EYE_OFFSET,
         show: ship.mmsi !== this._selectedMmsi,
       })

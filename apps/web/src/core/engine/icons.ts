@@ -95,20 +95,25 @@ export const aircraftIcon = memoIcon((ctx) => {
   ])
 })
 
-/** Ship: top-view hull — pointed bow up, flat stern — with a deck cut-out. */
+/**
+ * Ship: top-view hull, bow up. Elongated (~3:1 length:beam) with a long,
+ * sharp bow taper so the heading is unmistakable at billboard scale, and a
+ * transverse deck-break cut near the stern so the aft block reads as the
+ * bridge/superstructure (and the long fore deck as cargo space) up close.
+ */
 export const shipIcon = memoIcon((ctx) => {
-  ctx.beginPath()
-  ctx.moveTo(32, 5) // bow tip
-  ctx.quadraticCurveTo(42, 12, 43, 24) // starboard bow flare
-  ctx.lineTo(43, 55) // starboard side
-  ctx.lineTo(21, 55) // flat stern
-  ctx.lineTo(21, 24) // port side
-  ctx.quadraticCurveTo(22, 12, 32, 5) // port bow flare
-  ctx.closePath()
-  ctx.fill()
-  // Cargo-deck slot: keeps the glyph reading "ship" (not "capsule") up close.
+  fillSymmetric(ctx, [
+    [32, 5], // bow tip
+    [35.5, 14], // fine entry at the stem
+    [41, 29], // bow flare reaches full beam
+    [41, 53], // starboard side aft
+    [38.5, 58], // stern quarter tuck
+    [32, 58], // flat transom
+  ])
+  // Deck break: cut just ahead of the aft superstructure, leaving a gunwale
+  // on each side. One bold negative-space detail — legible at ~50% scale.
   ctx.globalCompositeOperation = 'destination-out'
-  ctx.fillRect(28.5, 30, 7, 18)
+  ctx.fillRect(26, 42.5, 12, 3.5)
   ctx.globalCompositeOperation = 'source-over'
 })
 

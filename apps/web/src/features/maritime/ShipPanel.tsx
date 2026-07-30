@@ -2,6 +2,7 @@ import { FollowButton } from '../../core/ui/FollowButton'
 import { formatAge, formatDeg, formatLatLon } from '../../lib/format'
 import { useWallClock } from '../../lib/wallClock'
 import { flagStateOf } from './mmsiFlags'
+import { ShipSilhouette } from './ShipSilhouette'
 import { useShips } from './shipsStore'
 
 /** Info panel for the selected vessel (live AIS data, wall-clock based). */
@@ -12,6 +13,8 @@ export function ShipPanel() {
   const nowMs = useWallClock((s) => s.nowMs)
 
   if (selectedMmsi === null) return null
+
+  const flag = ship === undefined ? null : flagStateOf(ship.mmsi)
 
   return (
     <section className="hud-panel telemetry-panel">
@@ -25,22 +28,27 @@ export function ShipPanel() {
         </span>
       </header>
       <div className="telemetry-name">{ship?.name || `MMSI ${selectedMmsi}`}</div>
+      {ship && (
+        <figure className="vessel-card">
+          <ShipSilhouette type={ship.shipType} />
+          <figcaption className="vessel-card-caption">
+            <span>SIDE PROFILE</span>
+            {flag !== null && <span>{flag.toUpperCase()}</span>}
+          </figcaption>
+        </figure>
+      )}
       {ship ? (
         <dl className="telemetry-grid">
           <dt>MMSI</dt>
           <dd>{ship.mmsi}</dd>
-          {flagStateOf(ship.mmsi) !== null && (
-            <>
-              <dt>FLAG</dt>
-              <dd>{flagStateOf(ship.mmsi)}</dd>
-            </>
-          )}
           <dt>TYPE</dt>
           <dd className={`ship-type ship-${ship.shipType}`}>{ship.shipType.toUpperCase()}</dd>
           <dt>SOG</dt>
           <dd>{ship.sogKn.toFixed(1)} KN</dd>
           <dt>COG</dt>
           <dd>{formatDeg(ship.cogDeg, 0)}</dd>
+          <dt>TRUE HDG</dt>
+          <dd>{ship.hdgDeg === null ? '—' : formatDeg(ship.hdgDeg, 0)}</dd>
           <dt>POS</dt>
           <dd>{formatLatLon(ship.latDeg, ship.lonDeg)}</dd>
           <dt>REPORT</dt>

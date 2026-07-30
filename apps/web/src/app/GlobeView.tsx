@@ -251,14 +251,18 @@ export function GlobeView() {
     let lastAltKm = 400
     const liveTargetScratch = new Cartesian3()
 
-    /** Selected ship, dead-reckoned to wall-now (mirrors ShipsLayer motion). */
+    /**
+     * Selected ship, dead-reckoned to wall-now. Bearing is true heading
+     * first, COG as the fallback — the same rule as the decal pose below,
+     * so the follow camera tracks exactly the point the decal occupies.
+     */
     const shipTarget = (): Cartesian3 | null => {
       const st = useShips.getState()
       const ship = st.selectedMmsi === null ? undefined : st.byMmsi.get(st.selectedMmsi)
       if (!ship) return null
       const dt = Math.min((Date.now() - ship.tsMs) / 1000, 1800)
       const v = ship.sogKn >= 0.2 ? ship.sogKn * 0.514444 : 0
-      const bearing = ship.cogDeg * DEG
+      const bearing = (ship.hdgDeg ?? ship.cogDeg) * DEG
       const lat = ship.latDeg + (v * Math.cos(bearing) * dt) / 111_320
       const lon =
         ship.lonDeg +
@@ -615,7 +619,8 @@ export function GlobeView() {
         }
       }
       // Selected ship/aircraft world decals: dead-reckoned to wall-now,
-      // world-oriented (nose along course), screen-proportional size.
+      // world-oriented (ship bow along true heading with COG fallback,
+      // aircraft nose along track), screen-proportional size.
       // Skipped entirely while the clock is not live — applyLiveVisibility
       // hid them, and setPose re-shows them on the first live frame.
       if (clockLive) {
@@ -625,12 +630,15 @@ export function GlobeView() {
           if (ship) {
             const dtS = Math.min((Date.now() - ship.tsMs) / 1000, 1800)
             const v = ship.sogKn >= 0.2 ? ship.sogKn * 0.514444 : 0
-            const brg = ship.cogDeg * DEG
+            // True heading (bow) first; COG as the fallback — the decal
+            // always needs some bearing, even for a headingless moored ship.
+            const bearingDeg = ship.hdgDeg ?? ship.cogDeg
+            const brg = bearingDeg * DEG
             const lat = ship.latDeg + (v * Math.cos(brg) * dtS) / 111_320
             const lon =
               ship.lonDeg +
               (v * Math.sin(brg) * dtS) / (111_320 * Math.max(0.01, Math.cos(ship.latDeg * DEG)))
-            shipDecal.setPose(lon, lat, 50, ship.cogDeg, viewer.camera.positionWC)
+            shipDecal.setPose(lon, lat, 50, bearingDeg, viewer.camera.positionWC)
           }
         }
         const selIcao = useAircraft.getState().selectedIcao

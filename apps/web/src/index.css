@@ -907,6 +907,66 @@ body {
   color: var(--text-dim);
 }
 
+/* ---- vessel identity card (maritime) ---------------------------- */
+/* No free vessel-photo API exists, so the panel shows a drawn side-profile
+   "recognition silhouette" per ship class (ShipSilhouette.tsx) instead:
+   cyan outline art over scanlines, dashed amber waterline. */
+
+.vessel-card {
+  margin: 0 0 10px;
+}
+
+.vessel-silhouette {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--hairline);
+  background-color: var(--cyan-wash);
+  background-image: var(--scanlines);
+  color: var(--cyan);
+}
+
+.vessel-silhouette path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.vessel-silhouette .sil-hull {
+  fill: var(--cyan-wash);
+}
+
+.vessel-silhouette .sil-detail {
+  stroke-width: 1;
+  opacity: 0.6;
+}
+
+.vessel-silhouette .sil-dash {
+  stroke-width: 1;
+  stroke-dasharray: 2 2.5;
+  opacity: 0.55;
+}
+
+.vessel-silhouette .sil-waterline {
+  stroke: var(--amber);
+  stroke-width: 1;
+  stroke-dasharray: 5 3;
+  opacity: 0.75;
+}
+
+.vessel-card-caption {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin-top: 3px;
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label-tight);
+  color: var(--text-dim);
+}
+
 /* ---- follow + panel actions ------------------------------------ */
 
 .panel-actions {
