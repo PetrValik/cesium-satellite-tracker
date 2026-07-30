@@ -274,6 +274,7 @@ describe('AisFeed vessel state', () => {
         lonDeg: 4.1,
         sogKn: 12.3,
         cogDeg: 245.1,
+        hdgDeg: 244,
         shipType: 'other',
         tsMs: T0,
       },
@@ -285,6 +286,34 @@ describe('AisFeed vessel state', () => {
     expect(second).toHaveLength(1)
     expect(second[0]).toMatchObject({ latDeg: 52.0, lonDeg: 4.2, tsMs: T0 + 30_000 })
     expect(feed.status().ships).toBe(1)
+    feed.stop()
+  })
+
+  it('treats the AIS not-available sentinels (COG 360, heading 511) as absent', () => {
+    const { feed, sockets } = feedEnv()
+    feed.start()
+    sockets[0]!.open()
+
+    // First report carries real values...
+    sockets[0]!.message(positionReport(244_123_456, 51.9, 4.1))
+    // ...the next one only sentinels — the stored values must survive.
+    sockets[0]!.message({
+      MessageType: 'PositionReport',
+      MetaData: { MMSI: 244_123_456, ShipName: 'EVER GIVEN ', latitude: 52.0, longitude: 4.2 },
+      Message: { PositionReport: { Latitude: 52.0, Longitude: 4.2, Sog: 11, Cog: 360, TrueHeading: 511 } },
+    })
+    expect(feed.snapshot()[0]).toMatchObject({ cogDeg: 245.1, hdgDeg: 244, sogKn: 11 })
+
+    // A vessel that never reported a heading stays null.
+    sockets[0]!.message({
+      MessageType: 'PositionReport',
+      MetaData: { MMSI: 211_000_001, ShipName: 'NO HDG ', latitude: 54.0, longitude: 8.0 },
+      Message: { PositionReport: { Latitude: 54.0, Longitude: 8.0, Sog: 0, Cog: 360, TrueHeading: 511 } },
+    })
+    expect(feed.snapshot().find((s) => s.mmsi === 211_000_001)).toMatchObject({
+      cogDeg: 0,
+      hdgDeg: null,
+    })
     feed.stop()
   })
 

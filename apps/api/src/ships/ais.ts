@@ -76,6 +76,7 @@ interface AisEnvelope {
       Longitude?: unknown
       Sog?: unknown
       Cog?: unknown
+      TrueHeading?: unknown
     } | null
     ShipStaticData?: {
       Type?: unknown
@@ -328,13 +329,17 @@ export class AisFeed {
     const lon = num(report?.Longitude) ?? num(msg.MetaData?.longitude)
     if (lat === undefined || lon === undefined || Math.abs(lat) > 90 || Math.abs(lon) > 180) return
     const prev = this.ships.get(mmsi)
+    // AIS sentinels for "not available": COG 360, true heading 511.
+    const cog = num(report?.Cog)
+    const hdg = num(report?.TrueHeading)
     this.ships.set(mmsi, {
       mmsi,
       name: prev?.name || cleanName(msg.MetaData?.ShipName),
       latDeg: lat,
       lonDeg: lon,
       sogKn: num(report?.Sog) ?? prev?.sogKn ?? 0,
-      cogDeg: num(report?.Cog) ?? prev?.cogDeg ?? 0,
+      cogDeg: (cog !== undefined && cog >= 0 && cog < 360 ? cog : undefined) ?? prev?.cogDeg ?? 0,
+      hdgDeg: (hdg !== undefined && hdg >= 0 && hdg < 360 ? hdg : undefined) ?? prev?.hdgDeg ?? null,
       shipType: prev?.shipType ?? 'other',
       tsMs: this.now(),
     })
@@ -368,6 +373,7 @@ export class AisFeed {
       lonDeg: lon,
       sogKn: 0,
       cogDeg: 0,
+      hdgDeg: null,
       shipType: mapShipType(typeCode),
       tsMs: this.now(),
     })

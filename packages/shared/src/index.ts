@@ -56,6 +56,12 @@ export const ShipSchema = z.object({
   sogKn: z.number(),
   /** Course over ground, degrees. */
   cogDeg: z.number(),
+  /**
+   * True heading (bow direction), degrees; null when the transponder has no
+   * heading sensor (AIS sentinel 511). Unlike COG this is meaningful even
+   * for an anchored vessel.
+   */
+  hdgDeg: z.number().nullable(),
   shipType: ShipTypeSchema,
   /** Epoch ms of the last received report. */
   tsMs: z.number(),
