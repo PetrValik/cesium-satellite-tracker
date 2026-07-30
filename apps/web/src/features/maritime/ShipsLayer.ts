@@ -73,15 +73,50 @@ const MIN_COS_LAT = 0.01
 // not allocate. Safe to share because Billboard's `position` setter clones
 // the value into its internal Cartesian3 (verified in cesium 1.138).
 const scratchPosition = new Cartesian3()
+// Scratch for the world-space travel axis. Safe to share for the same
+// reason: both the Billboard constructor and the `alignedAxis` setter clone
+// the value into the billboard's internal Cartesian3 (cesium 1.138).
+const scratchAxis = new Cartesian3()
+
+/**
+ * ECEF unit vector of horizontal travel for a bearing (degrees clockwise
+ * from north) at (latDeg, lonDeg), using the local ENU basis
+ *   east  = (-sinLon, cosLon, 0)
+ *   north = (-sinLat·cosLon, -sinLat·sinLon, cosLat)
+ *   dir   = east·sin(brg) + north·cos(brg)
+ * east and north are orthonormal, so dir is unit-length by construction.
+ */
+function travelAxis(
+  latDeg: number,
+  lonDeg: number,
+  bearingDeg: number,
+  result: Cartesian3,
+): Cartesian3 {
+  const latRad = latDeg * RAD_PER_DEG
+  const lonRad = lonDeg * RAD_PER_DEG
+  const bearingRad = bearingDeg * RAD_PER_DEG
+  const sinLat = Math.sin(latRad)
+  const cosLat = Math.cos(latRad)
+  const sinLon = Math.sin(lonRad)
+  const cosLon = Math.cos(lonRad)
+  const sinBrg = Math.sin(bearingRad)
+  const cosBrg = Math.cos(bearingRad)
+  result.x = -sinLon * sinBrg - sinLat * cosLon * cosBrg
+  result.y = cosLon * sinBrg - sinLat * sinLon * cosBrg
+  result.z = cosLat * cosBrg
+  return result
+}
 
 /**
  * The AIS vessel layer: one BillboardCollection, one tinted hull sprite per
  * ship, keyed by MMSI. Between feed polls `advance()` dead-reckons every
  * moving vessel from its last report (constant course/speed, cheap
  * equirectangular step), gated to at most once per 250 ms. Each moving hull
- * carries a FIXED screen rotation by its course over ground, set once per
- * feed snapshot — moving the camera never re-orients a hull (explicit user
- * preference). Moored vessels (COG is noise) render upright
+ * points along its course over ground via world-space Billboard.alignedAxis
+ * (the ECEF travel direction; sprite-up follows its screen projection, which
+ * Cesium recomputes every frame, so the heading reads correctly from any
+ * camera angle — no per-frame rotation work). Moored vessels use
+ * alignedAxis = ZERO (plain screen-aligned); rotation stays at its default 0
  * everywhere. The selected ship's billboard is hidden — a dedicated marker
  * elsewhere represents it.
  *
@@ -122,8 +157,10 @@ export class ShipsLayer {
    * positions/velocities/colors; otherwise the collection is rebuilt.
    * An empty array clears the layer. Selection survives either path (the
    * selected billboard stays hidden as long as its MMSI is present).
-   * Rotation is set here, at store time only: dead reckoning never changes
-   * the bearing, so advance() carries no orientation work at all.
+   * alignedAxis is computed here, at store time only: dead reckoning never
+   * changes the bearing, and the axis's lat/lon dependence drifts negligibly
+   * within one poll interval, so advance() carries no orientation work at
+   * all.
    */
   setShips(ships: Ship[]): void {
     if (this._isUnusable()) return
@@ -137,9 +174,11 @@ export class ShipsLayer {
         billboard.color = this._colors[ship.shipType]
         Cartesian3.fromDegrees(ship.lonDeg, ship.latDeg, 0, undefined, scratchPosition)
         billboard.position = scratchPosition
-        // Fixed screen rotation by COG, set once — the glyph never visibly
-        // re-orients as the camera moves. Moored → COG is noise → upright.
-        billboard.rotation = ship.sogKn < MOORED_SOG_KN ? 0 : -ship.cogDeg * RAD_PER_DEG
+        // Moored → COG is noise; ZERO means plain screen-aligned.
+        billboard.alignedAxis =
+          ship.sogKn < MOORED_SOG_KN
+            ? Cartesian3.ZERO
+            : travelAxis(ship.latDeg, ship.lonDeg, ship.cogDeg, scratchAxis)
         billboard.show = ship.mmsi !== this._selectedMmsi
       }
       return
@@ -165,8 +204,11 @@ export class ShipsLayer {
         position: scratchPosition,
         color: this._colors[ship.shipType],
         scaleByDistance: SCALE_BY_DISTANCE,
-        // Fixed screen rotation by COG, set once (see in-place path).
-        rotation: ship.sogKn < MOORED_SOG_KN ? 0 : -ship.cogDeg * RAD_PER_DEG,
+        // Moored → COG is noise; ZERO means plain screen-aligned.
+        alignedAxis:
+          ship.sogKn < MOORED_SOG_KN
+            ? Cartesian3.ZERO
+            : travelAxis(ship.latDeg, ship.lonDeg, ship.cogDeg, scratchAxis),
         eyeOffset: EYE_OFFSET,
         show: ship.mmsi !== this._selectedMmsi,
       })
@@ -182,7 +224,7 @@ export class ShipsLayer {
   /**
    * Dead-reckon every moving vessel to wall-clock `wallNowMs`. No-op unless
    * at least 250 ms elapsed since the last pass. Orientation costs nothing
-   * here: rotation is fixed at store time, and
+   * here: alignedAxis is world-space and set once per feed snapshot, and
    * Cesium re-projects it to the screen every frame on its own. Zero
    * allocations: one shared scratch Cartesian3.
    */
