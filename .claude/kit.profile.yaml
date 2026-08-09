@@ -1,0 +1,85 @@
+# kit.profile.yaml — machine-readable rules for this repo.
+# Prose guidance lives in CLAUDE.md; values live here. See the kit's
+# `profile-contract` skill for what every key means.
+
+project:
+  name: orbital-ops
+  description: "Real-time satellite + vessel tracker on a CesiumJS globe (orbit.irminsul.uk)"
+
+stack:
+  language: typescript
+  framework: react-vite
+
+commands:
+  build: "npm run build"
+  test: "npm test"
+  lint: "npm run lint"
+  format: ""
+  run: "npm run dev"
+
+git:
+  trunk: main
+  branch_prefixes: [feat, fix, chore, docs, refactor]
+  can_push: true
+
+pr:
+  target: main
+  who_merges:
+    auto: []
+    manual: [low, medium, high] # merging main deploys to the cloud box
+  required_checks: []
+
+risk_paths:
+  - "apps/web/src/core/engine/**" # Cesium lifecycle — leaks here are invisible until runtime
+  - "**/*sgp4*"
+  - "**/*propagat*" # frame/unit bugs produce plausible wrong answers
+  - ".github/workflows/**"
+  - "Dockerfile*"
+  - "docker-compose*.yml"
+  - "**/*.env*"
+
+conventions:
+  language: en
+  commit_format: "<type>(<scope>): <summary>"
+  ai_authorship_trailer: false
+  docs_dir: docs
+
+review:
+  severity_floor: low
+
+flows:
+  plan_gate: false
+
+units:
+  kind: vertical-slice
+  description: "one feature folder under apps/web/src/features/ — UI, state, and domain logic together"
+
+token_budget: null
+
+second_brain:
+  enabled: true
+  root: "~/Obsidian/SecondBrain"
+
+packs:
+  frontend_ts:
+    enabled: true
+    apps_root: "apps"
+    framework: react-vite
+    data:
+      client: manual # no OpenAPI codegen; apps/api is hand-typed via packages/shared
+      server_state: none # zustand holds client state; there is no server-state library
+    forms: none # no forms in this app
+    styling: css-modules # HUD styling is hand-written CSS, not a token framework
+    features:
+      multi_tenant: false
+      i18n: false
+    naming:
+      slice_parts: [components, state, domain]
+    test:
+      unit: vitest
+      component: none
+      mock: none
+      e2e: none
+    coverage:
+      min_line: null
+    bundle_budget: null
