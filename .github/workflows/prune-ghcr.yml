@@ -1,0 +1,81 @@
+# Prune old container versions from GHCR so the storage quota stops filling.
+#
+# WHY THIS EXISTS
+# ---------------
+# GitHub counts Actions artifacts and private GHCR packages against ONE shared storage quota, and
+# GHCR never deletes anything on its own. Every push to main publishes a new image and every old one
+# stays forever. On 2026-08-13 that quota filled: an unrelated deploy in another repo built its
+# image green and then died on `Failed to CreateArtifact: Artifact storage quota has been hit`.
+# Measured the same day, platform-api held ~17 tagged versions, all three months old, every one with
+# **0 downloads**.
+#
+# WHAT IT KEEPS, AND WHY IT IS COUNTED THIS WAY
+# ---------------------------------------------
+# `min-versions-to-keep` counts VERSIONS, not tags, and those are not the same thing. A single
+# `docker push` from buildx publishes the tagged manifest **plus its child manifests**, which appear
+# in the package UI as untagged `sha256:…` rows nested under the tag. They look like debris and are
+# not: delete a child and the tag above it stops pulling.
+#
+# That is why this does NOT use `delete-only-untagged-versions`, which is the advice you will find
+# first and which breaks images whose manifest is a list. It deletes whole oldest-first versions
+# instead, keeping enough of them that recent tags keep their children.
+#
+# Observed here: ~3 versions per push. KEEP=30 therefore retains roughly the last ten pushes, and
+# the box only ever needs the running tag and the one before it.
+#
+# SAFE BY DEFAULT: a manual run reports and deletes nothing unless you type `delete`. Only the
+# weekly schedule deletes on its own.
+name: prune-ghcr
+
+on:
+  schedule:
+    - cron: '17 4 * * 1'          # Mondays 04:17 UTC — clear of every deploy and backup window
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'dry-run (report only) or delete'
+        type: choice
+        options: [dry-run, delete]
+        default: dry-run
+
+permissions:
+  contents: read
+  packages: write                 # the only write scope, and only for this repo's packages
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false            # one package failing must not stop the others being pruned
+      matrix:
+        package: [cesium-satellite-tracker]
+    steps:
+      - name: What would go
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PKG: ${{ matrix.package }}
+        run: |
+          set -euo pipefail
+          enc="$(printf '%s' "$PKG" | sed 's|/|%2F|g')"
+          base="/orgs/${{ github.repository_owner }}/packages/container/$enc"
+          gh api "$base" >/dev/null 2>&1 || base="/users/${{ github.repository_owner }}/packages/container/$enc"
+          gh api --paginate "$base/versions" \
+            --jq '.[] | "\(.created_at[0:10])  \(.metadata.container.tags | if length == 0 then "<untagged>" else join(",") end)"' \
+            | sort -r > /tmp/all.txt
+          total=$(wc -l < /tmp/all.txt)
+          echo "### \`$PKG\` — $total version(s)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Keeping the newest 30; these are the oldest and would go:" >> "$GITHUB_STEP_SUMMARY"
+          { echo '```'; tail -n +31 /tmp/all.txt | head -40; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Delete
+        # The schedule prunes; a manual run only prunes when explicitly asked for it.
+        if: ${{ github.event_name == 'schedule' || inputs.mode == 'delete' }}
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ matrix.package }}
+          package-type: container
+          min-versions-to-keep: 30
+          # Never delete the tags a box can be asked to run or roll back to. `latest` and `main` are
+          # floating pointers a human types; `staging` is what the staging box pulls. A sha- tag is
+          # protected by the count above, not by name — there are too many to enumerate.
+          ignore-versions: '^(latest|main|staging)$'
