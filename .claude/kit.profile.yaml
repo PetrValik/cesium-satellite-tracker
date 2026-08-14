@@ -38,6 +38,15 @@ risk_paths:
   - "docker-compose*.yml"
   - "**/*.env*"
 
+# Enforced subset of CLAUDE.md's routing table (kit-core guard-skill-routing): the first
+# write to a matching path is denied until that skill is loaded, once per session per skill.
+# The engine and orbital-mechanics rows in that table point at AGENTS, which a path glob
+# cannot dispatch — those stay guidance, and `risk_paths` already gates the engine folder.
+skill_routes:
+  - glob: 'apps/web/src/features/**'
+    skill: frontend-slice-architecture
+    why: 'a feature folder holds UI, state and domain logic together'
+
 conventions:
   language: en
   commit_format: "<type>(<scope>): <summary>"
