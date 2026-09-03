@@ -48,6 +48,8 @@ Key docs:
 Machine-readable rules (commands, branch policy, risk paths, active packs) live in
 `.claude/kit.profile.yaml`. Read it before proposing a command.
 
+[`AGENTS.md`](AGENTS.md) is the map — what this is, where things live, how to build, test and run, the common tasks and the gotchas. Read it when you need to find something; this file is the law.
+
 ---
 
 ## Architecture — the rules that actually get enforced
