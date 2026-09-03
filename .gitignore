@@ -154,3 +154,8 @@ apps/api/data/
 
 # Claude Code worktrees (claude --worktree / isolation: worktree)
 .claude/worktrees/
+
+# kit run-state, local settings and digests (agentic-repo playbook, 2026-09-04)
+.claude/kit-run/
+.claude/settings.local.json
+.claude/digests/

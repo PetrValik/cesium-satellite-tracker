@@ -69,6 +69,15 @@ token_budget: null
 second_brain:
   enabled: true
   root: "~/Obsidian/SecondBrain"
+# Agent tiering and kill criteria (agentic-repo playbook, 2026-09-04). Gate agents read and
+# report on sonnet; build and review agents stay on opus. The same gate failing three times
+# for one agent stops the flow and hands the decision over.
+model_tiers:
+  gate: sonnet
+  build: opus
+agents:
+  max_stuck_iterations: 3
+
 
 packs:
   frontend_ts:

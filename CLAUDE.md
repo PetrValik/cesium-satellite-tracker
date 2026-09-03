@@ -68,6 +68,54 @@ bug at this object count, not a style preference.
 
 ---
 
+## Commands
+
+The real ones, from `.claude/kit.profile.yaml` (`commands:`); agents call them by name.
+
+```sh
+npm run build                                                          # build
+npm run lint && npm test                                               # check
+npm test                                                               # test
+npm run lint                                                           # lint
+npm run dev                                                            # run
+```
+
+## Enforcement
+
+Hooks are code that runs; the lines above are guidance. What the kit enforces here, from the profile:
+
+| Hook | What it does here |
+| --- | --- |
+| push guard | `can_push: true`; a merge to `main` deploys, so PRs merge manually |
+| trunk guard | no commits on `main`; branch first |
+| risk paths | engine, workers, propagators, workflows, Docker, env files ask before an edit |
+| skill routing | first write under `apps/web/src/features/**` needs `frontend-slice-architecture` loaded |
+| check gate | `npm run lint && npm test` must be green before a turn that changed source can end |
+| no-verify guard | `--no-verify`, `HUSKY=0`, force-push to `main` are denied |
+| session context | `.claude/context.md` re-injected after compaction |
+
+All hooks fail open and are kill-switchable (`KIT_HOOKS_DISABLE=1`, or the per-hook `KIT_*=0` named in the kit's hooks README). `.claude/context.md` is what survives a compaction — keep it to eight lines.
+
+## Per-module docs
+
+One `CLAUDE.md` per feature folder — five headings, under 25 lines, facts from the code, traps cited `file:line`. Read the one for the folder you are about to change; correct a trap there when it bites again (ratchet rule). List them: `git ls-files '*/CLAUDE.md'`.
+
+| Area | Doc |
+| --- | --- |
+| web `airspace` | [`apps/web/src/features/airspace/CLAUDE.md`](apps/web/src/features/airspace/CLAUDE.md) |
+| web `catalog` | [`apps/web/src/features/catalog/CLAUDE.md`](apps/web/src/features/catalog/CLAUDE.md) |
+| web `constellation` | [`apps/web/src/features/constellation/CLAUDE.md`](apps/web/src/features/constellation/CLAUDE.md) |
+| web `infra` | [`apps/web/src/features/infra/CLAUDE.md`](apps/web/src/features/infra/CLAUDE.md) |
+| web `maritime` | [`apps/web/src/features/maritime/CLAUDE.md`](apps/web/src/features/maritime/CLAUDE.md) |
+| web `passes` | [`apps/web/src/features/passes/CLAUDE.md`](apps/web/src/features/passes/CLAUDE.md) |
+| web `timebar` | [`apps/web/src/features/timebar/CLAUDE.md`](apps/web/src/features/timebar/CLAUDE.md) |
+| web `tracking` | [`apps/web/src/features/tracking/CLAUDE.md`](apps/web/src/features/tracking/CLAUDE.md) |
+| web `engine` | [`apps/web/src/core/engine/CLAUDE.md`](apps/web/src/core/engine/CLAUDE.md) |
+| web `workers` | [`apps/web/src/workers/CLAUDE.md`](apps/web/src/workers/CLAUDE.md) |
+| api `satellites` | [`apps/api/src/satellites/CLAUDE.md`](apps/api/src/satellites/CLAUDE.md) |
+| api `ships` | [`apps/api/src/ships/CLAUDE.md`](apps/api/src/ships/CLAUDE.md) |
+| api `aircraft` | [`apps/api/src/aircraft/CLAUDE.md`](apps/api/src/aircraft/CLAUDE.md) |
+
 ## Language
 
 All repo artefacts — code, comments, docs, commit messages, PR descriptions — are in
