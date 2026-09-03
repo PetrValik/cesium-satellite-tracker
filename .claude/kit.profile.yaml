@@ -16,6 +16,7 @@ commands:
   lint: "npm run lint"
   format: ""
   run: "npm run dev"
+  check: "npm run lint && npm test" # ~4 s — the Stop gate runs it after source changes
 
 git:
   trunk: main
@@ -31,7 +32,7 @@ pr:
 
 risk_paths:
   - "apps/web/src/core/engine/**" # Cesium lifecycle — leaks here are invisible until runtime
-  - "**/*sgp4*"
+  - "apps/web/src/workers/**" # SGP4 batch propagation lives here (the earlier **/*sgp4* matched no file)
   - "**/*propagat*" # frame/unit bugs produce plausible wrong answers
   - ".github/workflows/**"
   - "Dockerfile*"

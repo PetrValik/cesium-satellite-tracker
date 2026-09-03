@@ -95,6 +95,8 @@ what goes stale.
 failure modes that matter here — a leak and a wrong-but-plausible position — so a change to
 the engine or the propagator is verified by **running it and watching**, not by a green suite.
 
+The kit's Stop hook runs the profile's `commands.check` after any source change and will not end the turn while it is red — fix the cause rather than switch the gate off.
+
 ## Second brain
 
 After completing a unit of work, write a note to

@@ -151,3 +151,6 @@ apps/web/public/cesium/
 
 # API runtime database (seed lives in apps/api/seed/, committed)
 apps/api/data/
+
+# Claude Code worktrees (claude --worktree / isolation: worktree)
+.claude/worktrees/
