@@ -66,6 +66,14 @@ units:
 
 token_budget: null
 
+# Vendored docs: only sites that publish a real llms-full.txt (verified 2026-09-05); /kit-docs vendors
+# these and nothing else unless --all. The site documents its current release — keep majors aligned.
+docs:
+  url_map:
+    hono: "https://hono.dev/llms-full.txt"
+    zod: "https://zod.dev/llms-full.txt"
+    zustand: "https://zustand.docs.pmnd.rs/llms-full.txt"
+
 second_brain:
   enabled: true
   root: "~/Obsidian/SecondBrain"
