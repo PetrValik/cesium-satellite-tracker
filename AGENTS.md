@@ -26,6 +26,8 @@ apps/web/src/
   workers/        propagation.worker.ts — batch SGP4 (nothing in the repo is named "sgp4")
   data/           committed static datasets (launch sites, ports)
   styles/         tokens.css — the HUD palette every panel reads
+apps/web/pwa/     service-worker template + stamp helper + sw.test.ts (stamped into dist/sw.js by vite.config.ts);
+                  manifest, icon.svg and committed PNG icons in apps/web/public/ (re-render: scripts/make-icons.sh)
 apps/api/src/
   app.ts          composition root: CORS, rate limit, mounts the slice routers
   index.ts        bootstrap: env, SQLite, seed, feeds, listen — the only file reading process.env
