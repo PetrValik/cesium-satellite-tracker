@@ -18,6 +18,12 @@ body,
   margin: 0;
 }
 
+html,
+body {
+  /* no pull-to-refresh / rubber-band from touches that start on the HUD */
+  overscroll-behavior: none;
+}
+
 body {
   background: var(--space);
   color: var(--text);
@@ -25,6 +31,9 @@ body {
   font-size: var(--fs-data);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
 }
 
 ::selection {
@@ -50,14 +59,18 @@ body {
   background: var(--scroll-thumb);
 }
 
-.hud-layer *::-webkit-scrollbar-thumb:hover {
-  background: var(--scroll-thumb-hover);
+@media (hover: hover) {
+  .hud-layer *::-webkit-scrollbar-thumb:hover {
+    background: var(--scroll-thumb-hover);
+  }
 }
 
 .catalog-panel,
 .right-stack,
 .pass-list,
-.search-results {
+.search-results,
+.sheet-body,
+.help-panel {
   scrollbar-width: thin;
   scrollbar-color: var(--scroll-thumb) transparent;
 }
@@ -68,6 +81,12 @@ body {
 .globe-root {
   position: absolute;
   inset: 0;
+}
+
+/* nothing may widen the layout viewport: on mobile an overflowing child
+   makes the page pinch-zoomable and leaves it zoomed after a rotation */
+.app-root {
+  overflow: hidden;
 }
 
 .globe-root .cesium-viewer,
@@ -82,6 +101,9 @@ body {
   inset: 0;
   pointer-events: none;
   z-index: 10;
+  /* no double-tap zoom on fast repeated taps (rate steps); the canvas keeps
+     Cesium's own touch-action: none */
+  touch-action: manipulation;
 }
 
 .hud-layer > * {
@@ -168,9 +190,13 @@ body {
     box-shadow var(--t-fast) var(--ease-out);
 }
 
-.hud-button:hover {
-  border-color: var(--amber-outline);
-  color: var(--amber);
+/* hover styles only where hover exists — on touch a tapped button would
+   otherwise keep its hover look ("sticky hover") */
+@media (hover: hover) {
+  .hud-button:hover {
+    border-color: var(--amber-outline);
+    color: var(--amber);
+  }
 }
 
 .hud-button:active {
@@ -209,7 +235,7 @@ body {
   display: flex;
   align-items: baseline;
   gap: var(--sp-3);
-  padding: 9px 16px;
+  padding: calc(9px + var(--safe-top)) calc(16px + var(--safe-right)) 9px calc(16px + var(--safe-left));
   background: linear-gradient(rgba(6, 9, 15, 0.9), rgba(6, 9, 15, 0));
   font-size: var(--fs-label-lg);
   letter-spacing: var(--ls-label);
@@ -273,7 +299,7 @@ body {
 
 .mode-tabs {
   position: absolute;
-  top: 38px;
+  top: calc(38px + var(--safe-top));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -397,9 +423,10 @@ body {
     top left / 15px 15px no-repeat;
   position: absolute;
   top: var(--hud-top);
-  left: var(--sp-3);
+  left: calc(var(--sp-3) + var(--safe-left));
   width: var(--w-catalog);
   max-height: calc(100vh - 160px);
+  max-height: calc(100dvh - 160px);
   overflow-y: auto;
 }
 
@@ -436,9 +463,11 @@ body {
     background-color var(--t-fast) var(--ease-out);
 }
 
-.group-row:hover:not(:disabled) {
-  color: var(--text);
-  background-color: var(--amber-wash);
+@media (hover: hover) {
+  .group-row:hover:not(:disabled) {
+    color: var(--text);
+    background-color: var(--amber-wash);
+  }
 }
 
 .group-row:disabled {
@@ -527,8 +556,10 @@ body {
   transition: background-color var(--t-fast) var(--ease-out);
 }
 
-.search-result:hover {
-  background: var(--amber-wash);
+@media (hover: hover) {
+  .search-result:hover {
+    background: var(--amber-wash);
+  }
 }
 
 .search-norad {
@@ -541,12 +572,13 @@ body {
 .right-stack {
   position: absolute;
   top: var(--hud-top);
-  right: var(--sp-3);
+  right: calc(var(--sp-3) + var(--safe-right));
   width: var(--w-right);
   display: flex;
   flex-direction: column;
   gap: 10px;
   max-height: calc(100vh - 140px);
+  max-height: calc(100dvh - 140px);
   overflow-y: auto;
   pointer-events: auto;
 }
@@ -575,9 +607,11 @@ body {
   background: var(--input-bg);
 }
 
-.telemetry-header .hud-button:hover {
-  color: var(--amber);
-  border-color: var(--amber-outline);
+@media (hover: hover) {
+  .telemetry-header .hud-button:hover {
+    color: var(--amber);
+    border-color: var(--amber-outline);
+  }
 }
 
 /* keep the pressed wash from .hud-button:active (earlier in the file, same
@@ -650,7 +684,7 @@ body {
 
 .transport-bar {
   position: absolute;
-  bottom: var(--sp-3);
+  bottom: calc(var(--sp-3) + var(--safe-bottom));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -686,8 +720,10 @@ body {
   border-right: 0;
 }
 
-.transport-rates .rate-button:hover {
-  color: var(--amber);
+@media (hover: hover) {
+  .transport-rates .rate-button:hover {
+    color: var(--amber);
+  }
 }
 
 .rate-button.is-active {
@@ -812,7 +848,7 @@ body {
 
 .sky-label {
   fill: var(--text-dim);
-  font-size: 9px;
+  font-size: var(--fs-micro);
   font-family: var(--mono);
   letter-spacing: var(--ls-label);
 }
@@ -886,8 +922,10 @@ body {
   transition: background-color var(--t-fast) var(--ease-out);
 }
 
-.pass-row:hover {
-  background-color: var(--amber-wash);
+@media (hover: hover) {
+  .pass-row:hover {
+    background-color: var(--amber-wash);
+  }
 }
 
 .pass-goto {
@@ -908,7 +946,7 @@ body {
 
 .photo-card figcaption {
   margin-top: 3px;
-  font-size: 9px;
+  font-size: var(--fs-micro);
   letter-spacing: var(--ls-label-tight);
   color: var(--text-dim);
 }
@@ -993,20 +1031,20 @@ body {
 
 /* ---- help overlay ------------------------------------------------ */
 
-.help-button {
+/* desktop launcher row, bottom-left: HELP · COLORS · HIDE (the compact
+   layout puts the same buttons in its dock instead) */
+.hud-launchers {
   position: absolute;
-  bottom: 14px;
-  left: 14px;
+  bottom: calc(14px + var(--safe-bottom));
+  left: calc(14px + var(--safe-left));
   z-index: 15;
-  color: var(--text-dim);
-  background: var(--panel-bg);
+  display: flex;
+  gap: var(--launcher-gap);
 }
 
-.settings-button {
-  position: absolute;
-  bottom: 14px;
-  left: 96px;
-  z-index: 15;
+.help-button,
+.settings-button,
+.hide-button {
   color: var(--text-dim);
   background: var(--panel-bg);
 }
@@ -1049,10 +1087,16 @@ body {
     box-shadow var(--t-fast) var(--ease-out);
 }
 
-.color-chip:hover,
 .color-chip[aria-expanded='true'] {
   border-color: var(--amber-outline);
   box-shadow: var(--glow-amber-box);
+}
+
+@media (hover: hover) {
+  .color-chip:hover {
+    border-color: var(--amber-outline);
+    box-shadow: var(--glow-amber-box);
+  }
 }
 
 .swatch-popover {
@@ -1101,9 +1145,11 @@ body {
     box-shadow var(--t-fast) var(--ease-out);
 }
 
-.swatch:hover {
-  border-color: var(--amber-outline);
-  box-shadow: var(--glow-amber-box);
+@media (hover: hover) {
+  .swatch:hover {
+    border-color: var(--amber-outline);
+    box-shadow: var(--glow-amber-box);
+  }
 }
 
 /* active color: amber ring with a dark gap so it reads on any swatch hue */
@@ -1131,8 +1177,9 @@ body {
 }
 
 .help-panel {
-  width: min(520px, calc(100vw - 40px));
+  width: min(520px, calc(100% - 40px));
   max-height: calc(100vh - 80px);
+  max-height: calc(100dvh - 80px);
   overflow-y: auto;
   padding: 14px 18px 16px;
 }
@@ -1294,18 +1341,50 @@ body {
 /* attribution stays visible (legal) but reads as fine print */
 .cesium-credits {
   position: absolute;
-  bottom: 4px;
-  right: 8px;
+  bottom: calc(4px + var(--safe-bottom));
+  right: calc(8px + var(--safe-right));
   z-index: 5;
-  font-size: 9px;
+  max-width: calc(100% - 16px);
+  font-size: var(--fs-micro);
   font-family: var(--mono);
   color: var(--text-dim);
   opacity: 0.45;
   transition: opacity var(--t-fast) var(--ease-out);
 }
 
-.cesium-credits:hover {
-  opacity: 1;
+/* Cesium positions its credit block absolutely at left:0 of this
+   (otherwise zero-width) container, which pushed the logo and the
+   "Data attribution" link off the right edge of the screen. Laid out in
+   flow instead, the container sizes to its content from the right. */
+.cesium-credits .cesium-widget-credits {
+  position: static;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  column-gap: var(--sp-2);
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+  text-shadow: none;
+  white-space: nowrap;
+}
+
+.cesium-credits .cesium-credit-expand-link {
+  padding-left: 0;
+}
+
+@media (hover: hover) {
+  .cesium-credits:hover {
+    opacity: 1;
+  }
+}
+
+/* no hover on touch, so the fine print never brightens — start brighter */
+@media (hover: none) {
+  .cesium-credits {
+    opacity: 0.75;
+  }
 }
 
 .cesium-credits a {
@@ -1313,19 +1392,717 @@ body {
 }
 
 .cesium-credits img {
+  height: 18px;
+  width: auto;
   vertical-align: middle;
 }
 
-/* ---- responsive: globe + transport only below 900px --------------- */
+/* ---- transport: compact stepper + split UTC (phone layout only) ---- */
 
-@media (max-width: 899px) {
-  .right-stack,
-  .catalog-panel {
-    display: none;
+/* the − rate + stepper replaces the six-button warp cluster on phones */
+.transport-stepper {
+  display: none;
+}
+
+.rate-current {
+  min-width: 52px;
+  padding: 0 4px;
+  text-align: center;
+  color: var(--amber);
+  font-size: var(--fs-data);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--ls-data);
+  text-shadow: var(--glow-amber-text);
+}
+
+.rate-step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* ---- 900–1365px: bottom band collision ------------------------------
+   The centred transport bar (852px; 872px on coarse pointers) reaches under
+   the bottom-left HELP / COLORS / HIDE launcher row (right edge ~243px;
+   ~261px coarse) and the bottom-right attribution below ~1366px — lift both
+   above it, but only while the bar is mounted (App sets .has-transport with
+   the ORBITAL layer); the compact layout stacks these in its own cluster.
+   The wider coarse row meets the bar up to ~1394px (1366px iPad Pro
+   landscape), so coarse pointers lift until 1420px, where it clears by
+   ~13px like the fine row does at 1366px.
+   While the HUD is hidden the bar is gone, so the credits (outside the HUD
+   layer) drop back to the edge; the launchers fade out where they are. */
+
+@media (max-width: 1365px), (pointer: coarse) and (max-width: 1419px) {
+  .has-transport:not(.is-compact) .hud-launchers,
+  .has-transport:not(.is-compact):not(.is-hud-hidden) .cesium-credits {
+    bottom: calc(var(--sp-3) + var(--safe-bottom) + var(--transport-h) + var(--sp-2));
+  }
+}
+
+/* ---- touch pointers: finger-sized targets ---------------------------- */
+
+@media (pointer: coarse) {
+  .hud-button,
+  .telemetry-header .hud-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--tap);
+    min-height: var(--tap);
+    padding: 0 12px;
+  }
+
+  .mode-tab {
+    padding: 0 14px;
+  }
+
+  .transport-rates .rate-button {
+    padding: 0 8px;
   }
 
   .transport-scrub {
-    width: 120px;
+    height: var(--tap);
+  }
+
+  .transport-scrub::-webkit-slider-thumb {
+    width: 14px;
+    height: 28px;
+    margin-top: -13px;
+  }
+
+  .transport-scrub::-moz-range-thumb {
+    width: 14px;
+    height: 28px;
+  }
+
+  .group-row,
+  .pass-row {
+    min-height: var(--tap-min);
+  }
+
+  .search-result {
+    align-items: center;
+    min-height: var(--tap);
+  }
+
+  /* iOS zooms the page into any focused input under 16px */
+  .hud-input {
+    min-height: var(--tap);
+    font-size: 16px;
+  }
+
+  /* ...but at 16px with label tracking "SEARCH NAME / NORAD ID" outgrows
+     the 256px rail (254px of text in 212px); the zoom guard keys off the
+     input's font-size, so only the typed value needs the 16px */
+  .hud-input::placeholder {
+    font-size: var(--fs-data);
+    letter-spacing: var(--ls-label-tight);
+  }
+
+  /* OBS lat / lon / GPS must still fit the 272px right stack */
+  .observer-input {
+    width: 72px;
+  }
+
+  .color-chip {
+    width: 48px;
+    height: var(--tap-min);
+  }
+
+  .swatch-grid {
+    grid-template-columns: repeat(6, var(--tap-min));
+    gap: var(--sp-1);
+  }
+
+  .swatch {
+    width: var(--tap-min);
+    height: var(--tap-min);
+  }
+
+  /* desktop layout on a touch tablet: keep the rail / stack clear of the
+     taller bottom band (transport bar + lifted launchers) */
+  .catalog-panel {
+    max-height: calc(100vh - 220px);
+    max-height: calc(100dvh - 220px);
+  }
+
+  .right-stack {
+    max-height: calc(100vh - 200px);
+    max-height: calc(100dvh - 200px);
+  }
+}
+
+/* touch-only legends for meanings desktop gets from title tooltips */
+.touch-legend {
+  display: none;
+  margin: 8px 0 0;
+  color: var(--text-dim);
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+}
+
+.touch-legend .stale-dot {
+  margin: 0 4px 0 0;
+}
+
+.help-touch {
+  display: none;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .touch-legend {
+    display: block;
+  }
+
+  .help-touch {
+    display: block;
+  }
+}
+
+/* ==== compact (phone) HUD ==============================================
+   .is-compact on .app-root (core/ui/useCompactLayout). The side panels are
+   gone; App renders CompactHud: one bottom cluster stacking
+   [sheet] [selection chip] [dock] [transport bar] above the attribution. */
+
+.is-compact .status-line {
+  gap: var(--sp-2);
+  padding: calc(8px + var(--safe-top)) calc(12px + var(--safe-right)) 8px calc(12px + var(--safe-left));
+  overflow: hidden;
+}
+
+.is-compact .status-line > :not(:first-child)::before {
+  margin-right: var(--sp-2);
+}
+
+/* OFFLINE outranks everything but the brand: it moves up and never shrinks */
+.is-compact .status-brand {
+  order: -2;
+  flex: none;
+}
+
+.is-compact .status-offline {
+  order: -1;
+  flex: none;
+}
+
+.is-compact .status-item {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 599px) {
+  .is-compact .status-tle,
+  .is-compact .status-sim,
+  .is-compact .status-long {
+    display: none;
+  }
+}
+
+.is-compact .mode-tabs {
+  top: calc(34px + var(--safe-top));
+}
+
+.is-compact .mode-tab {
+  padding: 0 12px;
+  letter-spacing: var(--ls-label);
+}
+
+/* the bottom cluster: everything stacks from the bottom up, so no element
+   needs another's height; empty space passes touches to the globe */
+.hud-layer > .compact-cluster {
+  position: absolute;
+  top: var(--compact-top);
+  bottom: calc(var(--safe-bottom) + var(--credits-row));
+  left: calc(var(--safe-left) + var(--gutter-compact));
+  right: calc(var(--safe-right) + var(--gutter-compact));
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.compact-cluster > *,
+.cluster-stack > * {
+  pointer-events: auto;
+}
+
+.compact-cluster > .cluster-stack {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  pointer-events: none;
+}
+
+/* ---- sheets ---- */
+
+.hud-sheet {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  max-height: var(--sheet-max);
+}
+
+.hud-panel.hud-sheet {
+  padding: 0;
+}
+
+.sheet-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: 4px 6px 4px 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.sheet-header .hud-title {
+  margin: 0;
+  color: var(--amber);
+  text-shadow: var(--glow-amber-text);
+}
+
+.sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 12px 12px;
+}
+
+/* the sheet header carries the title */
+.sheet-body > .hud-title:first-child {
+  display: none;
+}
+
+/* search hits flow in the sheet's own scroll instead of a clipped dropdown */
+.hud-sheet .search-results {
+  position: static;
+  max-height: none;
+}
+
+/* details: the selection panels stacked; the chip below is their header */
+.sheet-details > .sheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+}
+
+.sheet-details .hud-panel {
+  flex: none;
+}
+
+.sheet-details .panel-actions {
+  display: none;
+}
+
+/* ✕ glyphs read at a glance on the finger-sized buttons */
+.sheet-close,
+.chip-deselect {
+  font-size: var(--fs-data-lg);
+}
+
+/* ---- selection chip ---- */
+
+.selection-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 6px 6px 6px 12px;
+  border-color: var(--hairline-strong);
+  box-shadow: inset 0 2px 0 var(--amber-glow);
+}
+
+.chip-readout {
+  display: flex;
+  flex: 1 1 220px;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.chip-kind,
+.chip-key {
+  color: var(--text-dim);
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+}
+
+.chip-kind {
+  flex: none;
+}
+
+.chip-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--amber);
+  font-size: var(--fs-callout);
+  font-weight: 600;
+  letter-spacing: var(--ls-data);
+  text-overflow: ellipsis;
+  text-shadow: var(--glow-amber-text);
+  white-space: nowrap;
+}
+
+.chip-value {
+  flex: none;
+  font-size: var(--fs-data);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--ls-data);
+  white-space: nowrap;
+}
+
+.chip-actions {
+  display: flex;
+  flex: 1 0 auto;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* ▴/▾ can come from different fallback fonts: a fixed cell keeps the
+   DETAILS button the same width open and closed. The gap is a margin, not a
+   text space — touch buttons are inline-flex, which drops the space. */
+.chip-chevron {
+  display: inline-block;
+  width: 1ch;
+  margin-inline-end: 1ch;
+  text-align: center;
+}
+
+/* ---- dock ---- */
+
+.hud-dock {
+  display: flex;
+  gap: 6px;
+}
+
+/* content-based widths: five labels (… COLORS · HIDE) fit a 360px phone,
+   where equal shares would clip the longest ones */
+.hud-dock > .hud-button {
+  position: static;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 6px;
+  color: var(--text-dim);
+  background: var(--panel-bg);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
+  letter-spacing: var(--ls-label);
+  white-space: nowrap;
+}
+
+.hud-dock > .hud-button.is-active {
+  color: var(--amber);
+  border-color: var(--amber-outline);
+  box-shadow: 0 0 8px var(--amber-glow), inset 0 -2px 0 var(--amber);
+}
+
+/* ---- transport bar: two rows (controls / full-width scrub) ---- */
+
+.is-compact .transport-bar {
+  position: static;
+  transform: none;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px var(--sp-2);
+  padding: 6px 8px 4px;
+}
+
+.is-compact .transport-rates {
+  display: none;
+}
+
+.is-compact .transport-stepper {
+  display: flex;
+  order: 1;
+  align-items: center;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+}
+
+.is-compact .transport-stepper .rate-step {
+  min-width: var(--tap-min);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.is-compact .rate-current {
+  min-width: 40px;
+  padding: 0;
+}
+
+/* row 1 must fit play · stepper · UTC · NOW in a 360px phone */
+.is-compact .transport-play {
+  min-width: var(--tap-min);
+  padding: 0;
+}
+
+.is-compact .transport-now {
+  padding: 0 8px;
+}
+
+.is-compact .transport-utc {
+  display: grid;
+  order: 2;
+  flex: 1 1 auto;
+  grid-template-areas:
+    'date zone'
+    'time time';
+  justify-content: center;
+  column-gap: 4px;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.is-compact .utc-date,
+.is-compact .utc-zone {
+  color: var(--text-dim);
+  font-size: var(--fs-label);
+  letter-spacing: 0.04em;
+  text-shadow: none;
+}
+
+.is-compact .utc-date {
+  grid-area: date;
+}
+
+.is-compact .utc-zone {
+  grid-area: zone;
+}
+
+.is-compact .utc-time {
+  grid-area: time;
+}
+
+.is-compact .transport-now {
+  order: 3;
+}
+
+.is-compact .transport-scrub {
+  order: 10;
+  flex: 1 0 100%;
+  width: auto;
+  height: var(--tap-min);
+}
+
+/* ---- dialogs ---- */
+
+.is-compact .help-panel {
+  width: calc(100% - 2 * var(--gutter-compact) - var(--safe-left) - var(--safe-right));
+  max-height: calc(100vh - 2 * var(--gutter-compact));
+  max-height: calc(100dvh - 2 * var(--gutter-compact) - var(--safe-top) - var(--safe-bottom));
+  padding: 10px 12px 14px;
+}
+
+/* the dialog header (✕ / RESET) stays reachable while the panel scrolls */
+.is-compact .help-panel > .telemetry-header {
+  position: sticky;
+  top: -10px; /* the panel's top padding */
+  z-index: 1;
+  margin: -10px -12px 0;
+  padding: 6px 12px;
+  background: var(--panel-bg-solid);
+  border-bottom: 1px solid var(--hairline);
+}
+
+/* key above description: a fixed key column squeezed the text to ~110px */
+.is-compact .help-row {
+  grid-template-columns: 1fr;
+  gap: 2px;
+  padding: 4px 0;
+}
+
+/* ---- attribution: its own line under the cluster, never covered ---- */
+
+.is-compact .cesium-credits {
+  bottom: var(--safe-bottom);
+  right: calc(var(--safe-right) + var(--gutter-compact));
+  max-width: calc(100% - 2 * var(--gutter-compact));
+  height: var(--credits-row);
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  /* stays legible over a bright basemap */
+  background: var(--panel-bg);
+}
+
+.is-compact .cesium-credits img {
+  height: 14px;
+}
+
+/* portrait tablets: keep the cluster instrument-sized, centred */
+@media (orientation: portrait) {
+  .compact-cluster > *,
+  .cluster-stack > * {
+    width: 100%;
+    max-width: 600px;
+    align-self: center;
+  }
+}
+
+/* ---- landscape phones: side sheet left, cluster stack on the right ---- */
+
+@media (orientation: landscape) {
+  .hud-layer > .compact-cluster {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: flex-start;
+  }
+
+  .compact-cluster > .hud-sheet {
+    flex: none;
+    width: min(320px, 40%);
+    max-height: 100%;
+  }
+
+  .compact-cluster > .cluster-stack {
+    flex: 1 1 auto;
+    align-items: center;
+  }
+
+  .cluster-stack > * {
+    width: min(100%, 640px);
+  }
+
+  .is-compact .transport-scrub {
+    order: 2;
+    flex: 1 1 120px;
+  }
+
+  .is-compact .transport-now {
+    order: 3;
+  }
+
+  .is-compact .transport-utc {
+    order: 4;
+    flex: none;
+  }
+}
+
+/* ==== hidden HUD ("clean globe") =======================================
+   core/ui/hudStore. App sets .is-hud-hidden on .app-root and `inert` on the
+   layer, so it leaves the tab order and the accessibility tree at once. The
+   layer fades and scales out a touch — every cluster slides toward its own
+   edge — then visibility:hidden drops it from hit-testing. Showing flips
+   visibility first, so the fade-in is seen. Credits live outside the layer. */
+
+.hud-layer {
+  transition:
+    opacity var(--t-hud) var(--ease-out),
+    scale var(--t-hud) var(--ease-out),
+    visibility 0s;
+}
+
+.is-hud-hidden > .hud-layer {
+  opacity: 0;
+  scale: var(--hud-retract);
+  visibility: hidden;
+  transition:
+    opacity var(--t-hud) var(--ease-out),
+    scale var(--t-hud) var(--ease-out),
+    visibility 0s linear var(--t-hud);
+}
+
+/* taps during the fade-out already fall through to the globe */
+.is-hud-hidden > .hud-layer * {
+  pointer-events: none;
+}
+
+/* restore: the one control left, quiet until hover / focus. The chamfered
+   bezel is an inner span so the clip-path never cuts the button's own
+   :focus-visible outline. */
+.hud-restore {
+  position: absolute;
+  left: calc(14px + var(--safe-left));
+  bottom: calc(14px + var(--safe-bottom));
+  z-index: 15;
+  display: grid;
+  width: var(--restore-size);
+  height: var(--restore-size);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  opacity: var(--quiet);
+  animation: hud-restore-in var(--t-hud) var(--ease-out);
+  transition:
+    opacity var(--t-fast) var(--ease-out),
+    color var(--t-fast) var(--ease-out);
+}
+
+/* phones: the bottom-left corner of the retracted cluster, clear of the
+   attribution row below it */
+.is-compact .hud-restore {
+  left: calc(var(--safe-left) + var(--gutter-compact));
+  bottom: calc(var(--safe-bottom) + var(--credits-row));
+}
+
+.hud-panel.hud-restore-bezel {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-color: var(--hairline-strong);
+}
+
+.hud-restore svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.hud-restore:focus-visible,
+.hud-restore:active {
+  opacity: 1;
+  color: var(--amber);
+}
+
+.hud-restore:focus-visible .hud-restore-bezel {
+  border-color: var(--amber-outline);
+  box-shadow: inset 0 2px 0 var(--amber-glow);
+}
+
+.hud-restore:focus-visible svg {
+  filter: drop-shadow(var(--glow-amber-box));
+}
+
+@media (hover: hover) {
+  .hud-restore:hover {
+    opacity: 1;
+    color: var(--amber);
+  }
+
+  .hud-restore:hover .hud-restore-bezel {
+    border-color: var(--amber-outline);
+  }
+}
+
+@keyframes hud-restore-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* HIDE has the shortest label; it must not shrink under a fingertip */
+.hud-dock > .hide-button {
+  min-width: var(--tap);
+}
+
+/* the narrowest phones: five dock labels fit only without letter-spacing */
+@media (max-width: 359px) {
+  .hud-dock > .hud-button {
+    padding: 0 4px;
+    letter-spacing: 0;
   }
 }
 
@@ -1338,5 +2115,13 @@ body {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /* the hidden-HUD swap is instant: no fade, no scale, no visibility delay */
+  .hud-layer,
+  .is-hud-hidden > .hud-layer,
+  .hud-restore {
+    transition: none !important;
+    animation: none !important;
   }
 }

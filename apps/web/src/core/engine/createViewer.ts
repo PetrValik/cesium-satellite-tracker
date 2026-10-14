@@ -6,10 +6,12 @@ import {
   Ion,
   JulianDate,
   OpenStreetMapImageryProvider,
+  ScreenSpaceEventType,
   Terrain,
   UrlTemplateImageryProvider,
   Viewer,
 } from 'cesium'
+import { msaaSamplesFor, resolutionScaleFor, skipCanvasAntialias } from './displayDensity'
 
 export type Basemap = 'streets' | 'topo' | 'satellite'
 
@@ -67,6 +69,10 @@ export function createOrbitalViewer(container: HTMLElement, basemap: Basemap = '
   creditContainer.className = 'cesium-credits'
   container.appendChild(creditContainer)
 
+  // Read once: MSAA and the canvas antialias flag are construction-time
+  // choices; resolutionScale is re-applied on DPR change (applyRenderDensity).
+  const dpr = window.devicePixelRatio || 1
+
   const baseOptions: Viewer.ConstructorOptions = {
     // All default widgets off — the app ships its own HUD.
     animation: false,
@@ -87,31 +93,69 @@ export function createOrbitalViewer(container: HTMLElement, basemap: Basemap = '
     // The sim-clock store is the source of truth; an external loop calls
     // syncViewerClock() — Cesium's clock must never advance time itself.
     shouldAnimate: false,
+    // Render in device pixels. The default (true) renders at CSS resolution,
+    // which on a hi-DPI display upscales the whole canvas — basemap tiles
+    // and their labels read as blurry. It does NOT change imagery LOD: tile
+    // screen-space error is divided by pixelRatio (QuadtreePrimitive.js,
+    // cesium 1.138), so LOD is DPR-independent and the extra pixels only buy
+    // edge/text sharpness. applyRenderDensity() caps the ratio at 2 below.
+    useBrowserRecommendedResolution: false,
+    // At DPR >= 2 the pixel density smooths edges by itself: drop the 4×
+    // multisampled scene buffers (Scene default) and the default
+    // framebuffer's own antialias buffer. DPR 1 keeps Cesium's defaults.
+    msaaSamples: msaaSamplesFor(dpr),
+    // Fresh object per call: Context mutates it to fill in its defaults.
+    contextOptions: { webgl: { antialias: !skipCanvasAntialias(dpr) } },
+    // A render error (in practice: a lost WebGL context on mobile) is
+    // recovered by the host rebuilding the viewer via scene.renderError —
+    // Cesium's raw error panel must not cover the HUD meanwhile.
+    showRenderLoopErrors: false,
   }
+
+  // Snapshot so a failed construction can remove exactly what Viewer added.
+  const preexisting = new Set<Element>(Array.from(container.children))
 
   let viewer: Viewer
-  if (token) {
-    // Token adds true 3D terrain; imagery still comes from the keyless
-    // basemap choice so the look is consistent with the token-free mode.
-    Ion.defaultAccessToken = token
-    viewer = new Viewer(container, {
-      ...baseOptions,
-      baseLayer: new ImageryLayer(basemapProvider(basemap)),
-      terrain: Terrain.fromWorldTerrain(),
-    })
-  } else {
-    viewer = new Viewer(container, {
-      ...baseOptions,
-      baseLayer: new ImageryLayer(basemapProvider(basemap)),
-      terrainProvider: new EllipsoidTerrainProvider(),
-    })
+  try {
+    if (token) {
+      // Token adds true 3D terrain; imagery still comes from the keyless
+      // basemap choice so the look is consistent with the token-free mode.
+      Ion.defaultAccessToken = token
+      viewer = new Viewer(container, {
+        ...baseOptions,
+        baseLayer: new ImageryLayer(basemapProvider(basemap)),
+        terrain: Terrain.fromWorldTerrain(),
+      })
+    } else {
+      viewer = new Viewer(container, {
+        ...baseOptions,
+        baseLayer: new ImageryLayer(basemapProvider(basemap)),
+        terrainProvider: new EllipsoidTerrainProvider(),
+      })
+    }
+  } catch (err) {
+    // No viewer owns the credit div yet — don't leave it behind. Viewer.js
+    // (1.138) also appends its .cesium-viewer div (holding the half-built
+    // CesiumWidget) BEFORE constructing the widget and never removes it on
+    // a throw, so a retry would stack a second viewer under the orphan.
+    for (const child of Array.from(container.children)) {
+      if (!preexisting.has(child) && child.classList.contains('cesium-viewer')) child.remove()
+    }
+    creditContainer.remove()
+    throw err
   }
 
-  // Render at native device pixels. The default (true) renders at CSS
-  // resolution, which on a Retina/hi-DPI display upscales the whole scene
-  // 2× — basemap tiles and their labels read as blurry. Native-DPR rendering
-  // also makes imagery LOD pick one level deeper, so tiles arrive sharp.
-  viewer.useBrowserRecommendedResolution = false
+  // Viewer registers pickAndSelectObject (LEFT_CLICK) and pickAndTrackObject
+  // (LEFT_DOUBLE_CLICK) on cesiumWidget.screenSpaceEventHandler — the same
+  // instance viewer.screenSpaceEventHandler returns (Viewer.js 1.138). The
+  // app picks on its own handler (GlobeView) and never uses selectedEntity /
+  // trackedEntity, so the defaults only cost a redundant pick pass per tap,
+  // throw an uncaught DeveloperError on a tap while the WebGL context is
+  // lost, and let a double-click set trackedEntity behind CameraRig's back.
+  viewer.screenSpaceEventHandler.removeInputAction(ScreenSpaceEventType.LEFT_CLICK)
+  viewer.screenSpaceEventHandler.removeInputAction(ScreenSpaceEventType.LEFT_DOUBLE_CLICK)
+
+  applyRenderDensity(viewer, dpr)
 
   const scene = viewer.scene
   scene.globe.enableLighting = true // day/night terminator
@@ -144,6 +188,32 @@ export function createOrbitalViewer(container: HTMLElement, basemap: Basemap = '
   })
 
   return viewer
+}
+
+/**
+ * Cap the effective render pixel ratio at 2 (resolutionScale) and match the
+ * scene MSAA to the density. Idempotent and cheap — the host calls it again
+ * whenever window.devicePixelRatio changes (browser zoom, monitor move).
+ */
+export function applyRenderDensity(viewer: Viewer, devicePixelRatio: number): void {
+  if (viewer.isDestroyed()) return
+  // The setter itself no-ops when the value is unchanged.
+  viewer.resolutionScale = resolutionScaleFor(devicePixelRatio)
+  const samples = msaaSamplesFor(devicePixelRatio)
+  // Scene clamps the value to the context maximum; only write on a change.
+  if (viewer.scene.msaaSamples !== samples) viewer.scene.msaaSamples = samples
+}
+
+/**
+ * Destroy a viewer made by createOrbitalViewer, including the credit div
+ * it appended to the host container (CesiumWidget.destroy removes only its
+ * own inner credit element, leaving one orphan per remount otherwise).
+ */
+export function destroyOrbitalViewer(viewer: Viewer): void {
+  if (viewer.isDestroyed()) return
+  const credits = viewer.cesiumWidget.creditContainer
+  viewer.destroy()
+  credits.remove()
 }
 
 // Reused across calls — syncViewerClock runs every sim tick and must not

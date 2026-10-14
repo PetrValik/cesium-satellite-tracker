@@ -56,6 +56,7 @@
 
   /* ---- type ------------------------------------------------ */
   --mono: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --fs-micro: 9px; /* sky-plot labels, photo credit, map attribution */
   --fs-label: 10px;
   --fs-label-lg: 11px;
   --fs-data: 12px;
@@ -77,9 +78,64 @@
   --sp-4: 16px;
   --w-catalog: 256px;
   --w-right: 272px;
-  --hud-top: 44px;
+
+  /* ---- device edges (notch, home indicator; 0 on desktop) --- */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --hud-top: calc(44px + var(--safe-top));
+
+  /* ---- touch + bottom-band geometry ------------------------- */
+  --tap: 44px; /* preferred touch target */
+  --tap-min: 40px; /* floor for dense list rows */
+  --tab-h: 25px; /* mode tab height (44 on coarse pointers) */
+  --transport-h: 43px; /* desktop transport bar height (64 on coarse) */
+  --gutter-compact: 8px;
+  --launcher-gap: 17px; /* HELP · COLORS · HIDE row; keeps COLORS at its old left:96px */
+  --credits-row: 20px; /* attribution line under the compact bottom cluster */
+  --sheet-max: 55vh;
+  --restore-size: 32px; /* lone "show controls" button (--tap on coarse) */
+  --quiet: 0.55; /* resting opacity of that button until hover / focus */
 
   /* ---- motion ---------------------------------------------- */
   --t-fast: 140ms;
+  --t-hud: 180ms; /* whole-HUD hide / show fade */
+  --hud-retract: 1.02; /* hidden HUD scales out: clusters slide to their edges */
   --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
+
+@supports (height: 100dvh) {
+  :root {
+    --sheet-max: 55dvh;
+  }
+}
+
+/* ---- touch pointers: bigger targets, nothing under 11px ------ */
+@media (pointer: coarse) {
+  :root {
+    --fs-micro: 11px;
+    --fs-label: 11px;
+    --tab-h: var(--tap);
+    --transport-h: 64px;
+    --restore-size: var(--tap);
+  }
+}
+
+/* no hover to brighten it on touch — rest less faint so it stays findable */
+@media (hover: none) {
+  :root {
+    --quiet: 0.75;
+  }
+}
+
+/* ---- compact (phone) HUD ----------------------------------------
+   App sets .is-compact on .app-root from core/ui/useCompactLayout —
+   one breakpoint decision shared by the React tree and the CSS. */
+.is-compact {
+  --fs-micro: 11px;
+  --fs-label: 11px;
+  /* top of the bottom cluster: under the status line + mode tabs */
+  --compact-top: calc(var(--safe-top) + 34px + var(--tab-h) + 6px);
+}
+

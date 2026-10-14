@@ -29,6 +29,13 @@ const LABEL_OFFSET = new Cartesian2(12, -12)
 // must not allocate).
 const scratchCartographic = new Cartographic()
 
+/** The `id` of a Scene.pick/drillPick result — the entity, for entity-backed visuals. */
+function pickedEntity(picked: unknown): unknown {
+  return typeof picked === 'object' && picked !== null
+    ? (picked as { id?: unknown }).id
+    : undefined
+}
+
 /**
  * Visuals for the single tracked satellite: orbit polyline, ground track,
  * live marker + label, and ground footprint circle. A handful of objects, so
@@ -242,6 +249,32 @@ export class TrackingVisuals {
       // evaluates with degenerate axes.
       this._footprint.show = false
     }
+  }
+
+  /**
+   * True when a Scene.pick/drillPick result is the live marker billboard or
+   * its label — i.e. a tap on the selected satellite itself. Entity
+   * billboards/labels carry the entity as their pick `id`
+   * (BillboardVisualizer/LabelVisualizer, cesium 1.138). The orbit ring and
+   * ground track are NOT claimed here: a tap on them is "near", not "on",
+   * the satellite — see ownsThinDecoration.
+   */
+  ownsMarker(picked: unknown): boolean {
+    return pickedEntity(picked) === this._marker
+  }
+
+  /**
+   * True when a pick result is the orbit ring or the ground track: thin lines
+   * hugging the selection, so a tap on one is a near-miss that keeps it.
+   * Their dynamic entity polylines are PolylineCollection lines whose pick
+   * object carries the entity as `id` (PolylineGeometryUpdater
+   * DynamicGeometryUpdater + Polyline.getPickId, cesium 1.138). The footprint
+   * is deliberately NOT included: its fill covers a wide area around the
+   * satellite, and a tap inside it must still read as an empty tap.
+   */
+  ownsThinDecoration(picked: unknown): boolean {
+    const entity = pickedEntity(picked)
+    return entity !== undefined && (entity === this._orbit || entity === this._ground)
   }
 
   /** Hide everything (deselect). Visual entities are kept for reuse. */

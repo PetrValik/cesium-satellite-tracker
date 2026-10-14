@@ -44,7 +44,7 @@ selects it. Clicking empty space deselects **within the current mode only**.
 | W A S D / ARROWS | Rotate view / orbit target |
 | Q / E | Zoom in / out |
 | F | Toggle camera follow-lock on the selection |
-| ESC | Release follow-lock, then deselect |
+| ESC | Close help → COLORS → open sheet, then release follow-lock, then deselect |
 
 ### Modes & time
 
@@ -55,6 +55,13 @@ selects it. Clicking empty space deselects **within the current mode only**.
 | , / . | Slower / faster time warp |
 | N | Reset simulation to NOW |
 | H or ? | Toggle the controls help |
+
+### HUD
+
+| Key | Action |
+|---|---|
+| U | Hide / show all controls (same as the HIDE button) |
+| ESC | While the controls are hidden: show them again (and nothing else) |
 
 Keyboard shortcuts are ignored while typing in an input (search, observer
 coordinates).
@@ -68,10 +75,31 @@ Follow-lock makes the camera ride the current selection.
 - **Satellites:** selecting a satellite does **not** auto-lock; press **F** to
   ride it. F toggles the lock and only acts when the current mode has a
   selection. The FOLLOW button does the same.
-- **ESC is staged:** if the help overlay is open it closes; otherwise if the
-  camera is following it releases the lock (keeping the selection); otherwise it
-  deselects. So one ESC releases the lock, a second ESC deselects.
+- **ESC is staged, one layer per press:** the help overlay closes first, then
+  the COLORS panel, then an open phone sheet (catalog / layers / details);
+  otherwise if the camera is following it releases the lock (keeping the
+  selection); otherwise it deselects. So with nothing open, one ESC releases
+  the lock and a second ESC deselects. While the controls are hidden, ESC only
+  shows them again (see below).
 - While following, DRAG orbits the followed object instead of the globe.
+
+## Hide controls (clean globe)
+
+HIDE takes the whole HUD off the globe — status line, layer tabs, side
+panels, dock and sheets, selection chip, transport bar and the HELP / COLORS
+launchers. Open sheets and the HELP / COLORS dialogs close with it.
+
+- **Where:** the HIDE button sits next to HELP / COLORS on desktop and at the
+  end of the dock on phones; on a keyboard, **U** toggles both ways.
+- **While hidden** only a small eye button (bottom-left) and the map
+  attribution stay on screen. Tap or click it, press **U**, or press **ESC**
+  to bring the controls back — ESC while hidden only shows them; it does not
+  release the follow-lock or deselect.
+- The globe stays live: drag, pinch, tap-select and follow-lock keep working
+  and simulation time keeps running. Showing the controls again reflects
+  whatever was selected meanwhile.
+- Opening HELP (**H** / **?**) while hidden brings the controls back with it.
+- Not persisted: a reload always opens with the controls showing.
 
 ## Layer toggles
 

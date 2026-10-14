@@ -1,5 +1,5 @@
 import { BillboardCollection, BlendOption, Cartesian3, Color, NearFarScalar } from 'cesium'
-import type { Billboard, Cartesian2, Scene } from 'cesium'
+import type { Billboard, Scene } from 'cesium'
 import { satelliteIcon } from '../../core/engine/icons'
 import { ORBIT_CLASSES } from '../../lib/protocol'
 import type { OrbitClass } from '../../lib/protocol'
@@ -343,24 +343,16 @@ export class ConstellationLayer {
   }
 
   /**
-   * Returns the noradId under the cursor if the picked primitive belongs to
-   * this collection, else null.
+   * Matcher for one Scene.pick/drillPick result: the noradId if it is a
+   * billboard of this collection, else null. Pure — the host runs ONE pick
+   * pass per tap and offers every hit to each layer's matcher. Billboard
+   * pick objects are { primitive, collection, id } (Billboard.getPickId;
+   * verified in cesium 1.138).
    */
-  pick(windowPosition: Cartesian2, scene: Scene): number | null {
-    if (scene.isDestroyed() || this._billboards.isDestroyed()) return null
-    // Scene.pick returns { primitive, collection, id } for billboards
-    // (Billboard.getPickId; verified in cesium 1.138).
-    const picked = scene.pick(windowPosition) as
-      | { collection?: unknown; id?: unknown }
-      | undefined
-    if (
-      picked !== undefined &&
-      picked.collection === this._billboards &&
-      typeof picked.id === 'number'
-    ) {
-      return picked.id
-    }
-    return null
+  idOf(picked: unknown): number | null {
+    if (typeof picked !== 'object' || picked === null) return null
+    const { collection, id } = picked as { collection?: unknown; id?: unknown }
+    return collection === this._billboards && typeof id === 'number' ? id : null
   }
 
   dispose(): void {

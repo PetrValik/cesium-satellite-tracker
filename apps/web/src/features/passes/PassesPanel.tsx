@@ -85,6 +85,7 @@ export function PassesPanel() {
                 <button
                   className="hud-button pass-goto"
                   title="Jump sim time to AOS"
+                  aria-label="Jump sim time to AOS"
                   onClick={() => {
                     simClock.get().scrubTo(p.aosMs)
                     simClock.get().setRate(10)
@@ -138,6 +139,7 @@ function ObserverEditor() {
       <span className="observer-label">OBS</span>
       <input
         className="hud-input observer-input"
+        name="observer-lat"
         value={lat}
         onChange={(e) => setLat(e.target.value)}
         onBlur={commit}
@@ -146,6 +148,7 @@ function ObserverEditor() {
       />
       <input
         className="hud-input observer-input"
+        name="observer-lon"
         value={lon}
         onChange={(e) => setLon(e.target.value)}
         onBlur={commit}
