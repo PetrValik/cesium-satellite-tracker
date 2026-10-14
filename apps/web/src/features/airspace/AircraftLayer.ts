@@ -1,5 +1,5 @@
 import { BillboardCollection, BlendOption, Cartesian3, Color, NearFarScalar } from 'cesium'
-import type { Billboard, Cartesian2, Scene } from 'cesium'
+import type { Billboard, Scene } from 'cesium'
 import { aircraftIcon } from '../../core/engine/icons'
 import type { Aircraft } from '@orbital-ops/shared'
 import { categoryOf } from './aircraftCategory'
@@ -329,24 +329,15 @@ export class AircraftLayer {
   }
 
   /**
-   * Returns the ICAO 24-bit address under the cursor if the picked primitive
-   * belongs to this collection, else null.
+   * Matcher for one Scene.pick/drillPick result: the ICAO 24-bit address if
+   * it is a billboard of this collection, else null. Pure — the host runs
+   * ONE pick pass per tap. Billboard pick objects are
+   * { primitive, collection, id } (Billboard.getPickId; cesium 1.138).
    */
-  pick(windowPosition: Cartesian2, scene: Scene): string | null {
-    if (scene.isDestroyed() || this._billboards.isDestroyed()) return null
-    // Scene.pick returns { primitive, collection, id } for billboards
-    // (Billboard.getPickId; verified in cesium 1.138).
-    const picked = scene.pick(windowPosition) as
-      | { collection?: unknown; id?: unknown }
-      | undefined
-    if (
-      picked !== undefined &&
-      picked.collection === this._billboards &&
-      typeof picked.id === 'string'
-    ) {
-      return picked.id
-    }
-    return null
+  idOf(picked: unknown): string | null {
+    if (typeof picked !== 'object' || picked === null) return null
+    const { collection, id } = picked as { collection?: unknown; id?: unknown }
+    return collection === this._billboards && typeof id === 'string' ? id : null
   }
 
   /** Show or hide the whole layer (billboards keep updating while hidden). */

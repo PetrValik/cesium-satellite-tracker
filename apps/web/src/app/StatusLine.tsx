@@ -1,4 +1,8 @@
-/** Top status strip: brand, tracked-object count, TLE age, sim state. Read-only HUD. */
+/**
+ * Top status strip: brand, tracked-object count, TLE age, sim state. Read-only HUD.
+ * The compact layout hides TLE AGE / SIM on narrow phones and the `status-long`
+ * spans (index.css); the inline spans render identically on desktop.
+ */
 import { useSimClock } from '../core/sim/simClock'
 import { useMode } from '../core/ui/modeStore'
 import { useCatalog } from '../features/catalog/catalogStore'
@@ -23,11 +27,24 @@ export function StatusLine() {
   return (
     <header className="status-line">
       <span className="status-brand">ORBITAL OPS</span>
-      <span className="status-item">TRACKING {formatCount(satCount)} OBJECTS</span>
-      {oldest !== null && <span className="status-item">TLE AGE {formatAge(nowMs - oldest)}</span>}
+      <span className="status-item status-count">
+        <span className="status-long">TRACKING </span>
+        {formatCount(satCount)} OBJECTS
+      </span>
+      {oldest !== null && (
+        <span className="status-item status-tle">TLE AGE {formatAge(nowMs - oldest)}</span>
+      )}
       {/* Sim-time readout travels with the ORBITAL layer, like the transport bar. */}
-      {satellitesOn && <span className="status-item">SIM {playing ? formatRate(rate) : 'HOLD'}</span>}
-      {offline && <span className="status-item status-offline">OFFLINE — CACHED DATA</span>}
+      {satellitesOn && (
+        <span className="status-item status-sim">SIM {playing ? formatRate(rate) : 'HOLD'}</span>
+      )}
+      {/* The offline badge is the one safety-relevant readout: on phones it
+          jumps ahead of the count (CSS order) and drops to its short form. */}
+      {offline && (
+        <span className="status-item status-offline" role="status">
+          OFFLINE<span className="status-long"> — CACHED DATA</span>
+        </span>
+      )}
     </header>
   )
 }

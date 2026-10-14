@@ -58,6 +58,7 @@ const POP_GAP = 6
 function SwatchPopover({
   anchorRef,
   label,
+  fieldName,
   value,
   onSelect,
   onClose,
@@ -65,6 +66,8 @@ function SwatchPopover({
   /** Chip ref, dereferenced only in commit-phase code (react-hooks/refs). */
   anchorRef: RefObject<HTMLButtonElement | null>
   label: string
+  /** `name` of the hex field — DevTools flags a form field with neither id nor name. */
+  fieldName: string
   value: string
   /** Writes to the store; the popover stays open (hex-field iteration). */
   onSelect: (hex: string) => void
@@ -93,13 +96,21 @@ function SwatchPopover({
       if (!node || !anchor) return
       const chip = anchor.getBoundingClientRect()
       const self = node.getBoundingClientRect()
+      // Clamp against what is actually on screen: on a pinch-zoomed or
+      // URL-bar-squeezed phone the visual viewport is smaller than (and
+      // offset inside) the layout viewport that innerWidth/innerHeight report.
+      const vv = window.visualViewport
+      const viewLeft = vv?.offsetLeft ?? 0
+      const viewTop = vv?.offsetTop ?? 0
+      const viewRight = viewLeft + (vv?.width ?? window.innerWidth)
+      const viewBottom = viewTop + (vv?.height ?? window.innerHeight)
       const left = Math.max(
-        POP_MARGIN,
-        Math.min(chip.right - self.width, window.innerWidth - self.width - POP_MARGIN),
+        viewLeft + POP_MARGIN,
+        Math.min(chip.right - self.width, viewRight - self.width - POP_MARGIN),
       )
       let top = chip.bottom + POP_GAP
-      if (top + self.height > window.innerHeight - POP_MARGIN) {
-        top = Math.max(POP_MARGIN, chip.top - self.height - POP_GAP)
+      if (top + self.height > viewBottom - POP_MARGIN) {
+        top = Math.max(viewTop + POP_MARGIN, chip.top - self.height - POP_GAP)
       }
       node.style.left = `${left}px`
       node.style.top = `${top}px`
@@ -176,6 +187,7 @@ function SwatchPopover({
       </div>
       <input
         className="hud-input swatch-hex"
+        name={fieldName}
         value={text}
         maxLength={7}
         spellCheck={false}
@@ -234,6 +246,7 @@ function ColorRow({
         <SwatchPopover
           anchorRef={chipRef}
           label={label}
+          fieldName={`color-${domain}-${colorKey}-hex`}
           value={value}
           onSelect={(hex) => setColor(domain, colorKey, hex)}
           onClose={close}
@@ -268,10 +281,16 @@ function SettingsDialog() {
         <header className="telemetry-header">
           <h2 className="hud-title">COLORS</h2>
           <span className="panel-actions">
-            <button className="hud-button" onClick={resetColors} title="Restore defaults">
+            {/* the visible RESET is the accessible name (WCAG 2.5.3 label in
+                name — voice users say what they see); title only describes */}
+            <button
+              className="hud-button"
+              onClick={resetColors}
+              title="Reset all colors to defaults"
+            >
               RESET
             </button>
-            <button className="hud-button" onClick={close} title="Close">
+            <button className="hud-button" onClick={close} title="Close" aria-label="Close colors">
               ✕
             </button>
           </span>

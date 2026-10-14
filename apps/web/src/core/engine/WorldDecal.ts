@@ -66,7 +66,9 @@ export class WorldDecal {
         closed: false,
       }),
       asynchronous: false, // ready the frame it is added
-      allowPicking: false,
+      // Pickable so a tap on the selected object's own marker is recognised
+      // (owns()) instead of reading as an empty tap that deselects it.
+      allowPicking: true,
       show: false,
     })
     scene.primitives.add(this._primitive)
@@ -102,6 +104,18 @@ export class WorldDecal {
       this._primitive.show = true
       this._visible = true
     }
+  }
+
+  /**
+   * True when a Scene.pick/drillPick result is this decal. Primitive pick
+   * objects are `{ primitive }` (Primitive.js createPickIds, cesium 1.138).
+   */
+  owns(picked: unknown): boolean {
+    return (
+      typeof picked === 'object' &&
+      picked !== null &&
+      (picked as { primitive?: unknown }).primitive === this._primitive
+    )
   }
 
   hide(): void {

@@ -119,6 +119,11 @@ export function LayersPanel() {
           </li>
         ))}
       </ul>
+      {/* the SUSP reason is a title tooltip on desktop; touch has no hover,
+          so a visible legend line stands in (index.css .touch-legend) */}
+      {rows.some((row) => row.suspended) && (
+        <p className="touch-legend">SUSP · LIVE FEEDS PAUSED WHILE SIM TIME IS OFF NOW</p>
+      )}
     </>
   )
 }

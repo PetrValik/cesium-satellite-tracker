@@ -30,13 +30,21 @@ export function CatalogPanel() {
                 <span className="group-name">{g.name.toUpperCase()}</span>
                 <span className="group-count">
                   {loading ? '…' : formatCount(g.count)}
-                  {g.stale ? <span className="stale-dot" title="TLE data stale" /> : null}
+                  {g.stale ? (
+                    <span className="stale-dot" title="TLE data stale" role="img" aria-label="TLE data stale" />
+                  ) : null}
                 </span>
               </button>
             </li>
           )
         })}
       </ul>
+      {/* the dot's meaning is a title tooltip on desktop; touch gets a legend */}
+      {groups.some((g) => g.stale) && (
+        <p className="touch-legend">
+          <span className="stale-dot" aria-hidden /> TLE DATA STALE
+        </p>
+      )}
     </>
   )
 }
@@ -89,6 +97,8 @@ function SearchBox() {
       <input
         className="hud-input"
         placeholder="SEARCH NAME / NORAD ID"
+        name="satellite-search"
+        aria-label="Search satellites by name or NORAD ID"
         value={q}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => results.length > 0 && setOpen(true)}

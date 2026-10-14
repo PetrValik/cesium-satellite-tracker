@@ -1,8 +1,9 @@
 /**
  * GlobeView — the composition root of everything on the globe.
  *
- * One mount effect owns the Cesium viewer, all layers, the propagation
- * worker, the camera rig, keyboard input, picking, and the render loop.
+ * One engine effect owns the Cesium viewer, all layers, the propagation
+ * worker's wiring, the camera rig, keyboard input, picking, and the render
+ * loop.
  * The moving parts and their time bases:
  *
  * - SIM TIME (warpable): the rAF loop advances the sim clock, syncs the
@@ -12,9 +13,15 @@
  *   report — they never time-travel with the sim. Whenever sim time leaves
  *   NOW (warp/pause/scrub) the live layers suspend: hidden, selection kept.
  *
- * React renders this component exactly once; all reactivity inside goes
- * through zustand `subscribe` (transient, no re-renders). Cleanup tears
- * down in reverse order and every Cesium access is isDestroyed-guarded.
+ * All reactivity inside goes through zustand `subscribe` (transient, no
+ * re-renders). The engine effect re-runs only when `engineEpoch` bumps: a
+ * lost WebGL context (mobile backgrounding / GPU pressure) cannot be
+ * restored in place, so recovery tears the whole engine down and builds it
+ * again on a fresh canvas. The propagation worker is NOT part of that: it
+ * lives for the component's lifetime (its hashed script URL may no longer
+ * be served after a deploy), and each engine epoch only re-wires its
+ * message listener and re-sends the catalog. Cleanup tears down in reverse
+ * order and every Cesium access is isDestroyed-guarded.
  */
 import { useEffect, useRef, useState } from 'react'
 import { ScreenSpaceEventHandler, ScreenSpaceEventType, type Cartesian2 } from 'cesium'
@@ -23,10 +30,24 @@ import { Cartesian3 } from 'cesium'
 import { CameraRig } from '../core/engine/CameraRig'
 import { aircraftIcon, shipIcon } from '../core/engine/icons'
 import { WorldDecal } from '../core/engine/WorldDecal'
-import { createOrbitalViewer, setViewerBasemap, syncViewerClock } from '../core/engine/createViewer'
+import {
+  applyRenderDensity,
+  createOrbitalViewer,
+  destroyOrbitalViewer,
+  setViewerBasemap,
+  syncViewerClock,
+} from '../core/engine/createViewer'
+import {
+  drawingBufferRatio,
+  PICK_LIMIT,
+  pickWindowCssPx,
+  pickWindowPx,
+} from '../core/engine/displayDensity'
 import { isSimLive, simClock, SIM_RATES } from '../core/sim/simClock'
 import { useFollow } from '../core/ui/followStore'
+import { useHud } from '../core/ui/hudStore'
 import { usePrefs } from '../core/ui/prefsStore'
+import { useSheet } from '../core/ui/sheetStore'
 import { ConstellationLayer } from '../features/constellation/ConstellationLayer'
 import { GroundTrackWindow } from '../features/tracking/GroundTrackWindow'
 import { TrackingVisuals } from '../features/tracking/TrackingVisuals'
@@ -54,6 +75,7 @@ import {
 } from '../lib/orbital'
 import type { SatRec } from 'satellite.js'
 import type { WorkerRequest, WorkerResponse } from '../lib/protocol'
+import { deselectInMode, hasSelectionInMode, resolveTap } from './selectionMode'
 
 /** Wall-clock ms between constellation ticks; tighter under heavy time warp. */
 function tickIntervalMs(rate: number): number {
@@ -62,22 +84,118 @@ function tickIntervalMs(rate: number): number {
 
 const TELEMETRY_INTERVAL_MS = 200
 
+/** A lost WebGL context gets this long to come back by itself before the engine is rebuilt anyway. */
+const CONTEXT_RESTORE_GRACE_MS = 1500
+/** More than this many rebuilds within RECOVERY_WINDOW_MS → stop and show the error panel. */
+const MAX_RECOVERIES = 3
+const RECOVERY_WINDOW_MS = 60_000
+/** A rebuild whose viewer failed to construct is retried after this pause (GPU not back yet). */
+const REBUILD_RETRY_DELAY_MS = 1000
+
+/**
+ * Logs one engine rebuild (performance.now() stamps) and reports whether it
+ * is within budget — at most MAX_RECOVERIES per RECOVERY_WINDOW_MS. One
+ * budget for both context-loss recovery and the retry of a failed rebuild.
+ */
+function takeRecoverySlot(log: { current: number[] }, nowMs: number): boolean {
+  const recent = log.current.filter((t) => nowMs - t < RECOVERY_WINDOW_MS)
+  recent.push(nowMs)
+  log.current = recent
+  return recent.length <= MAX_RECOVERIES
+}
+
+/** `init`: the first viewer never came up. `lost`: a running renderer died and rebuilds ran out. */
+interface EngineError {
+  kind: 'init' | 'lost'
+  message: string
+}
+
 export function GlobeView() {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [engineError, setEngineError] = useState<string | null>(null)
+  const [engineError, setEngineError] = useState<EngineError | null>(null)
+  /** Bumped to tear the engine down and rebuild it (context-loss recovery). */
+  const [engineEpoch, setEngineEpoch] = useState(0)
+  /** Last rAF timestamp, kept across rebuilds so sim time loses no wall time. */
+  const lastFrameRef = useRef(0)
+  /** performance.now() of recent rebuilds (loop guard). */
+  const recoveryLogRef = useRef<number[]>([])
+  /** A follow lock that was active when a rebuild started, re-engaged after it. */
+  const resumeFollowRef = useRef(false)
+  /** The SGP4 propagation worker, owned by the effect below (component lifetime). */
+  const workerRef = useRef<Worker | null>(null)
+
+  // Propagation worker: created ONCE per mount, never per engine epoch. A
+  // context-loss rebuild in a PWA tab left open across a deploy would
+  // otherwise re-fetch the old content-hashed worker URL, which the new
+  // service worker no longer caches and the server answers with index.html.
+  // Declared before the engine effect so its setup runs first (React runs
+  // effects in declaration order) and the engine effect finds it.
+  useEffect(() => {
+    const worker = new Worker(new URL('../workers/propagation.worker.ts', import.meta.url), {
+      type: 'module',
+    })
+    const onWorkerError = (e: Event) => {
+      // Fires for a script that failed to load (404 / HTML served for the
+      // hashed URL) as well as an uncaught error inside the worker.
+      const detail = e instanceof ErrorEvent && e.message ? `: ${e.message}` : ''
+      console.error(
+        `[propagation.worker] worker failed${detail} — satellite positions will not update`,
+        e,
+      )
+    }
+    const onWorkerMessageError = (e: MessageEvent) => {
+      console.error('[propagation.worker] a message from the worker could not be deserialized', e)
+    }
+    worker.addEventListener('error', onWorkerError)
+    worker.addEventListener('messageerror', onWorkerMessageError)
+    workerRef.current = worker
+    return () => {
+      if (workerRef.current === worker) workerRef.current = null
+      worker.removeEventListener('error', onWorkerError)
+      worker.removeEventListener('messageerror', onWorkerMessageError)
+      worker.terminate()
+    }
+  }, [])
 
   useEffect(() => {
     const container = containerRef.current
-    if (!container) return
+    const worker = workerRef.current
+    // The worker effect above always runs first; the guard only keeps a
+    // viewer from being built that nothing could feed.
+    if (!container || !worker) return
 
     let viewer
     try {
       viewer = createOrbitalViewer(container, usePrefs.getState().basemap)
     } catch (err) {
-      // Init failure is only observable from inside this effect.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setEngineError(err instanceof Error ? err.message : String(err))
-      return
+      const message = err instanceof Error ? err.message : String(err)
+      // Viewer.js (1.138) appends its .cesium-viewer div before building the
+      // widget and never removes it on a throw — a retry would stack under it.
+      container.replaceChildren()
+      if (engineEpoch === 0 || !takeRecoverySlot(recoveryLogRef, performance.now())) {
+        // Init failure is only observable from inside this effect.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setEngineError({ kind: engineEpoch === 0 ? 'init' : 'lost', message })
+        return
+      }
+      // A rebuild after context loss: on mobile the GPU is often not back
+      // yet. Try once more on a fresh epoch after a pause — never while
+      // hidden (same rule as scheduleRecovery); the budget above caps it.
+      let retryTimer: ReturnType<typeof setTimeout> | undefined
+      const armRetry = () => {
+        if (retryTimer !== undefined || document.hidden) return
+        retryTimer = setTimeout(() => {
+          retryTimer = undefined
+          // Went hidden during the pause: the visibilitychange listener re-arms.
+          if (!document.hidden) setEngineEpoch((n) => n + 1)
+        }, REBUILD_RETRY_DELAY_MS)
+      }
+      armRetry()
+      document.addEventListener('visibilitychange', armRetry)
+      return () => {
+        if (retryTimer !== undefined) clearTimeout(retryTimer)
+        document.removeEventListener('visibilitychange', armRetry)
+      }
     }
 
     // Dev-only escape hatch for live debugging in the browser console.
@@ -110,9 +228,6 @@ export function GlobeView() {
     const aircraftDecal = new WorldDecal(viewer.scene, aircraftIcon(), '#ffb454')
     const launchSitesLayer = new LaunchSitesLayer(viewer.scene, launchSites)
     const portsLayer = new PortsLayer(viewer.scene, ports)
-    const worker = new Worker(new URL('../workers/propagation.worker.ts', import.meta.url), {
-      type: 'module',
-    })
     const post = (msg: WorkerRequest) => worker.postMessage(msg)
 
     // --- live domain layers: data (type/band filtered) + layer visibility ---
@@ -133,6 +248,10 @@ export function GlobeView() {
 
     shipsLayer.setShips(filteredShips(useShips.getState()))
     aircraftLayer.setAircraft(filteredAircraft(useAircraft.getState()))
+    // A rebuild (or HMR) mounts with a selection already in the stores; the
+    // subscriptions below only see changes, so apply it once here.
+    shipsLayer.setSelected(useShips.getState().selectedMmsi)
+    aircraftLayer.setSelected(useAircraft.getState().selectedIcao)
 
     // Ships/aircraft dead-reckon on WALL time, so once the sim clock is
     // warped, paused, or scrubbed away from now their positions are
@@ -376,7 +495,11 @@ export function GlobeView() {
       post({ type: 'tick', epochMs: epochMs + leadMs })
     }
 
-    worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
+    // The worker outlives this epoch: a reply to the previous epoch's request
+    // can still arrive here. Harmless — positions before this layer's first
+    // `ready` are dropped by its empty billboard set, and setCatalog resets
+    // the sample pair; the epoch's own `init` (sent below) ends the race.
+    const onWorkerMessage = (e: MessageEvent<WorkerResponse>) => {
       const msg = e.data
       if (msg.type === 'ready') {
         constellation.setCatalog(msg.noradIds, msg.classes)
@@ -392,6 +515,7 @@ export function GlobeView() {
         tickBusy = false
       }
     }
+    worker.addEventListener('message', onWorkerMessage)
 
     const sendCatalog = (sats: { noradId: number; tle1: string; tle2: string }[]) => {
       workerReady = false
@@ -403,13 +527,18 @@ export function GlobeView() {
     }
 
     const tickTimer = setInterval(() => {
-      if (!workerReady || tickBusy) return
+      // Hidden tab: nothing is drawn (rAF is paused), so whole-catalog
+      // propagation would only drain the battery. onVisibilityChange resyncs.
+      if (document.hidden || !workerReady || tickBusy) return
       const { rate } = simClock.get()
       if (performance.now() - lastTickWall < tickIntervalMs(rate)) return
       requestTick()
     }, 100)
 
     // --- store subscriptions (transient; no React re-renders involved) ---
+    // Also the rebuild path: the long-lived worker still holds the working
+    // set, but this epoch's fresh ConstellationLayer only learns the ids and
+    // classes from a `ready`, so re-init it (ready → setCatalog → tick).
     const initialSats = useCatalog.getState().sats
     if (initialSats.length > 0) sendCatalog(initialSats)
     if (useCatalog.getState().selectedId !== null) applySelection(useCatalog.getState().selectedId)
@@ -440,23 +569,11 @@ export function GlobeView() {
     }
 
     // Transport controls travel with the ORBITAL layer (the bar itself is
-    // unmounted then) — the keyboard equivalents must go quiet with it, or
-    // an invisible warp would silently suspend the live feeds.
-    const timeControlsActive = () => useMode.getState().satellitesVisible
-
-    const deselectCurrentMode = () => {
-      const mode = useMode.getState().mode
-      if (mode === 'orbital') useCatalog.getState().select(null)
-      else if (mode === 'maritime') useShips.getState().select(null)
-      else useAircraft.getState().select(null)
-    }
-
-    const hasSelectionInMode = () => {
-      const mode = useMode.getState().mode
-      if (mode === 'orbital') return useCatalog.getState().selectedId !== null
-      if (mode === 'maritime') return useShips.getState().selectedMmsi !== null
-      return useAircraft.getState().selectedIcao !== null
-    }
+    // unmounted then) and with the HUD (hidden: the bar is faded out and
+    // inert) — the keyboard equivalents must go quiet with it, or an
+    // invisible warp would silently suspend the live feeds.
+    const timeControlsActive = () =>
+      useMode.getState().satellitesVisible && !useHud.getState().hidden
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target)) return
@@ -471,10 +588,14 @@ export function GlobeView() {
           if (hasSelectionInMode()) useFollow.getState().toggle()
           break
         case 'Escape':
+          // Innermost first, one layer per press: overlays, then an open
+          // compact sheet (closing it does nothing else), then the follow
+          // lock, then the selection.
           if (useMode.getState().helpOpen) useMode.getState().closeHelp()
           else if (useMode.getState().settingsOpen) useMode.getState().closeSettings()
+          else if (useSheet.getState().sheet !== null) useSheet.getState().close()
           else if (useFollow.getState().following) useFollow.getState().setFollowing(false)
-          else deselectCurrentMode()
+          else deselectInMode()
           break
         case 'Digit1':
           useMode.getState().toggleDomain('orbital')
@@ -515,52 +636,184 @@ export function GlobeView() {
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('blur', onWindowBlur)
 
-    // --- picking: current mode's layer first, cross-domain hits switch mode ---
-    const pickHandler = new ScreenSpaceEventHandler(viewer.scene.canvas)
-    pickHandler.setInputAction((movement: { position: Cartesian2 }) => {
-      const mode = useMode.getState().mode
+    // --- picking: ONE drill pick per tap, every hit offered to each layer ---
+    const canvas = viewer.scene.canvas
+    // The pointer that pressed last sizes the pick window (finger vs mouse —
+    // a touch laptop has both); the media query covers a missing type.
+    let lastPointerType = ''
+    const onPointerDown = (e: PointerEvent) => {
+      lastPointerType = e.pointerType
+    }
+    canvas.addEventListener('pointerdown', onPointerDown, { capture: true, passive: true })
+    const coarsePointer = window.matchMedia('(pointer: coarse)')
 
-      const trySat = () => {
-        const id = constellation.pick(movement.position, viewer.scene)
-        if (id === null) return false
+    // Matchers: a hit on the selected object's own marker (tracked-satellite
+    // billboard/label, ship/aircraft decal) counts as that object, so tapping
+    // it keeps the selection instead of jumping to a neighbour.
+    const satIdOf = (hit: unknown) =>
+      tracking.ownsMarker(hit) ? useCatalog.getState().selectedId : constellation.idOf(hit)
+    const shipIdOf = (hit: unknown) =>
+      shipDecal.owns(hit) ? useShips.getState().selectedMmsi : shipsLayer.idOf(hit)
+    const aircraftIdOf = (hit: unknown) =>
+      aircraftDecal.owns(hit) ? useAircraft.getState().selectedIcao : aircraftLayer.idOf(hit)
+
+    // Each walks the hits nearest-first and takes its layer's first claim.
+    const trySat = (hits: readonly unknown[]) => {
+      for (const hit of hits) {
+        const id = satIdOf(hit)
+        if (id === null) continue
         useMode.getState().setMode('orbital')
         useCatalog.getState().select(id)
         return true
       }
-      const tryShip = () => {
-        const mmsi = shipsLayer.pick(movement.position, viewer.scene)
-        if (mmsi === null) return false
+      return false
+    }
+    const tryShip = (hits: readonly unknown[]) => {
+      for (const hit of hits) {
+        const mmsi = shipIdOf(hit)
+        if (mmsi === null) continue
         useMode.getState().setMode('maritime')
         useShips.getState().select(mmsi)
         return true
       }
-      const tryAircraft = () => {
-        const icao = aircraftLayer.pick(movement.position, viewer.scene)
-        if (icao === null) return false
+      return false
+    }
+    const tryAircraft = (hits: readonly unknown[]) => {
+      for (const hit of hits) {
+        const icao = aircraftIdOf(hit)
+        if (icao === null) continue
         useMode.getState().setMode('airspace')
         useAircraft.getState().select(icao)
         return true
       }
+      return false
+    }
 
+    // Context-loss state (driven by the recovery section below). While the
+    // context is gone or a rebuild is pending, a pick reads a dead buffer
+    // and finds nothing — an "empty tap" that would drop the very selection
+    // the rebuild is meant to keep.
+    let contextLost = false
+    let recoveryRequested = false
+
+    const pickHandler = new ScreenSpaceEventHandler(canvas)
+    pickHandler.setInputAction((movement: { position: Cartesian2 }) => {
+      const scene = viewer.scene
+      if (scene.isDestroyed() || contextLost || recoveryRequested) return
+      // Pick rectangle is in drawing-buffer px (Picking.js, cesium 1.138):
+      // convert the CSS window with the ratio Cesium itself applies to the
+      // tap position (includes the resolutionScale cap).
+      const size = pickWindowPx(
+        pickWindowCssPx(lastPointerType, coarsePointer.matches),
+        drawingBufferRatio(scene.drawingBufferWidth, canvas.clientWidth),
+      )
+      // drillPick collects up to PICK_LIMIT distinct objects in one pass,
+      // nearest the tap first (PickFramebuffer spiral). Only when it found
+      // fewer does it run another pass to look behind them, so an empty
+      // tap costs exactly one pass (was three scene.pick calls).
+      const hits: readonly unknown[] = scene.drillPick(movement.position, PICK_LIMIT, size, size)
+
+      // Current mode's layer first; a cross-domain hit switches mode. The
+      // selected object's own marker/decal is claimed by the matchers above.
+      const mode = useMode.getState().mode
       const order =
         mode === 'maritime'
           ? [tryShip, tryAircraft, trySat]
           : mode === 'airspace'
             ? [tryAircraft, tryShip, trySat]
             : [trySat, tryShip, tryAircraft]
-      if (order.some((attempt) => attempt())) return
-
-      // Empty click: deselect within the current mode only.
-      if (mode === 'orbital') useCatalog.getState().select(null)
-      else if (mode === 'maritime') useShips.getState().select(null)
-      else useAircraft.getState().select(null)
+      // Near-miss = a thin line of the selection an empty tap would drop
+      // (ORBITAL: the tracked orbit ring / ground track) — keep it. Anything
+      // else nobody claims (footprint fill, ports, launch sites, another
+      // domain's lines) is an empty tap, as is no hit at all.
+      const isNearMiss = (hit: unknown) => mode === 'orbital' && tracking.ownsThinDecoration(hit)
+      if (resolveTap(hits, order, isNearMiss) === 'empty') deselectInMode(mode)
     }, ScreenSpaceEventType.LEFT_CLICK)
+
+    // --- WebGL context loss: rebuild the engine on a fresh canvas ---
+    // @cesium/engine 1.138 has no webglcontextlost/restored handling at all,
+    // and its GPU resources cannot be re-created in place. Recovery bumps
+    // engineEpoch: this effect's cleanup destroys everything, then the
+    // effect runs again on the same container. (contextLost /
+    // recoveryRequested are declared above, with the pick handler.)
+    let recoveryTimer: ReturnType<typeof setTimeout> | undefined
+    const recover = (reason: string) => {
+      if (recoveryRequested) return
+      recoveryRequested = true
+      if (recoveryTimer !== undefined) clearTimeout(recoveryTimer)
+      if (takeRecoverySlot(recoveryLogRef, performance.now())) {
+        resumeFollowRef.current = useFollow.getState().following
+      } else {
+        // Rebuilding keeps failing: show the error panel (the epoch bump
+        // still runs the cleanup, so nothing is left running behind it).
+        setEngineError({ kind: 'lost', message: reason })
+      }
+      setEngineEpoch((n) => n + 1)
+    }
+    // Wait for webglcontextrestored, or rebuild after a grace period. Never
+    // while hidden: a backgrounded tab may not get a GPU context at all.
+    const scheduleRecovery = () => {
+      if (recoveryRequested || recoveryTimer !== undefined || document.hidden) return
+      recoveryTimer = setTimeout(() => {
+        recoveryTimer = undefined
+        // Went hidden during the grace period: onVisibilityChange reschedules.
+        if (!document.hidden) recover('WebGL context lost')
+      }, CONTEXT_RESTORE_GRACE_MS)
+    }
+    const isContextLost = () => {
+      // getContext() hands back the canvas's existing context (Cesium asks
+      // for webgl2 first, webgl as the fallback).
+      const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl')
+      return gl === null || gl.isContextLost()
+    }
+    const onContextLost = (e: Event) => {
+      // Without preventDefault the browser never fires webglcontextrestored.
+      e.preventDefault()
+      contextLost = true
+      scheduleRecovery()
+    }
+    const onContextRestored = () => {
+      // Same rule as scheduleRecovery: never rebuild while hidden. The
+      // context is still gone for this engine (its GPU resources died with
+      // it), so stay marked lost; onVisibilityChange reschedules on return.
+      contextLost = true
+      if (document.hidden) return
+      recover('WebGL context lost')
+    }
+    // CesiumWidget's own renderError listener has already stopped its
+    // render loop; showRenderLoopErrors is off, so this is the only report.
+    const onRenderError = (_scene: unknown, error: unknown) => {
+      if (contextLost || isContextLost()) {
+        contextLost = true
+        scheduleRecovery()
+        return
+      }
+      console.error('[cesium] render error', error)
+      recover(error instanceof Error ? error.message : String(error))
+    }
+    canvas.addEventListener('webglcontextlost', onContextLost)
+    canvas.addEventListener('webglcontextrestored', onContextRestored)
+    const removeRenderErrorListener = viewer.scene.renderError.addEventListener(onRenderError)
+
+    // --- page visibility: ticks pause while hidden, resync on return ---
+    const onVisibilityChange = () => {
+      if (document.hidden) return
+      // The sample pair is stale after skipped ticks: same path as a
+      // scrub/NOW jump — drop it and force a fresh tick.
+      constellation.onTimeJump()
+      lastTickWall = 0
+      if (contextLost) scheduleRecovery()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
 
     // --- render loop: sim clock, viewer clock, selected satellite ---
     let rafId = 0
-    let lastFrame = performance.now()
+    // Continue from the previous engine's last frame after a rebuild, so the
+    // gap is advanced like any tab suspension (not silently dropped).
+    let lastFrame = lastFrameRef.current > 0 ? lastFrameRef.current : performance.now()
     let lastTelemetry = 0
     let lastCameraSave = 0
+    let lastDpr = window.devicePixelRatio || 1
 
     const frame = (now: number) => {
       // Clamp tab-suspend jumps only while warping (a 30 s gap at ×3600
@@ -570,6 +823,13 @@ export function GlobeView() {
       const rawDt = now - lastFrame
       const dt = simClock.get().rate === 1 ? rawDt : Math.min(rawDt, 500)
       lastFrame = now
+      lastFrameRef.current = now
+      // Browser zoom / monitor move changes the DPR: keep the 2× render cap.
+      const dpr = window.devicePixelRatio || 1
+      if (dpr !== lastDpr) {
+        lastDpr = dpr
+        applyRenderDensity(viewer, dpr)
+      }
       simClock.get().advance(dt)
       const epochMs = simClock.get().epochMs
       syncViewerClock(viewer, epochMs)
@@ -678,12 +938,24 @@ export function GlobeView() {
     }
     rafId = requestAnimationFrame(frame)
 
+    // Rebuilt after a context loss: re-engage the follow lock it interrupted.
+    if (resumeFollowRef.current) {
+      resumeFollowRef.current = false
+      if (hasSelectionInMode()) useFollow.getState().setFollowing(true)
+    }
+
     return () => {
       cancelAnimationFrame(rafId)
       clearInterval(tickTimer)
+      if (recoveryTimer !== undefined) clearTimeout(recoveryTimer)
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
       window.removeEventListener('blur', onWindowBlur)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      canvas.removeEventListener('pointerdown', onPointerDown, { capture: true })
+      canvas.removeEventListener('webglcontextlost', onContextLost)
+      canvas.removeEventListener('webglcontextrestored', onContextRestored)
+      removeRenderErrorListener()
       useFollow.getState().setFollowing(false)
       rig.dispose()
       unsubCatalog()
@@ -694,7 +966,8 @@ export function GlobeView() {
       unsubFollow()
       unsubPrefs()
       pickHandler.destroy()
-      worker.terminate()
+      // The worker itself lives on (terminated by its own effect on unmount).
+      worker.removeEventListener('message', onWorkerMessage)
       constellation.dispose()
       tracking.dispose()
       shipDecal.dispose()
@@ -703,17 +976,32 @@ export function GlobeView() {
       aircraftLayer.dispose()
       launchSitesLayer.dispose()
       portsLayer.dispose()
-      if (!viewer.isDestroyed()) viewer.destroy()
+      if (import.meta.env.DEV) {
+        const w = window as unknown as { __opsViewer?: unknown }
+        if (w.__opsViewer === viewer) delete w.__opsViewer
+      }
+      // Also removes the .cesium-credits div createOrbitalViewer appended.
+      destroyOrbitalViewer(viewer)
     }
-  }, [])
+  }, [engineEpoch])
 
   if (engineError) {
     return (
       <div className="engine-error">
         <div className="engine-error-panel">
-          <h1>RENDERER OFFLINE</h1>
-          <p>Cesium failed to initialize: {engineError}</p>
-          <p>Try a browser with WebGL 2 support.</p>
+          {engineError.kind === 'lost' ? (
+            <>
+              <h1>RENDERER LOST</h1>
+              <p>The WebGL renderer was lost and could not be restored: {engineError.message}</p>
+              <p>Reload the page to restart it.</p>
+            </>
+          ) : (
+            <>
+              <h1>RENDERER OFFLINE</h1>
+              <p>Cesium failed to initialize: {engineError.message}</p>
+              <p>Try a browser with WebGL 2 support.</p>
+            </>
+          )}
         </div>
       </div>
     )
