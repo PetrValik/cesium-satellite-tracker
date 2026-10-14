@@ -34,15 +34,18 @@ const MOVEMENT_KEYS = new Set([
 // Scratches — update() runs per frame and must not allocate.
 const scratchTransform = new Matrix4()
 const scratchTarget = new Cartesian3()
+const scratchLocalPosition = new Cartesian3()
+const scratchLocalDirection = new Cartesian3()
+const scratchLocalUp = new Cartesian3()
 
 /**
  * Keyboard camera movement + follow-lock.
  *
- * Follow uses `camera.lookAtTransform` with an east-north-up frame refreshed
- * to the target's position every frame: the camera keeps its offset in the
- * target-local frame, so it rides along as the target moves, and both mouse
- * drags and the movement keys orbit the target. Without a target the same
- * keys rotate/zoom the free camera around the globe.
+ * Follow puts the camera in an east-north-up frame at the target
+ * (`camera.lookAtTransform`) and moves that frame to the target every frame
+ * while restoring the camera's frame-local pose, so it rides along at a fixed
+ * offset; mouse drags and the movement keys orbit the target. Without a
+ * target the same keys rotate/zoom the free camera around the globe.
  */
 export class CameraRig {
   private readonly _viewer: Viewer
@@ -163,10 +166,23 @@ export class CameraRig {
             scratchTransform,
             new HeadingPitchRange(camera.heading, CesiumMath.toRadians(-35), this._initialRangeM),
           )
-        } else {
-          // Refreshing the transform alone carries the camera's local offset
-          // along with the moving target.
+        } else if (Matrix4.equals(camera.transform, Matrix4.IDENTITY)) {
+          // Something dropped the frame (a flight, setView): re-adopt it at
+          // the current world pose rather than misread a world pose as local.
           camera.lookAtTransform(scratchTransform)
+        } else {
+          // lookAtTransform(transform) alone keeps the camera's WORLD pose
+          // (Camera._setTransform re-expresses it in the new frame), so the
+          // target would drift off-screen. Carry the frame-local pose — any
+          // drag/key orbit already applied to it — across the frame move.
+          Cartesian3.clone(camera.position, scratchLocalPosition)
+          Cartesian3.clone(camera.direction, scratchLocalDirection)
+          Cartesian3.clone(camera.up, scratchLocalUp)
+          camera.lookAtTransform(scratchTransform)
+          Cartesian3.clone(scratchLocalPosition, camera.position)
+          Cartesian3.clone(scratchLocalDirection, camera.direction)
+          Cartesian3.clone(scratchLocalUp, camera.up)
+          Cartesian3.cross(camera.direction, camera.up, camera.right)
         }
       }
     }
