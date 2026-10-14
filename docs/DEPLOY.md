@@ -82,7 +82,62 @@ The live-feed keys stay in the server-side `.env` next to
 git pull && docker compose up -d --build
 ```
 
-## 6. Notes
+## 6. PWA (service worker)
+
+Production builds only: `vite build` stamps `apps/web/pwa/sw.template.js` into
+`dist/sw.js` (plugin in `apps/web/vite.config.ts`), and `src/main.tsx`
+registers `/sw.js` after page load. `vite dev` never registers one.
+
+**What it caches** (two Cache Storage entries, both prefixed `oo-`):
+
+| Cache | Holds | Filled |
+|---|---|---|
+| `oo-shell-<build id>` | `/` (the offline shell), `manifest.webmanifest`, `favicon.ico`, `icon.svg`, `apple-touch-icon.png`, the manifest's icons, every hashed file under `/assets/` | at install; the shell and the unhashed files past the HTTP cache |
+| `oo-cesium-<Cesium version>` | `/cesium/*` (Cesium's unhashed workers and assets) | on first use, cache first; kept across deploys that do not bump Cesium |
+
+The build id is a hash of the template, `index.html`, the precache list, the
+Cesium version and the bytes of the unhashed public files, so the same inputs
+give the same `sw.js`. The build fails if the manifest or any icon it lists is
+missing from `dist/`.
+
+Navigations are network first: the precached shell is served only offline,
+after 4 s without an answer, or on a 5xx (e.g. a 502 while the container
+restarts).
+
+**Never intercepted:** `/api` and `/api/*` (live data always comes from the
+network), every cross-origin request (imagery tiles, Cesium Ion, photo APIs),
+non-GET, `Range` and `only-if-cached` requests, and `/sw.js` itself. Any other
+same-origin path outside the precache, `/assets/` and `/cesium/` passes
+through as well.
+
+**How an update reaches open clients:** the browser re-checks `/sw.js` past
+the HTTP cache on navigations. A deploy that changes the build id installs a
+new worker, which precaches the new build (a failed precache fails the
+install and the old worker stays), skips waiting, deletes every other `oo-*`
+cache and claims open pages. There is no in-page reload prompt: an open tab
+keeps the code it loaded, and its next load boots the deployed `index.html`.
+
+**Kill switch:** ship a `sw.js` that deletes every `oo-*` cache and calls
+`self.registration.unregister()`, then redeploy. The stamp step requires the
+three placeholders, so keep them when replacing the template:
+
+```js
+const BUILD_ID = '__BUILD_ID__'
+const CESIUM_VERSION = '__CESIUM_VERSION__'
+const PRECACHE = __PRECACHE__
+
+self.addEventListener('install', () => self.skipWaiting())
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    (async () => {
+      for (const key of await caches.keys()) if (key.startsWith('oo-')) await caches.delete(key)
+      await self.registration.unregister()
+    })(),
+  )
+})
+```
+
+## 7. Notes
 
 - The seed refreshes automatically from CelesTrak (stale-while-revalidate,
   6 h TTL, per-group failure cooldown) — no cron needed.

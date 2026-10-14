@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- ORBITAL OPS app icon. Source for the PNG icons: run scripts/make-icons.sh after editing.
+       Colours are the HUD tokens in styles/tokens.css (space, amber, amber-bright, cyan).
+       Keep every mark inside r = 204 around the centre (the 80% maskable safe zone).
+       No double hyphen in these comments: it is invalid XML and the icon renders as a broken image. -->
+  <rect width="512" height="512" fill="#06090f"/>
+  <!-- reticle hairline with cardinal ticks -->
+  <circle cx="256" cy="256" r="196" fill="none" stroke="#6ee7ff" stroke-opacity=".16" stroke-width="2"/>
+  <path d="M256 60V78M256 434V452M60 256H78M434 256H452" stroke="#6ee7ff" stroke-opacity=".5" stroke-width="3"/>
+  <g transform="rotate(-24 256 256)">
+    <!-- orbit, far half (behind the globe) -->
+    <path d="M68 256A188 64 0 0 1 444 256" fill="none" stroke="#ffb454" stroke-opacity=".4" stroke-width="10" stroke-linecap="round"/>
+    <!-- globe -->
+    <circle cx="256" cy="256" r="104" fill="#0b1a2b" stroke="#6ee7ff" stroke-opacity=".45" stroke-width="4"/>
+    <ellipse cx="256" cy="256" rx="104" ry="36" fill="none" stroke="#6ee7ff" stroke-opacity=".18" stroke-width="3"/>
+    <ellipse cx="256" cy="256" rx="40" ry="104" fill="none" stroke="#6ee7ff" stroke-opacity=".18" stroke-width="3"/>
+    <!-- orbit, near half (in front of the globe) -->
+    <path d="M444 256A188 64 0 0 1 68 256" fill="none" stroke="#ffb454" stroke-width="10" stroke-linecap="round"/>
+    <!-- satellite -->
+    <circle cx="400" cy="297" r="27" fill="#ffb454" fill-opacity=".22"/>
+    <circle cx="400" cy="297" r="14" fill="#ffe8c7"/>
+  </g>
+</svg>

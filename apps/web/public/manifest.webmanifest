@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "ORBITAL OPS",
+  "short_name": "ORBITAL OPS",
+  "description": "Real-time satellite, ship and aircraft tracker on a 3D globe",
+  "lang": "en",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#06090f",
+  "theme_color": "#06090f",
+  "categories": ["navigation", "utilities"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
