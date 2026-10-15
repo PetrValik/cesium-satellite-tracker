@@ -1,13 +1,17 @@
 /**
  * Left-rail content for AIRSPACE mode: live aircraft count, feed age, and
- * altitude-band + category rows that double as globe filters. Colors are
- * unified: category = hue, altitude = shade (see AircraftLayer).
+ * altitude-band + category rows that double as globe filters. The globe
+ * paints category = hue, altitude = shade of that hue (AircraftLayer), so
+ * the category swatches wear the user palette and the band swatches show
+ * the shade ramp on a neutral hue (index.css .band-*).
  */
-import { formatAge, formatCount } from '../../lib/format'
-import { useWallClock } from '../../lib/wallClock'
-import { AIRCRAFT_CATEGORIES, categoryOf, type AircraftCategory } from './aircraftCategory'
+import { hueStyle } from '../../core/ui/hueStyle'
 import { usePrefs } from '../../core/ui/prefsStore'
 import { useSimLive } from '../../core/sim/simLive'
+import { AIRCRAFT_CATEGORIES, type AircraftCategory } from '../../lib/aircraftCategories'
+import { formatAge, formatCount } from '../../lib/format'
+import { useWallClock } from '../../lib/wallClock'
+import { categoryOf } from './aircraftCategory'
 import { ALT_BANDS, bandOf, useAircraft, type AltBand } from './aircraftStore'
 
 const BAND_LABELS: Record<AltBand, string> = {
@@ -48,11 +52,11 @@ export function AirPicture() {
     <>
       <h2 className="hud-title">AIR PICTURE</h2>
       {available === false && (
-        <div className="passes-empty">
+        <div className="panel-empty">
           ADS-B OFFLINE — OPENSKY UNREACHABLE (OPTIONAL OPENSKY_CLIENT_ID SPEEDS UP POLLING)
         </div>
       )}
-      {available === null && <div className="passes-empty">CONNECTING…</div>}
+      {available === null && <div className="panel-empty">CONNECTING…</div>}
       {available === true && (
         <>
           {simLive ? (
@@ -71,7 +75,7 @@ export function AirPicture() {
                   onClick={() => toggleBand(band)}
                   title="Toggle this altitude band on the globe"
                 >
-                  <span className={`group-indicator band-${band}`} aria-hidden />
+                  <span className={`group-indicator has-hue band-${band}`} aria-hidden />
                   <span className="group-name">{BAND_LABELS[band]}</span>
                   <span className="group-count">{formatCount(countsByBand[band])}</span>
                 </button>
@@ -87,12 +91,8 @@ export function AirPicture() {
                   title="Toggle this category on the globe (heuristic classification)"
                 >
                   <span
-                    className="group-indicator"
-                    style={
-                      activeCategories.has(category)
-                        ? { background: aircraftColors[category], borderColor: aircraftColors[category] }
-                        : undefined
-                    }
+                    className="group-indicator has-hue"
+                    style={hueStyle(aircraftColors[category])}
                     aria-hidden
                   />
                   <span className="group-name">{CATEGORY_LABELS[category]}</span>

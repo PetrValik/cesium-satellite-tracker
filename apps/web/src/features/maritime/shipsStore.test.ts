@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ShipListSchema, type Ship } from '@orbital-ops/shared'
+import { SHIP_TYPES, ShipListSchema, type Ship } from '@orbital-ops/shared'
 
 const h = vi.hoisted(() => {
   /** Mirror of lib/api's ApiError; stable identity across module resets. */
@@ -87,13 +87,72 @@ describe('shipsStore polling', () => {
 
     mod.startShipsPolling()
     await vi.advanceTimersByTimeAsync(0)
-    expect(mod.useShips.getState().configured).toBe(false)
+    // Unreachable is not "unconfigured": only a 503 may claim the key is missing.
+    expect(mod.useShips.getState().configured).toBeNull()
+    expect(mod.useShips.getState().connected).toBe(false)
     expect(h.ships).toHaveBeenCalledTimes(1)
 
     await vi.advanceTimersByTimeAsync(POLL_MS)
     expect(h.ships).toHaveBeenCalledTimes(2)
     await vi.advanceTimersByTimeAsync(POLL_MS)
     expect(h.ships).toHaveBeenCalledTimes(3)
+  })
+})
+
+describe('shipsStore poll failures', () => {
+  it('a 5xx after a good poll keeps the snapshot and the configured flag', async () => {
+    h.ships.mockResolvedValueOnce([ship(1, 'cargo')])
+    h.ships.mockRejectedValueOnce(new h.ApiError('Bad Gateway', 502))
+
+    mod.startShipsPolling()
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(POLL_MS)
+
+    const s = mod.useShips.getState()
+    expect(h.ships).toHaveBeenCalledTimes(2)
+    expect(s.configured).toBe(true)
+    expect(s.connected).toBe(false)
+    expect(s.ships).toHaveLength(1)
+  })
+
+  it('logs a contract break (non-ApiError) instead of reporting the feed unconfigured', async () => {
+    const drift = new Error('zod: expected number, received string')
+    h.ships.mockRejectedValue(drift)
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    mod.startShipsPolling()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(log).toHaveBeenCalledWith(expect.any(String), drift)
+    expect(mod.useShips.getState().configured).toBeNull()
+    expect(mod.useShips.getState().connected).toBe(false)
+    log.mockRestore()
+  })
+
+  it('stopShipsPolling clears the interval', async () => {
+    h.ships.mockResolvedValue([])
+    mod.startShipsPolling()
+    await vi.advanceTimersByTimeAsync(0)
+    mod.stopShipsPolling()
+    await vi.advanceTimersByTimeAsync(5 * POLL_MS)
+    expect(h.ships).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('visibleShips', () => {
+  const ships = [ship(1, 'cargo'), ship(2, 'tanker'), ship(3, 'fishing')]
+
+  it('returns the store array itself while every type is on', () => {
+    expect(mod.visibleShips({ ships, activeTypes: new Set(SHIP_TYPES) })).toBe(ships)
+  })
+
+  it('keeps only the active types', () => {
+    const visible = mod.visibleShips({ ships, activeTypes: new Set(['cargo', 'fishing'] as const) })
+    expect(visible.map((s) => s.mmsi)).toEqual([1, 3])
+  })
+
+  it('is empty with every type off', () => {
+    expect(mod.visibleShips({ ships, activeTypes: new Set() })).toEqual([])
   })
 })
 

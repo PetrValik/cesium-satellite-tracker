@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { SHIP_TYPES, type Ship, type ShipType } from '@orbital-ops/shared'
 import { api, ApiError } from '../../lib/api'
+import { createPoller } from '../../lib/poller'
 
 const POLL_MS = 10_000
 /** While the feed reports "not configured", only re-check occasionally. */
@@ -13,9 +14,17 @@ export interface ShipsState {
   selectedMmsi: number | null
   /** Ship types currently shown on the globe (filter rows in the picture panel). */
   activeTypes: Set<ShipType>
-  /** null = unknown (no successful status yet). */
+  /**
+   * Whether the server has an AIS feed: false only on a 503 (no
+   * AISSTREAM_API_KEY), true after a successful poll, null until either.
+   */
   configured: boolean | null
-  connected: boolean
+  /**
+   * Whether the last poll succeeded: false after any failure (network,
+   * 5xx, 503, contract drift), null before the first poll settles. A failed
+   * poll keeps the last snapshot.
+   */
+  connected: boolean | null
   select: (mmsi: number | null) => void
   toggleType: (type: ShipType) => void
 }
@@ -27,7 +36,7 @@ export const useShips = create<ShipsState>((set) => ({
   selectedMmsi: null,
   activeTypes: new Set<ShipType>(SHIP_TYPES),
   configured: null,
-  connected: false,
+  connected: null,
   select: (mmsi) => set({ selectedMmsi: mmsi }),
   toggleType: (type) =>
     set((s) => {
@@ -42,37 +51,41 @@ export const useShips = create<ShipsState>((set) => ({
     }),
 }))
 
-let timer: ReturnType<typeof setInterval> | undefined
-let unconfiguredBackoff = 0
+/**
+ * The vessels the globe shows: the type filter applied. Returns the store's
+ * own array (same reference) while every type is on.
+ */
+export function visibleShips(s: Pick<ShipsState, 'ships' | 'activeTypes'>): Ship[] {
+  return s.activeTypes.size === SHIP_TYPES.length
+    ? s.ships
+    : s.ships.filter((ship) => s.activeTypes.has(ship.shipType))
+}
 
-async function poll(): Promise<void> {
-  if (unconfiguredBackoff > 0) {
-    unconfiguredBackoff--
-    return
-  }
-  try {
-    const ships = await api.ships()
+const poller = createPoller({
+  intervalMs: POLL_MS,
+  fetch: () => api.ships(),
+  onData: (ships) => {
     const byMmsi = new Map(ships.map((s) => [s.mmsi, s]))
     const countsByType: Partial<Record<ShipType, number>> = {}
     for (const s of ships) countsByType[s.shipType] = (countsByType[s.shipType] ?? 0) + 1
     useShips.setState({ ships, byMmsi, countsByType, configured: true, connected: true })
-  } catch (err) {
-    useShips.setState({ configured: false, connected: false })
-    // 503 = feed not configured server-side: back off instead of spamming.
+  },
+  onError: (err) => {
+    // 503 = feed not configured server-side: say so, and back off instead
+    // of spamming. Any other failure leaves `configured` as it was.
     if (err instanceof ApiError && err.status === 503) {
-      unconfiguredBackoff = UNCONFIGURED_RECHECK_TICKS
+      useShips.setState({ configured: false, connected: false })
+      return UNCONFIGURED_RECHECK_TICKS
     }
-  }
-}
+    useShips.setState({ connected: false })
+    // Not an ApiError = the response broke the shared contract: say so.
+    if (!(err instanceof ApiError)) console.error('[shipsStore] poll failed', err)
+    return 0
+  },
+})
 
 /** Start the ships polling loop (idempotent). */
-export function startShipsPolling(): void {
-  if (timer !== undefined) return
-  void poll()
-  timer = setInterval(() => void poll(), POLL_MS)
-}
+export const startShipsPolling = poller.start
 
-export function stopShipsPolling(): void {
-  clearInterval(timer)
-  timer = undefined
-}
+/** Stop the ships polling loop (App's unmount cleanup). */
+export const stopShipsPolling = poller.stop

@@ -6,9 +6,7 @@
  * nature — anything unmatched is 'civil'.
  */
 import type { Aircraft } from '@orbital-ops/shared'
-
-export const AIRCRAFT_CATEGORIES = ['civil', 'cargo', 'military'] as const
-export type AircraftCategory = (typeof AIRCRAFT_CATEGORIES)[number]
+import type { AircraftCategory } from '../../lib/aircraftCategories'
 
 /** Well-known military ICAO-hex blocks (conservative subset). */
 const MIL_HEX_RANGES: [number, number][] = [
@@ -37,7 +35,7 @@ const MIL_CALLSIGN_PREFIXES = [
   'EVAC', // US aeromedical
   'RRR', // Royal Air Force
   'ASCOT', // RAF transport
-  'KRF', // RAF tanker "Vulcan"? kept conservative below
+  'KRF', // UK royal / VIP flights in military aircraft "Kittyhawk"
   'GAF', // German Air Force
   'FAF', // French Air Force
   'CTM', // French COTAM
@@ -49,7 +47,7 @@ const MIL_CALLSIGN_PREFIXES = [
   'HUF', // Hungarian Air Force
   'CEF', // Czech Air Force
   'SVF', // Swedish Air Force
-  'NOW', // Norwegian Air Force? conservative — NOW is also weather; excluded at match time by length
+  'NOW', // Royal Norwegian Air Force "Norwegian"
   'NATO',
   'DUKE', // US Army Europe
   'HKY', // US ANG "Hickory"
@@ -78,7 +76,7 @@ const CARGO_CALLSIGN_PREFIXES = [
   'SQC', // Singapore Airlines Cargo
   'LCO', // LATAM Cargo
   'AZG', // Silk Way West
-  'CMB', // Cameo/Challenge? conservative: Challenge Airlines? left in as cargo
+  'CMB', // US Transportation Command "Camber" — DoD airlift charters by civil carriers
   'KYE', // Sky Lease Cargo
 ]
 

@@ -7,7 +7,7 @@ import { useSyncExternalStore } from 'react'
  * when this matches, and sets `.is-compact` on `.app-root` so the CSS keys
  * off the same decision — never a second, drifting media query.
  */
-export const COMPACT_QUERY = '(max-width: 899px), (max-height: 520px) and (pointer: coarse)'
+const COMPACT_QUERY = '(max-width: 899px), (max-height: 520px) and (pointer: coarse)'
 
 let mql: MediaQueryList | null = null
 

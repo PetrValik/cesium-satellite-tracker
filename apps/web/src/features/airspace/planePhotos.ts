@@ -1,9 +1,12 @@
 /**
  * Aircraft photos from the public planespotters.net API (keyless, CORS-open,
  * built for exactly this use — attribution required and rendered by the
- * panel). Results are cached per airframe for the session; null = the API
- * answered "no photo", so we don't re-ask.
+ * panel), fetched through the lib/api boundary. Answers are cached per
+ * airframe for the session; a cached null means the API answered "no
+ * photo", so we don't re-ask. A failed lookup (network error, 429, 5xx,
+ * malformed body) is never cached, so a later selection retries.
  */
+import { api, ApiError } from '../../lib/api'
 
 export interface PlanePhoto {
   thumbUrl: string
@@ -14,33 +17,18 @@ export interface PlanePhoto {
 
 const cache = new Map<string, PlanePhoto | null>()
 
-interface PlanespottersResponse {
-  photos?: {
-    thumbnail_large?: { src?: string }
-    thumbnail?: { src?: string }
-    link?: string
-    photographer?: string
-  }[]
-}
-
-/** Resolve a photo for an ICAO24 hex; null when none exists. */
+/** Resolve a photo for an ICAO24 hex; null when none exists or the lookup failed. */
 export async function fetchPlanePhoto(icao24: string): Promise<PlanePhoto | null> {
   const cached = cache.get(icao24)
   if (cached !== undefined) return cached
-  let result: PlanePhoto | null = null
+  let result: PlanePhoto | null
   try {
-    const res = await fetch(`https://api.planespotters.net/pub/photos/hex/${encodeURIComponent(icao24)}`)
-    if (res.ok) {
-      const data = (await res.json()) as PlanespottersResponse
-      const photo = data.photos?.[0]
-      const thumbUrl = photo?.thumbnail_large?.src ?? photo?.thumbnail?.src
-      if (photo && thumbUrl && photo.link) {
-        result = { thumbUrl, link: photo.link, photographer: photo.photographer ?? 'unknown' }
-      }
-    }
-  } catch {
-    // network failure — treat as "no photo" but do not cache, so a later
-    // selection retries
+    const photo = await api.planePhoto(icao24)
+    result = photo && { ...photo, photographer: photo.photographer ?? 'unknown' }
+  } catch (err) {
+    // An HTTP or network failure is expected now and then; anything else is
+    // planespotters' response shape drifting — say so instead of hiding it.
+    if (!(err instanceof ApiError)) console.error('[planePhotos]', err)
     return null
   }
   cache.set(icao24, result)

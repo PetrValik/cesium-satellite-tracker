@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 import type { Aircraft } from '@orbital-ops/shared'
 import { api, ApiError } from '../../lib/api'
-import { AIRCRAFT_CATEGORIES, categoryOf, type AircraftCategory } from './aircraftCategory'
+import { AIRCRAFT_CATEGORIES, type AircraftCategory } from '../../lib/aircraftCategories'
+import { createPoller } from '../../lib/poller'
+import { categoryOf } from './aircraftCategory'
 
 /** Altitude bands used for both icon colors and filtering. */
 export const ALT_BANDS = ['ground', 'low', 'mid', 'high'] as const
@@ -68,38 +70,45 @@ export const useAircraft = create<AircraftState>((set) => ({
     }),
 }))
 
-let timer: ReturnType<typeof setInterval> | undefined
-let unconfiguredBackoff = 0
+/**
+ * The aircraft the globe shows: band and category filters ANDed. Returns
+ * the store's own array (same reference) while every filter is on.
+ */
+export function visibleAircraft(
+  s: Pick<AircraftState, 'aircraft' | 'activeBands' | 'activeCategories'>,
+): Aircraft[] {
+  const allBands = s.activeBands.size === ALT_BANDS.length
+  const allCategories = s.activeCategories.size === AIRCRAFT_CATEGORIES.length
+  if (allBands && allCategories) return s.aircraft
+  return s.aircraft.filter(
+    (a) =>
+      (allBands || s.activeBands.has(bandOf(a))) &&
+      (allCategories || s.activeCategories.has(categoryOf(a))),
+  )
+}
 
-async function poll(): Promise<void> {
-  if (unconfiguredBackoff > 0) {
-    unconfiguredBackoff--
-    return
-  }
-  try {
-    const aircraft = await api.aircraft()
+const poller = createPoller({
+  intervalMs: POLL_MS,
+  fetch: () => api.aircraft(),
+  onData: (aircraft) =>
     useAircraft.setState({
       aircraft,
       byIcao: new Map(aircraft.map((a) => [a.icao24, a])),
       available: true,
       lastPollMs: Date.now(),
-    })
-  } catch (err) {
+    }),
+  onError: (err) => {
+    // The last snapshot stays; the panel reports the feed unavailable.
     useAircraft.setState({ available: false })
-    if (err instanceof ApiError && err.status === 503) {
-      unconfiguredBackoff = UNCONFIGURED_RECHECK_TICKS
-    }
-  }
-}
+    // Not an ApiError = the response broke the shared contract: say so.
+    if (!(err instanceof ApiError)) console.error('[aircraftStore] poll failed', err)
+    // 503 = feed not configured server-side: back off instead of spamming.
+    return err instanceof ApiError && err.status === 503 ? UNCONFIGURED_RECHECK_TICKS : 0
+  },
+})
 
 /** Start the aircraft polling loop (idempotent). */
-export function startAircraftPolling(): void {
-  if (timer !== undefined) return
-  void poll()
-  timer = setInterval(() => void poll(), POLL_MS)
-}
+export const startAircraftPolling = poller.start
 
-export function stopAircraftPolling(): void {
-  clearInterval(timer)
-  timer = undefined
-}
+/** Stop the aircraft polling loop (App's unmount cleanup). */
+export const stopAircraftPolling = poller.stop

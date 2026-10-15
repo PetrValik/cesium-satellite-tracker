@@ -1,11 +1,13 @@
 import { create } from 'zustand'
 import type { ShipType } from '@orbital-ops/shared'
+import type { AircraftCategory } from '../../lib/aircraftCategories'
 import type { OrbitClass } from '../../lib/protocol'
+import { readStored, writeStored } from '../../lib/storage'
 
 const STORAGE_KEY = 'orbital-ops.prefs'
 
 export interface ColorPrefs {
-  aircraft: Record<'civil' | 'cargo' | 'military', string>
+  aircraft: Record<AircraftCategory, string>
   ships: Record<ShipType, string>
   satellites: Record<OrbitClass, string>
 }
@@ -33,7 +35,7 @@ export const DEFAULT_COLORS: ColorPrefs = {
 export const BASEMAPS = ['streets', 'topo', 'satellite'] as const
 export type Basemap = (typeof BASEMAPS)[number]
 
-export interface SavedCamera {
+interface SavedCamera {
   x: number
   y: number
   z: number
@@ -65,41 +67,32 @@ function mergeColors(stored: Partial<ColorPrefs> | undefined): ColorPrefs {
   return merged
 }
 
-function load(): StoredPrefs {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<StoredPrefs>
-      const cam = parsed.lastCamera
-      const lastCamera =
-        cam &&
-        [cam.x, cam.y, cam.z, cam.headingRad, cam.pitchRad, cam.rollRad].every(Number.isFinite)
-          ? cam
-          : null
-      const basemap = BASEMAPS.includes(parsed.basemap as Basemap)
-        ? (parsed.basemap as Basemap)
-        : 'streets'
-      return { colors: mergeColors(parsed.colors), lastCamera, basemap }
-    }
-  } catch {
-    // corrupted storage — defaults below
-  }
-  return { colors: structuredClone(DEFAULT_COLORS), lastCamera: null, basemap: 'streets' }
+const defaultPrefs = (): StoredPrefs => ({
+  colors: structuredClone(DEFAULT_COLORS),
+  lastCamera: null,
+  basemap: 'streets',
+})
+
+function parseStoredPrefs(value: unknown): StoredPrefs {
+  const parsed = value as Partial<StoredPrefs>
+  const cam = parsed.lastCamera
+  const lastCamera =
+    cam &&
+    [cam.x, cam.y, cam.z, cam.headingRad, cam.pitchRad, cam.rollRad].every(Number.isFinite)
+      ? cam
+      : null
+  const basemap = BASEMAPS.includes(parsed.basemap as Basemap)
+    ? (parsed.basemap as Basemap)
+    : 'streets'
+  return { colors: mergeColors(parsed.colors), lastCamera, basemap }
 }
 
 function persist(state: StoredPrefs): void {
-  try {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        colors: state.colors,
-        lastCamera: state.lastCamera,
-        basemap: state.basemap,
-      }),
-    )
-  } catch {
-    // storage unavailable — prefs still work in-memory
-  }
+  writeStored(STORAGE_KEY, {
+    colors: state.colors,
+    lastCamera: state.lastCamera,
+    basemap: state.basemap,
+  })
 }
 
 export interface PrefsState extends StoredPrefs {
@@ -111,7 +104,7 @@ export interface PrefsState extends StoredPrefs {
 }
 
 export const usePrefs = create<PrefsState>((set) => ({
-  ...load(),
+  ...(readStored(STORAGE_KEY, parseStoredPrefs) ?? defaultPrefs()),
   setColor: (domain, key, hex) =>
     set((s) => {
       if (!HEX_RE.test(hex)) return s

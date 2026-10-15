@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react'
+import type { Aircraft } from '@orbital-ops/shared'
 import { FollowButton } from '../../core/ui/FollowButton'
+import { hueStyle } from '../../core/ui/hueStyle'
+import { usePrefs } from '../../core/ui/prefsStore'
 import { formatAge, formatDeg, formatLatLon } from '../../lib/format'
 import { useWallClock } from '../../lib/wallClock'
 import { categoryOf } from './aircraftCategory'
 import { useAircraft } from './aircraftStore'
+import { aircraftName, formatAircraftAlt } from './aircraftSummary'
 import { fetchPlanePhoto, type PlanePhoto } from './planePhotos'
 
 const MS_TO_KN = 1.94384
@@ -42,6 +46,17 @@ function PhotoCard({ icao24 }: { icao24: string }) {
   )
 }
 
+/** CATEGORY value, in the hue the globe paints that category with (user palette). */
+function CategoryValue({ aircraft }: { aircraft: Aircraft }) {
+  const category = categoryOf(aircraft)
+  const color = usePrefs((s) => s.colors.aircraft[category])
+  return (
+    <dd className="hue-text" style={hueStyle(color)}>
+      {category.toUpperCase()}
+    </dd>
+  )
+}
+
 /** Info panel for the selected aircraft (live ADS-B data, wall-clock based). */
 export function AircraftPanel() {
   const selectedIcao = useAircraft((s) => s.selectedIcao)
@@ -54,6 +69,7 @@ export function AircraftPanel() {
   if (selectedIcao === null) return null
 
   return (
+    // telemetry-panel: a rule-less hook shared by the three selection panels
     <section className="hud-panel telemetry-panel">
       <header className="telemetry-header">
         <h2 className="hud-title">AIRCRAFT</h2>
@@ -64,18 +80,16 @@ export function AircraftPanel() {
           </button>
         </span>
       </header>
-      <div className="telemetry-name">{aircraft?.callsign || selectedIcao.toUpperCase()}</div>
+      <div className="telemetry-name">{aircraftName(aircraft, selectedIcao)}</div>
       <PhotoCard icao24={selectedIcao} />
       {aircraft ? (
         <dl className="telemetry-grid">
           <dt>ICAO24</dt>
           <dd>{aircraft.icao24.toUpperCase()}</dd>
           <dt>CATEGORY</dt>
-          <dd className={`cat-label-${categoryOf(aircraft)}`}>
-            {categoryOf(aircraft).toUpperCase()}
-          </dd>
+          <CategoryValue aircraft={aircraft} />
           <dt>ALT</dt>
-          <dd>{aircraft.onGround ? 'GROUND' : aircraft.altM === null ? '—' : `${Math.round(aircraft.altM)} M`}</dd>
+          <dd>{formatAircraftAlt(aircraft)}</dd>
           <dt>GS</dt>
           <dd>{aircraft.velocityMs === null ? '—' : `${Math.round(aircraft.velocityMs * MS_TO_KN)} KN`}</dd>
           <dt>TRK</dt>
@@ -90,7 +104,7 @@ export function AircraftPanel() {
           <dd>{formatAge(Math.max(0, nowMs - aircraft.tsMs))} AGO</dd>
         </dl>
       ) : (
-        <div className="passes-empty">SIGNAL LOST — AIRCRAFT AGED OUT OF THE FEED</div>
+        <div className="panel-empty">SIGNAL LOST — AIRCRAFT AGED OUT OF THE FEED</div>
       )}
     </section>
   )

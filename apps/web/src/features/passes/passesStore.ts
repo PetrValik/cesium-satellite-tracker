@@ -1,29 +1,13 @@
 import { create } from 'zustand'
 import type { ObserverGeo, PassPrediction } from '../../lib/protocol'
+import { readStored, writeStored } from '../../lib/storage'
+import { DEFAULT_OBSERVER, isValidObserver } from './observer'
 
 const STORAGE_KEY = 'orbital-ops.observer'
 
-/** Default observer: Prague (the project's home base). */
-const DEFAULT_OBSERVER: ObserverGeo = { latDeg: 50.08, lonDeg: 14.44, heightM: 200 }
-
-function loadObserver(): ObserverGeo {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return DEFAULT_OBSERVER
-    const o = JSON.parse(raw) as ObserverGeo
-    if (
-      Number.isFinite(o.latDeg) &&
-      Math.abs(o.latDeg) <= 90 &&
-      Number.isFinite(o.lonDeg) &&
-      Math.abs(o.lonDeg) <= 180 &&
-      Number.isFinite(o.heightM)
-    ) {
-      return o
-    }
-  } catch {
-    // corrupted storage — fall through to default
-  }
-  return DEFAULT_OBSERVER
+function parseObserver(value: unknown): ObserverGeo | undefined {
+  const o = value as ObserverGeo
+  return isValidObserver(o) ? o : undefined
 }
 
 export interface PassesState {
@@ -43,7 +27,7 @@ export interface PassesState {
 }
 
 export const usePasses = create<PassesState>((set) => ({
-  observer: loadObserver(),
+  observer: readStored(STORAGE_KEY, parseObserver) ?? DEFAULT_OBSERVER,
   passes: [],
   computedFor: null,
   windowStartMs: null,
@@ -51,11 +35,7 @@ export const usePasses = create<PassesState>((set) => ({
   selectedPass: null,
 
   setObserver: (observer) => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(observer))
-    } catch {
-      // storage may be unavailable (private mode) — observer still works in-memory
-    }
+    writeStored(STORAGE_KEY, observer)
     set({ observer, computedFor: null, windowStartMs: null, passes: [], selectedPass: null })
   },
 

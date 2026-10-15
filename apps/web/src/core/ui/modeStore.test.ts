@@ -18,8 +18,8 @@ function stubStorage(initial: Record<string, string> = {}): Map<string, string> 
 async function loadStore(initial?: Record<string, string>) {
   const backing = stubStorage(initial)
   vi.resetModules()
-  const { useMode } = await import('./modeStore')
-  return { useMode, backing }
+  const { useMode, transportVisible } = await import('./modeStore')
+  return { useMode, transportVisible, backing }
 }
 
 afterEach(() => {
@@ -103,9 +103,9 @@ describe('modeStore persistence', () => {
 
   it('round-trips every visibility toggle through storage', async () => {
     const { useMode, backing } = await loadStore()
-    useMode.getState().toggleSatellites() // true -> false
-    useMode.getState().toggleShips() // false -> true
-    useMode.getState().toggleAircraft() // false -> true
+    useMode.getState().toggleLayer('orbital') // true -> false
+    useMode.getState().toggleLayer('maritime') // false -> true
+    useMode.getState().toggleLayer('airspace') // false -> true
 
     expect(JSON.parse(backing.get(STORAGE_KEY)!)).toEqual({
       mode: 'orbital',
@@ -142,7 +142,7 @@ describe('modeStore persistence', () => {
     expect(useMode.getState().aircraftVisible).toBe(true)
 
     // Re-show satellites after they were toggled off, then reopen ORBITAL.
-    useMode.getState().toggleSatellites() // true -> false
+    useMode.getState().toggleLayer('orbital') // true -> false
     useMode.getState().setMode('orbital')
     expect(useMode.getState().satellitesVisible).toBe(true)
     expect(JSON.parse(backing.get(STORAGE_KEY)!)).toMatchObject({
@@ -197,5 +197,54 @@ describe('toggleDomain (tab clicks)', () => {
       aircraftVisible: true,
       mode: 'airspace',
     })
+  })
+})
+
+describe('toggleLayer (LAYERS rows)', () => {
+  it('showing a layer leaves focus where it is', async () => {
+    const { useMode, backing } = await loadStore()
+    useMode.getState().toggleLayer('maritime')
+    expect(useMode.getState()).toMatchObject({ mode: 'orbital', shipsVisible: true })
+    expect(JSON.parse(backing.get(STORAGE_KEY)!)).toMatchObject({
+      mode: 'orbital',
+      shipsVisible: true,
+    })
+  })
+
+  it('hiding the focused domain drops focus to the first visible one', async () => {
+    const { useMode } = await loadStore()
+    useMode.getState().toggleDomain('maritime') // ships on, focus maritime
+    useMode.getState().toggleDomain('airspace') // aircraft on, focus airspace
+    useMode.getState().toggleLayer('orbital') // satellites off (background)
+    expect(useMode.getState().mode).toBe('airspace')
+
+    useMode.getState().toggleLayer('airspace') // hide the focused domain
+    expect(useMode.getState()).toMatchObject({ mode: 'maritime', aircraftVisible: false })
+  })
+
+  it('keeps focus when the last visible domain is hidden', async () => {
+    const { useMode } = await loadStore()
+    useMode.getState().toggleLayer('orbital')
+    expect(useMode.getState()).toMatchObject({ mode: 'orbital', satellitesVisible: false })
+  })
+})
+
+describe('mode selectors', () => {
+  it('isDomainVisible maps each domain to its own layer flag', async () => {
+    const { isDomainVisible } = await import('./modeStore')
+    const flags = { satellitesVisible: true, shipsVisible: false, aircraftVisible: true }
+    expect(isDomainVisible(flags, 'orbital')).toBe(true)
+    expect(isDomainVisible(flags, 'maritime')).toBe(false)
+    expect(isDomainVisible(flags, 'airspace')).toBe(true)
+  })
+
+  it('transportVisible follows the ORBITAL layer only', async () => {
+    const { useMode, transportVisible } = await loadStore()
+    expect(transportVisible(useMode.getState())).toBe(true)
+    useMode.getState().toggleLayer('maritime')
+    useMode.getState().toggleLayer('airspace')
+    expect(transportVisible(useMode.getState())).toBe(true)
+    useMode.getState().toggleLayer('orbital')
+    expect(transportVisible(useMode.getState())).toBe(false)
   })
 })

@@ -14,3 +14,6 @@ export const SIGNAL_AMBER = '#ffb454'
 
 /** The tracked satellite's ground track, and ports. Mirrors tokens.css `--cyan`. */
 export const SIGNAL_CYAN = '#6ee7ff'
+
+/** Aircraft in the 'ground' band, whatever their category hue. Mirrors tokens.css `--aircraft-ground`. */
+export const SIGNAL_GROUND = '#8a93a3'

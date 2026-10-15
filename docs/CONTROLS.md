@@ -9,19 +9,23 @@ form.
 
 ## OPS modes
 
-An MFD-style tab strip switches which domain the HUD focuses on. All layers can
-render on the globe at once; the mode drives which left-rail and right-stack
-panels are shown, and which layer clicks resolve to first. Keys `1` / `2` / `3`
-switch modes (and clear the current selection); clicking an object from another
-domain jumps to its mode automatically.
+An MFD-style tab strip toggles each domain's layer (amber = on); any subset can
+render on the globe at once. Turning a domain on also focuses it: the focused
+mode drives which left-rail and right-stack panels are shown, and which layer
+clicks resolve to first. Turning the focused domain off moves focus to the first
+domain still on (tab order). Keys `1` / `2` / `3` work like the tabs; hiding a
+layer drops any selection in it. Clicking an object from another domain jumps to
+its mode automatically.
 
 | Mode | Key | Left rail | Right stack | Globe emphasis |
 |---|---|---|---|---|
-| **ORBITAL** | `1` | CATALOG — 12 satellite groups (toggle to load) + name/NORAD search | Telemetry + Passes/sky plot for the selected satellite | Constellation points colored by orbit class (LEO/MEO/GEO/HEO); selected sat gets orbit path, ground track, and visibility footprint |
-| **MARITIME** | `2` | MARITIME PICTURE — live vessel counts by type (AIS OFFLINE without a key) | Ship detail panel for the selected vessel | AIS vessels colored by type, dead-reckoned along their course |
-| **AIRSPACE** | `3` | AIR PICTURE — live aircraft count + feed age | Aircraft detail panel for the selected aircraft | ADS-B aircraft colored by altitude band, dead-reckoned between polls |
+| **ORBITAL** | `1` | CATALOG — 12 satellite groups (toggle to load) + name/NORAD search (SEARCH UNAVAILABLE when the API does not answer) | Telemetry + Passes/sky plot for the selected satellite | Constellation points colored by orbit class (LEO/MEO/GEO/HEO); selected sat gets orbit path, ground track, and visibility footprint |
+| **MARITIME** | `2` | MARITIME PICTURE — live vessel counts by type (AIS OFFLINE without a key, AIS UNAVAILABLE while a poll fails) | Ship detail panel for the selected vessel | AIS vessels colored by type, dead-reckoned along their course |
+| **AIRSPACE** | `3` | AIR PICTURE — live aircraft count + feed age, altitude-band and category filters | Aircraft detail panel for the selected aircraft | ADS-B aircraft: hue by category (civil / cargo / military), shade by altitude band, flat grey on the ground; dead-reckoned between polls |
 
-The layer toggles (below) sit under the mode content in every mode.
+The layer toggles (below) sit under the mode content in every mode. Every
+legend swatch and colored label in the panels (vessel type, aircraft category,
+orbit class) uses the same colors as the globe, including your COLORS choices.
 
 ## Mouse
 
@@ -50,9 +54,9 @@ selects it. Clicking empty space deselects **within the current mode only**.
 
 | Key | Action |
 |---|---|
-| 1 / 2 / 3 | ORBITAL / MARITIME / AIRSPACE |
-| SPACE | Play / pause simulation time |
-| , / . | Slower / faster time warp |
+| 1 / 2 / 3 | Toggle the ORBITAL / MARITIME / AIRSPACE layer (like the tabs) |
+| SPACE | Play / pause simulation time (ORBITAL layer on) |
+| , / . | Slower / faster time warp (ORBITAL layer on) |
 | N | Reset simulation to NOW |
 | H or ? | Toggle the controls help |
 
@@ -103,18 +107,22 @@ launchers. Open sheets and the HELP / COLORS dialogs close with it.
 
 ## Layer toggles
 
-The LAYERS panel is present in every mode and toggles globe overlays
-independently of the active mode. Each row shows a live count.
+The LAYERS panel is present in every mode. Each row shows a live count, and
+the BASEMAP row switches between MAP, TOPO and SAT imagery.
 
 | Layer | Default |
 |---|---|
-| VESSELS (AIS ships) | on |
-| AIRCRAFT (ADS-B) | on |
+| SATELLITES | on |
+| VESSELS (AIS ships) | off |
+| AIRCRAFT (ADS-B) | off |
 | LAUNCH SITES | on |
 | MAJOR PORTS | off |
 
-Hiding the vessels or aircraft layer also drops any selection in that layer.
-Mode and layer choices persist in `localStorage`.
+The SATELLITES / VESSELS / AIRCRAFT rows are the same layers as the tabs, but
+turning one on from here does not move focus. Turning off the focused domain
+moves focus to the first domain still on, exactly like its tab. Hiding a layer
+also drops any selection in that layer. While sim time is off NOW the live rows
+read SUSP. Mode and layer choices persist in `localStorage`.
 
 ## Observer & pass prediction (ORBITAL)
 
@@ -123,8 +131,9 @@ elevation for your observer over the **next 24 h** and draws the selected pass
 on a polar azimuth/elevation sky plot.
 
 - **Observer:** edit latitude/longitude in the OBS fields (Enter or blur to
-  commit), or press **GPS** to use browser geolocation. The default observer is
-  Prague (50.08, 14.44). The observer persists in `localStorage`.
+  commit), or press **GPS** to use browser geolocation; a denied permission or a
+  failed fix is reported under the fields. The default observer is Prague
+  (50.08, 14.44). The observer persists in `localStorage`.
 - **Pass list:** each row shows AOS time, max elevation, and duration. The **→**
   button jumps sim time to that pass's AOS, sets warp to ×10, and starts
   playing, so you can watch the pass unfold.
