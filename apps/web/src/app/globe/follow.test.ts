@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Viewer } from 'cesium'
-import type { Ship } from '@orbital-ops/shared'
+import type { Satellite, Ship } from '@orbital-ops/shared'
 
 // The domain stores import lib/api; nothing here fetches.
 vi.mock('../../lib/api', () => ({ api: {}, ApiError: class extends Error {} }))
 
 import { useFollow } from '../../core/ui/followStore'
 import { useMode } from '../../core/ui/modeStore'
+import { useSatellites } from '../../core/ui/satelliteStore'
 import { useAircraft } from '../../features/airspace/aircraftStore'
-import { useCatalog } from '../../features/catalog/catalogStore'
 import { useShips } from '../../features/maritime/shipsStore'
 import { GlobeFollow, orbitalFollowRangeM, releasesFollow } from './follow'
 import { LayerSync, type SyncedLayers } from './layerSync'
@@ -81,7 +81,7 @@ beforeEach(() => {
     shipsVisible: true,
     aircraftVisible: false,
   })
-  useCatalog.setState({ selectedId: null })
+  useSatellites.setState({ selectedId: null })
   useShips.setState({ ships: [SHIP], byMmsi: new Map([[SHIP.mmsi, SHIP]]), selectedMmsi: null })
   useAircraft.setState({ selectedIcao: null })
 })
@@ -186,5 +186,72 @@ describe('LayerSync + GlobeFollow', () => {
     useMode.getState().toggleLayer('orbital')
     expect(useFollow.getState().following).toBe(true)
     expect(rig.unfollow).not.toHaveBeenCalled()
+  })
+})
+
+describe('LayerSync satellite selection', () => {
+  const HIT: Satellite = {
+    noradId: 99_001,
+    name: 'SEARCH HIT',
+    tle1: '1'.padEnd(69, 'x'),
+    tle2: '2'.padEnd(69, 'x'),
+    groups: [],
+  }
+
+  /** Mount with a tracker that accepts every satellite (an always-usable TLE). */
+  function mount() {
+    const f = fakes()
+    f.satellite.active = true
+    const layers = fakeLayers()
+    const tracker = { select: vi.fn(() => null), active: true }
+    layers.satellite = tracker
+    const sync = new LayerSync(layers, f.follow)
+    disposers.push(() => f.follow.dispose(), () => sync.dispose())
+    return { ...f, layers, tracker }
+  }
+
+  beforeEach(() => {
+    useMode.setState({ mode: 'orbital' })
+    useSatellites.setState({ byId: new Map(), selectedId: null })
+  })
+
+  it('a search hit outside the active groups is tracked: registerSat then select', () => {
+    const { layers, tracker } = mount()
+    useSatellites.getState().registerSat(HIT)
+    useSatellites.getState().select(HIT.noradId)
+    expect(tracker.select).toHaveBeenCalledTimes(1)
+    expect(tracker.select).toHaveBeenLastCalledWith(HIT, expect.any(Number))
+    expect(layers.constellation.setSelected).toHaveBeenLastCalledWith(HIT.noradId)
+  })
+
+  it('a rebuild re-applies the selection already in the store (context loss keeps it)', () => {
+    useSatellites.setState({ byId: new Map([[HIT.noradId, HIT]]), selectedId: HIT.noradId })
+    const { layers, tracker } = mount()
+    expect(tracker.select).toHaveBeenCalledWith(HIT, expect.any(Number))
+    expect(layers.constellation.setSelected).toHaveBeenCalledWith(HIT.noradId)
+  })
+
+  it('a catalog publish into byId does not re-apply an unchanged selection', () => {
+    const { tracker } = mount()
+    useSatellites.getState().registerSat(HIT)
+    useSatellites.getState().select(HIT.noradId)
+    useSatellites.getState().upsertSats([{ ...HIT, name: 'FROM GROUP' }])
+    expect(tracker.select).toHaveBeenCalledTimes(1)
+    expect(useSatellites.getState().selectedId).toBe(HIT.noradId)
+  })
+
+  it('hiding SATELLITES in LAYERS deselects and releases the follow lock', () => {
+    const { rig, layers, tracker } = mount()
+    useSatellites.getState().registerSat(HIT)
+    useSatellites.getState().select(HIT.noradId)
+    useFollow.getState().setFollowing(true)
+    expect(rig.follow).toHaveBeenCalledTimes(1)
+
+    useMode.getState().toggleLayer('orbital')
+    expect(useSatellites.getState().selectedId).toBeNull()
+    expect(tracker.select).toHaveBeenLastCalledWith(null, expect.any(Number))
+    expect(layers.constellation.setSelected).toHaveBeenLastCalledWith(null)
+    expect(useFollow.getState().following).toBe(false)
+    expect(rig.unfollow).toHaveBeenCalledTimes(1)
   })
 })

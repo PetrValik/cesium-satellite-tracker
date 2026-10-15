@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Satellite } from '@orbital-ops/shared'
+import { useSatellites } from '../../core/ui/satelliteStore'
 import { api } from '../../lib/api'
 import { formatCount } from '../../lib/format'
 import { useCatalog } from './catalogStore'
@@ -58,8 +59,8 @@ function SearchBox() {
   const debounce = useRef<ReturnType<typeof setTimeout>>(undefined)
   // Monotonic request id: a slow early response must not overwrite a later one.
   const searchSeq = useRef(0)
-  const registerSat = useCatalog((s) => s.registerSat)
-  const select = useCatalog((s) => s.select)
+  const registerSat = useSatellites((s) => s.registerSat)
+  const select = useSatellites((s) => s.select)
 
   useEffect(() => () => clearTimeout(debounce.current), [])
 

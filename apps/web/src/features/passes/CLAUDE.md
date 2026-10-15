@@ -2,7 +2,7 @@
 Pass prediction for one observer: the observer store (persisted via `lib/storage`, validated by `observer`), the 24 h prediction panel with its observer editor, and the polar az/el sky plot — the design's signature widget.
 
 ## Depends on
-`lib/orbital` (`createSatrec`, `predictPasses`), `lib/protocol` (`ObserverGeo`, `PassPrediction`), `core/sim/simClock` (the prediction window is anchored at SIM time, not wall time), and `features/catalog/catalogStore` for the selected satellite — the cross-slice read `docs/ARCHITECTURE.md:35` permits.
+`lib/orbital` (`createSatrec`, `predictPasses`), `lib/protocol` (`ObserverGeo`, `PassPrediction`), `core/sim/simClock` (the prediction window is anchored at SIM time, not wall time), and `core/ui/satelliteStore` for the selected satellite.
 
 ## Invariants
 - Prediction runs on the main thread, deferred off the click by a `setTimeout`, through `lib/orbital.predictPasses` — the only pass predictor; the worker has no passes job.

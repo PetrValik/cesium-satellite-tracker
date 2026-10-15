@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../lib/api', () => ({ api: {}, ApiError: class extends Error {} }))
 
 import { useMode } from '../../core/ui/modeStore'
+import { useSatellites } from '../../core/ui/satelliteStore'
 import { useAircraft } from '../../features/airspace/aircraftStore'
-import { useCatalog } from '../../features/catalog/catalogStore'
 import { useShips } from '../../features/maritime/shipsStore'
 import { claimOrder, createTapRouter } from './tapRouting'
 
@@ -42,7 +42,7 @@ beforeEach(() => {
     shipsVisible: true,
     aircraftVisible: true,
   })
-  useCatalog.setState({ selectedId: null })
+  useSatellites.setState({ selectedId: null })
   useShips.setState({ selectedMmsi: null })
   useAircraft.setState({ selectedIcao: null })
 })
@@ -60,7 +60,7 @@ describe('createTapRouter', () => {
     useMode.setState({ mode: 'maritime' })
     router()([SAT, SHIP])
     expect(useShips.getState().selectedMmsi).toBe(211_000_000)
-    expect(useCatalog.getState().selectedId).toBeNull()
+    expect(useSatellites.getState().selectedId).toBeNull()
   })
 
   it('a cross-domain claim selects there and switches mode', () => {
@@ -70,9 +70,9 @@ describe('createTapRouter', () => {
   })
 
   it('a tap on the selected object’s own marker keeps it selected', () => {
-    useCatalog.setState({ selectedId: 25_544 })
+    useSatellites.setState({ selectedId: 25_544 })
     router()([MARKER, { sat: 99 }])
-    expect(useCatalog.getState().selectedId).toBe(25_544)
+    expect(useSatellites.getState().selectedId).toBe(25_544)
     useMode.setState({ mode: 'maritime' })
     useShips.setState({ selectedMmsi: 211_000_000 })
     router()([SHIP_DECAL, { ship: 1 }])
@@ -80,22 +80,22 @@ describe('createTapRouter', () => {
   })
 
   it('an orbit-ring near-miss keeps the ORBITAL selection; footprint or nothing deselects', () => {
-    useCatalog.setState({ selectedId: 25_544 })
+    useSatellites.setState({ selectedId: 25_544 })
     router()([RING])
-    expect(useCatalog.getState().selectedId).toBe(25_544)
+    expect(useSatellites.getState().selectedId).toBe(25_544)
     router()([FOOTPRINT])
-    expect(useCatalog.getState().selectedId).toBeNull()
-    useCatalog.setState({ selectedId: 25_544 })
+    expect(useSatellites.getState().selectedId).toBeNull()
+    useSatellites.setState({ selectedId: 25_544 })
     router()([])
-    expect(useCatalog.getState().selectedId).toBeNull()
+    expect(useSatellites.getState().selectedId).toBeNull()
   })
 
   it('an empty tap deselects only in the focused mode, where the ring is no near-miss', () => {
-    useCatalog.setState({ selectedId: 25_544 })
+    useSatellites.setState({ selectedId: 25_544 })
     useShips.setState({ selectedMmsi: 211_000_000 })
     useMode.setState({ mode: 'maritime' })
     router()([RING])
     expect(useShips.getState().selectedMmsi).toBeNull()
-    expect(useCatalog.getState().selectedId).toBe(25_544)
+    expect(useSatellites.getState().selectedId).toBe(25_544)
   })
 })

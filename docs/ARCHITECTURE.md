@@ -13,9 +13,9 @@ src/
 ├── core/
 │   ├── engine/   # non-React Cesium machinery (viewer, CameraRig, tap picking, renderer health)
 │   ├── sim/      # simulation clock + coarse wall clock
-│   └── ui/       # cross-domain UI state (mode, follow, prefs, hud, sheet) + shared atoms
+│   └── ui/       # cross-domain UI state (mode, follow, prefs, hud, sheet, satellites) + shared atoms
 ├── features/     # one folder per slice
-│   ├── catalog/        # satellite groups, search, satellite selection
+│   ├── catalog/        # satellite groups, the worker's working set, search
 │   ├── constellation/  # whole-catalog rendering
 │   ├── tracking/       # selected satellite: propagation, visuals, telemetry
 │   ├── passes/         # pass prediction + sky plot
@@ -31,10 +31,10 @@ src/
 **Rules**
 
 1. A slice may import from `core/`, `lib/`, `data/`, and `@orbital-ops/shared`
-   — never from another slice's folder.
-   *Exception:* satellite-domain slices (`tracking`, `passes`,
-   `constellation`) may read `catalog/catalogStore` — it is the satellite
-   domain's entity/selection store.
+   — never from another slice's folder. State two slices share is promoted
+   into `core/`: satellite entities and the selection live in
+   `core/ui/satelliteStore` (`catalog` publishes loads and search hits;
+   any slice may read it or change the selection).
 2. Only `app/` and `src/App.tsx` compose slices. If two slices need to meet,
    they meet there or through a `core/ui` store.
 3. `core/` never imports from `features/`.

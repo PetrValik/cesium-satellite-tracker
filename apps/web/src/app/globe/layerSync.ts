@@ -3,9 +3,9 @@ import { setViewerBasemap } from '../../core/engine/createViewer'
 import { isSimLive, simClock } from '../../core/sim/simClock'
 import { isDomainVisible, OPS_MODES, transportVisible, useMode } from '../../core/ui/modeStore'
 import { usePrefs } from '../../core/ui/prefsStore'
+import { useSatellites } from '../../core/ui/satelliteStore'
 import type { AircraftLayer } from '../../features/airspace/AircraftLayer'
 import { useAircraft, visibleAircraft } from '../../features/airspace/aircraftStore'
-import { useCatalog } from '../../features/catalog/catalogStore'
 import type { ConstellationLayer } from '../../features/constellation/ConstellationLayer'
 import type { LaunchSitesLayer } from '../../features/infra/LaunchSitesLayer'
 import type { PortsLayer } from '../../features/infra/PortsLayer'
@@ -62,7 +62,7 @@ export class LayerSync {
     this._applyPalettes()
     // The selected satellite, applied once for a rebuild like the live
     // domains above.
-    const selectedId = useCatalog.getState().selectedId
+    const selectedId = useSatellites.getState().selectedId
     if (selectedId !== null) this._applySatellite(selectedId)
 
     // Subscriptions last: nothing after them can throw, so a failed build
@@ -106,7 +106,7 @@ export class LayerSync {
           else this._applyLiveVisibility()
           // Hiding a layer with a selected (maybe followed) object would
           // leave a phantom selection — drop it; ORBITAL's tracking visuals
-          // and telemetry go with it through the catalog subscription. User
+          // and telemetry go with it through the satellite subscription. User
           // toggles only: a warp-driven hide (_applyLiveVisibility) keeps
           // the selection alive.
           if (!visible) deselectInMode(domain)
@@ -118,7 +118,7 @@ export class LayerSync {
           simClock.get().resetToNow()
         }
       }),
-      useCatalog.subscribe((state, prev) => {
+      useSatellites.subscribe((state, prev) => {
         if (state.selectedId !== prev.selectedId) this._applySatellite(state.selectedId)
       }),
     )
@@ -172,7 +172,7 @@ export class LayerSync {
     const follow = this._follow
     constellation.setSelected(noradId)
     follow.dropSatellite()
-    const sat = noradId === null ? undefined : useCatalog.getState().byId.get(noradId)
+    const sat = noradId === null ? undefined : useSatellites.getState().byId.get(noradId)
     const seed = satellite.select(sat ?? null, simClock.get().epochMs)
     if (noradId === null) {
       follow.cleared('orbital')

@@ -6,7 +6,7 @@
 import { FollowButton } from '../../core/ui/FollowButton'
 import { hueStyle } from '../../core/ui/hueStyle'
 import { usePrefs } from '../../core/ui/prefsStore'
-import { useCatalog } from '../catalog/catalogStore'
+import { useSatellites } from '../../core/ui/satelliteStore'
 import { tleInclinationDeg } from './satSummary'
 import { useTelemetry } from './telemetryStore'
 import { formatDeg, formatKm, formatLatLon } from '../../lib/format'
@@ -21,8 +21,8 @@ export function TelemetryPanel() {
   const lonDeg = useTelemetry((s) => s.lonDeg)
   const periodMinutes = useTelemetry((s) => s.periodMinutes)
   const classColor = usePrefs((s) => (orbitClass === null ? null : s.colors.satellites[orbitClass]))
-  const select = useCatalog((s) => s.select)
-  const sat = useCatalog((s) => (noradId === null ? undefined : s.byId.get(noradId)))
+  const select = useSatellites((s) => s.select)
+  const sat = useSatellites((s) => (noradId === null ? undefined : s.byId.get(noradId)))
 
   if (noradId === null) return null
   const inclinationDeg = sat ? tleInclinationDeg(sat.tle2) : null

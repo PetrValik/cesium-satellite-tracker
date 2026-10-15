@@ -6,9 +6,9 @@
  */
 import { useEffect, useState } from 'react'
 import { simClock, useSimClock } from '../../core/sim/simClock'
+import { useSatellites } from '../../core/ui/satelliteStore'
 import { formatDuration, formatUtcTime } from '../../lib/format'
 import { createSatrec, MIN_MAX_ELEVATION_DEG, predictPasses } from '../../lib/orbital'
-import { useCatalog } from '../catalog/catalogStore'
 import { DEFAULT_OBSERVER, isValidObserver } from './observer'
 import { usePasses } from './passesStore'
 import { SkyPlot } from './SkyPlot'
@@ -16,7 +16,7 @@ import { SkyPlot } from './SkyPlot'
 const WINDOW_HOURS = 24
 
 export function PassesPanel() {
-  const sat = useCatalog((s) => (s.selectedId === null ? undefined : s.byId.get(s.selectedId)))
+  const sat = useSatellites((s) => (s.selectedId === null ? undefined : s.byId.get(s.selectedId)))
   const observer = usePasses((s) => s.observer)
   const passes = usePasses((s) => s.passes)
   const computing = usePasses((s) => s.computing)

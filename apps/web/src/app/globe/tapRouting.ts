@@ -1,8 +1,8 @@
 import type { WorldDecal } from '../../core/engine/WorldDecal'
 import { OPS_MODES, useMode, type OpsMode } from '../../core/ui/modeStore'
+import { useSatellites } from '../../core/ui/satelliteStore'
 import type { AircraftLayer } from '../../features/airspace/AircraftLayer'
 import { useAircraft } from '../../features/airspace/aircraftStore'
-import { useCatalog } from '../../features/catalog/catalogStore'
 import type { ConstellationLayer } from '../../features/constellation/ConstellationLayer'
 import type { ShipsLayer } from '../../features/maritime/ShipsLayer'
 import { useShips } from '../../features/maritime/shipsStore'
@@ -66,9 +66,9 @@ export function createTapRouter(t: TapTargets): (hits: readonly unknown[]) => vo
   const claimers: Record<OpsMode, Claimer> = {
     orbital: claimer(
       (hit) =>
-        t.tracking.ownsMarker(hit) ? useCatalog.getState().selectedId : t.constellation.idOf(hit),
+        t.tracking.ownsMarker(hit) ? useSatellites.getState().selectedId : t.constellation.idOf(hit),
       'orbital',
-      (id) => useCatalog.getState().select(id),
+      (id) => useSatellites.getState().select(id),
     ),
     maritime: claimer(
       (hit) => (t.shipDecal.owns(hit) ? useShips.getState().selectedMmsi : t.ships.idOf(hit)),
