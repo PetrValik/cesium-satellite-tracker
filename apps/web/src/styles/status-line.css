@@ -1,0 +1,108 @@
+/* ============================================================
+   status line — top strip: wordmark, live readouts, OFFLINE badge
+   ============================================================ */
+
+.status-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding: calc(9px + var(--safe-top)) calc(16px + var(--safe-right)) 9px calc(16px + var(--safe-left));
+  background: var(--status-fade);
+  font-size: var(--fs-label-lg);
+  letter-spacing: var(--ls-label);
+  pointer-events: none; /* readout only — let the globe take drags */
+  white-space: nowrap;
+}
+
+.status-brand {
+  color: var(--amber);
+  font-weight: 700;
+  letter-spacing: var(--ls-wide);
+  text-shadow: var(--glow-amber-text);
+}
+
+.status-item {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* dim middot separators between readouts */
+.status-line > :not(:first-child)::before {
+  content: '·';
+  margin-right: var(--sp-3);
+  color: var(--text-dim);
+  opacity: 0.55;
+}
+
+.status-offline {
+  color: var(--alert);
+  border: 1px solid var(--alert-outline);
+  background: var(--alert-wash);
+  padding: 1px 8px 2px;
+  border-radius: var(--radius);
+}
+
+/* offline badge swaps its middot for a blinking indicator square */
+.status-line > .status-offline::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: var(--sp-2);
+  background: var(--alert);
+  opacity: 1;
+  animation: blink-hard 1.5s steps(1, end) infinite;
+}
+
+@keyframes blink-hard {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* ---- compact (phone) ----------------------------------------------- */
+
+.is-compact .status-line {
+  gap: var(--sp-2);
+  padding: calc(8px + var(--safe-top)) calc(12px + var(--safe-right)) 8px calc(12px + var(--safe-left));
+  overflow: hidden;
+}
+
+.is-compact .status-line > :not(:first-child)::before {
+  margin-right: var(--sp-2);
+}
+
+/* OFFLINE outranks everything but the brand: it moves up and never shrinks */
+.is-compact .status-brand {
+  order: -2;
+  flex: none;
+}
+
+.is-compact .status-offline {
+  order: -1;
+  flex: none;
+}
+
+.is-compact .status-item {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 599px) {
+  .is-compact .status-tle,
+  .is-compact .status-sim,
+  .is-compact .status-long {
+    display: none;
+  }
+}

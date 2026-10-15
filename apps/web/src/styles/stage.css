@@ -1,0 +1,74 @@
+/* ============================================================
+   stage — app root, globe, HUD layer, hidden HUD
+   The globe fills the viewport; the HUD layer floats over it and
+   passes pointer events through except on its own children.
+   ============================================================ */
+
+.app-root,
+.globe-root {
+  position: absolute;
+  inset: 0;
+}
+
+/* nothing may widen the layout viewport: on mobile an overflowing child
+   makes the page pinch-zoomable and leaves it zoomed after a rotation */
+.app-root {
+  overflow: hidden;
+}
+
+.globe-root .cesium-viewer,
+.globe-root .cesium-widget,
+.globe-root .cesium-widget canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.hud-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+  /* no double-tap zoom on fast repeated taps (rate steps); the canvas keeps
+     Cesium's own touch-action: none */
+  touch-action: manipulation;
+  /* hide / show fade: see hidden HUD below */
+  transition:
+    opacity var(--t-hud) var(--ease-out),
+    scale var(--t-hud) var(--ease-out),
+    visibility 0s;
+}
+
+.hud-layer > * {
+  pointer-events: auto;
+}
+
+/* ---- hidden HUD ("clean globe") ---------------------------------------
+   core/ui/hudStore. App sets .is-hud-hidden on .app-root and `inert` on the
+   layer, so it leaves the tab order and the accessibility tree at once. The
+   layer fades and scales out a touch — every cluster slides toward its own
+   edge — then visibility:hidden drops it from hit-testing. Showing flips
+   visibility first, so the fade-in is seen. Credits live outside the layer. */
+
+.is-hud-hidden > .hud-layer {
+  opacity: 0;
+  scale: var(--hud-retract);
+  visibility: hidden;
+  transition:
+    opacity var(--t-hud) var(--ease-out),
+    scale var(--t-hud) var(--ease-out),
+    visibility 0s linear var(--t-hud);
+}
+
+/* taps during the fade-out already fall through to the globe */
+.is-hud-hidden > .hud-layer * {
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* the hidden-HUD swap is instant: no fade, no scale, no visibility delay */
+  .hud-layer,
+  .is-hud-hidden > .hud-layer {
+    transition: none !important;
+    animation: none !important;
+  }
+}

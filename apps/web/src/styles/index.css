@@ -1,0 +1,48 @@
+/* ============================================================
+   ORBITAL OPS — HUD stylesheet (main.tsx imports only this file)
+   Colour, type and geometry values come from tokens.css; no raw hex
+   in a component file.
+
+   One file per component or area, each holding ALL of that
+   component's rules: hover, touch (pointer: coarse), compact
+   (.is-compact), landscape, hidden-HUD and reduced-motion overrides
+   sit next to the rule they override.
+
+   The import order is part of the cascade — at equal specificity the
+   later file wins. Generic first (tokens, base, stage, panel,
+   controls), then components. Order that matters today:
+   - panel.css / controls.css before every file that restyles a
+     .hud-panel or .hud-button;
+   - controls-late.css after telemetry.css, transport.css and
+     passes.css (their header, rate, PLAY and GO TO buttons);
+   - mode-tabs.css after controls-late.css: on touch pointers the
+     tabs keep their own side padding over the finger-sized button's;
+   - dock.css keeps .hud-dock > .hide-button after the dock button
+     rule (same specificity).
+   ============================================================ */
+
+@import './tokens.css';
+@import './base.css';
+@import './stage.css';
+@import './panel.css';
+@import './controls.css';
+@import './status-line.css';
+@import './rail.css';
+@import './search.css';
+@import './telemetry.css';
+@import './transport.css';
+@import './passes.css';
+@import './cards.css';
+@import './controls-late.css';
+@import './mode-tabs.css';
+@import './launchers.css';
+@import './dialogs.css';
+@import './colors.css';
+@import './boot.css';
+@import './engine-error.css';
+@import './credits.css';
+@import './cluster.css';
+@import './sheet.css';
+@import './chip.css';
+@import './dock.css';
+@import './restore.css';

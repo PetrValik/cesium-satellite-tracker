@@ -22,6 +22,8 @@
     transparent 1px 3px
   );
   --shadow-pop: 0 10px 26px rgba(3, 5, 9, 0.65); /* floating popovers */
+  --scrim: rgba(3, 5, 9, 0.6); /* dialog backdrop */
+  --status-fade: linear-gradient(rgba(6, 9, 15, 0.9), rgba(6, 9, 15, 0)); /* --space fading out under the status line */
 
   /* ---- text ------------------------------------------------ */
   --text: #e8eef7;
@@ -29,7 +31,7 @@
 
   /* ---- signal amber (primary accent, CRT warmth) ----------- */
   --amber: #ffb454;
-  --amber-bright: #ffe8c7; /* matches SELECTED_OUTLINE_COLOR in engine */
+  --amber-bright: #ffe8c7; /* live marker fill on the sky plot (.sky-live) */
   --amber-outline: rgba(255, 180, 84, 0.55);
   --amber-soft: rgba(255, 180, 84, 0.35);
   --amber-wash: rgba(255, 180, 84, 0.12);
@@ -88,10 +90,11 @@
   /* ---- touch + bottom-band geometry ------------------------- */
   --tap: 44px; /* preferred touch target */
   --tap-min: 40px; /* floor for dense list rows */
-  --tab-h: 25px; /* mode tab height (44 on coarse pointers) */
-  --transport-h: 43px; /* desktop transport bar height (64 on coarse) */
+  --tab-h: 25px; /* measured mode-tab height (--tap on coarse); feeds --compact-top only */
+  --transport-h: 43px; /* measured desktop transport bar height (64 on coarse); feeds the
+                          launcher / credits lift only — the bar sizes to its content */
   --gutter-compact: 8px;
-  --launcher-gap: 17px; /* HELP · COLORS · HIDE row; keeps COLORS at its old left:96px */
+  --launcher-gap: 17px; /* between the desktop HELP · COLORS · HIDE launchers */
   --credits-row: 20px; /* attribution line under the compact bottom cluster */
   --sheet-max: 55vh;
   --restore-size: 32px; /* lone "show controls" button (--tap on coarse) */

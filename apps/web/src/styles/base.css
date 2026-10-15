@@ -1,0 +1,85 @@
+/* ============================================================
+   base — reset, page, selection, focus ring, scrollbars
+   Element-level defaults every component builds on.
+   ============================================================ */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+html,
+body {
+  /* no pull-to-refresh / rubber-band from touches that start on the HUD */
+  overscroll-behavior: none;
+}
+
+body {
+  background: var(--space);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--fs-data);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: var(--amber-soft);
+}
+
+:focus-visible {
+  outline: 1px solid var(--amber);
+  outline-offset: 2px;
+}
+
+/* thin dark scrollbars inside instrument panels */
+.hud-layer *::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.hud-layer *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.hud-layer *::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+}
+
+@media (hover: hover) {
+  .hud-layer *::-webkit-scrollbar-thumb:hover {
+    background: var(--scroll-thumb-hover);
+  }
+}
+
+.rail-panel,
+.right-stack,
+.pass-list,
+.search-results,
+.sheet-body,
+.dialog-panel {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
+
+/* ---- reduced motion ------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  /* no animation or transition anywhere; the boot sweep and live pulses stop */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

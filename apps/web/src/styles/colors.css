@@ -1,0 +1,124 @@
+/* ============================================================
+   COLORS panel — palette grid and swatch picker
+   ============================================================ */
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--sp-1) var(--sp-4);
+}
+
+.color-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: 2px 0;
+}
+
+.color-row-label {
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+  color: var(--text-dim);
+}
+
+/* ---- swatch picker (COLORS panel) ------------------------------- */
+/* Replaces input[type=color]: the native OS dialog is a white light-mode
+   popup that breaks the MFD illusion. The popover portals to <body> with
+   fixed positioning — the settings panel scrolls, and its backdrop-filter
+   + clip-path would trap and clip an absolutely positioned child. */
+
+.color-chip {
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition:
+    border-color var(--t-fast) var(--ease-out),
+    box-shadow var(--t-fast) var(--ease-out);
+}
+
+.color-chip[aria-expanded='true'] {
+  border-color: var(--amber-outline);
+  box-shadow: var(--glow-amber-box);
+}
+
+@media (hover: hover) {
+  .color-chip:hover {
+    border-color: var(--amber-outline);
+    box-shadow: var(--glow-amber-box);
+  }
+}
+
+.swatch-popover {
+  position: fixed;
+  top: 0;
+  left: 0;
+  visibility: hidden; /* revealed by JS once measured and placed */
+  z-index: 60; /* above the settings backdrop (50) */
+  padding: 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius);
+  background: var(--panel-bg-solid);
+  box-shadow: var(--shadow-pop);
+}
+
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 20px);
+  gap: 6px;
+}
+
+.swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition:
+    border-color var(--t-fast) var(--ease-out),
+    box-shadow var(--t-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .swatch:hover {
+    border-color: var(--amber-outline);
+    box-shadow: var(--glow-amber-box);
+  }
+}
+
+/* active color: amber ring with a dark gap so it reads on any swatch hue */
+.swatch.is-selected {
+  border-color: var(--space);
+  box-shadow:
+    0 0 0 2px var(--space),
+    0 0 0 3px var(--amber);
+}
+
+.swatch-hex {
+  margin-top: var(--sp-2);
+  text-align: center;
+  text-transform: uppercase;
+}
+
+/* ---- touch pointers ------------------------------------------------ */
+
+@media (pointer: coarse) {
+  .color-chip {
+    width: 48px;
+    height: var(--tap-min);
+  }
+
+  .swatch-grid {
+    grid-template-columns: repeat(6, var(--tap-min));
+    gap: var(--sp-1);
+  }
+
+  .swatch {
+    width: var(--tap-min);
+    height: var(--tap-min);
+  }
+}

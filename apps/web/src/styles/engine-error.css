@@ -1,0 +1,55 @@
+/* ============================================================
+   engine fault — the full-screen panel when WebGL cannot start
+   ============================================================ */
+
+.engine-error {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--scanlines), var(--space);
+  padding: var(--sp-4);
+}
+
+.engine-error-panel {
+  max-width: 440px;
+  padding: 22px 28px;
+  border: 1px solid var(--alert-outline);
+  background: var(--panel-bg);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--chamfer)) 0,
+    100% var(--chamfer),
+    100% 100%,
+    0 100%
+  );
+  position: relative;
+  text-align: center;
+}
+
+.engine-error-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 9px;
+  height: 9px;
+  border-top: 2px solid var(--alert);
+  border-left: 2px solid var(--alert);
+  opacity: 0.8;
+}
+
+.engine-error h1 {
+  margin: 0 0 var(--sp-3);
+  color: var(--alert);
+  letter-spacing: var(--ls-boot);
+  font-size: var(--fs-readout);
+  text-shadow: var(--glow-alert-text);
+}
+
+.engine-error p {
+  margin: var(--sp-1) 0;
+  color: var(--text-dim);
+  font-size: var(--fs-data);
+  letter-spacing: var(--ls-data);
+}

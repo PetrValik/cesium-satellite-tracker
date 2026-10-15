@@ -1,0 +1,75 @@
+/* ============================================================
+   selection chip — the compact HUD's selection header
+   ============================================================ */
+
+.selection-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 6px 6px 6px 12px;
+  border-color: var(--hairline-strong);
+  box-shadow: inset 0 2px 0 var(--amber-glow);
+}
+
+.chip-readout {
+  display: flex;
+  flex: 1 1 220px;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.chip-kind,
+.chip-key {
+  color: var(--text-dim);
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+}
+
+.chip-kind {
+  flex: none;
+}
+
+.chip-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--amber);
+  font-size: var(--fs-callout);
+  font-weight: 600;
+  letter-spacing: var(--ls-data);
+  text-overflow: ellipsis;
+  text-shadow: var(--glow-amber-text);
+  white-space: nowrap;
+}
+
+.chip-value {
+  flex: none;
+  font-size: var(--fs-data);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--ls-data);
+  white-space: nowrap;
+}
+
+.chip-actions {
+  display: flex;
+  flex: 1 0 auto;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* ▴/▾ can come from different fallback fonts: a fixed cell keeps the
+   DETAILS button the same width open and closed. The gap is a margin, not a
+   text space — touch buttons are inline-flex, which drops the space. */
+.chip-chevron {
+  display: inline-block;
+  width: 1ch;
+  margin-inline-end: 1ch;
+  text-align: center;
+}
+
+/* ✕ glyph reads at a glance on the finger-sized button */
+.chip-deselect {
+  font-size: var(--fs-data-lg);
+}

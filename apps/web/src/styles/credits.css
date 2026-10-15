@@ -1,0 +1,84 @@
+/* ============================================================
+   Cesium credits — the map attribution line
+   Lifted above the desktop transport bar on narrower screens:
+   see "what the bar lifts" in transport.css.
+   ============================================================ */
+
+/* attribution stays visible (legal) but reads as fine print */
+.cesium-credits {
+  position: absolute;
+  bottom: calc(4px + var(--safe-bottom));
+  right: calc(8px + var(--safe-right));
+  z-index: 5;
+  max-width: calc(100% - 16px);
+  font-size: var(--fs-micro);
+  font-family: var(--mono);
+  color: var(--text-dim);
+  opacity: 0.45;
+  transition: opacity var(--t-fast) var(--ease-out);
+}
+
+/* Cesium positions its credit block absolutely at left:0 of this
+   (otherwise zero-width) container, which pushed the logo and the
+   "Data attribution" link off the right edge of the screen. Laid out in
+   flow instead, the container sizes to its content from the right. */
+.cesium-credits .cesium-widget-credits {
+  position: static;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  column-gap: var(--sp-2);
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+  text-shadow: none;
+  white-space: nowrap;
+}
+
+.cesium-credits .cesium-credit-expand-link {
+  padding-left: 0;
+}
+
+@media (hover: hover) {
+  .cesium-credits:hover {
+    opacity: 1;
+  }
+}
+
+/* no hover on touch, so the fine print never brightens — start brighter */
+@media (hover: none) {
+  .cesium-credits {
+    opacity: 0.75;
+  }
+}
+
+.cesium-credits a {
+  color: var(--text-dim);
+}
+
+.cesium-credits img {
+  height: 18px;
+  width: auto;
+  vertical-align: middle;
+}
+
+/* ---- compact (phone) ----------------------------------------------- */
+
+/* its own line under the bottom cluster, never covered */
+
+.is-compact .cesium-credits {
+  bottom: var(--safe-bottom);
+  right: calc(var(--safe-right) + var(--gutter-compact));
+  max-width: calc(100% - 2 * var(--gutter-compact));
+  height: var(--credits-row);
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  /* stays legible over a bright basemap */
+  background: var(--panel-bg);
+}
+
+.is-compact .cesium-credits img {
+  height: 14px;
+}

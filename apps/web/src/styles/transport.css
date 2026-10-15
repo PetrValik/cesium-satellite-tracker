@@ -1,0 +1,287 @@
+/* ============================================================
+   transport bar — tape deck, bottom center
+   Desktop: one row centred at the bottom. Compact: two rows
+   (controls / full-width scrub) at the foot of the bottom cluster.
+   ============================================================ */
+
+.transport-bar {
+  position: absolute;
+  bottom: calc(var(--sp-3) + var(--safe-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 8px 14px;
+}
+
+.transport-play {
+  min-width: 36px;
+  color: var(--amber);
+  border-color: var(--amber-soft);
+}
+
+/* segmented warp cluster */
+.transport-rates {
+  display: flex;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+}
+
+.transport-rates .rate-button {
+  border: 0;
+  border-right: 1px solid var(--hairline);
+  border-radius: 0;
+  min-width: 42px;
+  padding: 5px 7px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.transport-rates .rate-button:last-child {
+  border-right: 0;
+}
+
+@media (hover: hover) {
+  .transport-rates .rate-button:hover {
+    color: var(--amber);
+  }
+}
+
+.rate-button.is-active {
+  color: var(--amber);
+  background: var(--amber-wash);
+  box-shadow: var(--glow-amber-box);
+  text-shadow: var(--glow-amber-text);
+}
+
+/* scrub: thin hairline track, amber thumb, center "NOW" tick */
+.transport-scrub {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 180px;
+  height: 16px;
+  margin: 0;
+  /* vertical tick marking t=0 (wall-clock now), drawn behind the track */
+  background: linear-gradient(
+      90deg,
+      transparent calc(50% - 1px),
+      var(--hairline-strong) calc(50% - 1px),
+      var(--hairline-strong) calc(50% + 1px),
+      transparent calc(50% + 1px)
+    )
+    center / 100% 8px no-repeat;
+  cursor: ew-resize;
+}
+
+.transport-scrub::-webkit-slider-runnable-track {
+  height: 2px;
+  background: var(--hairline-strong);
+}
+
+.transport-scrub::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 6px;
+  height: 14px;
+  margin-top: -6px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--amber);
+  box-shadow: var(--glow-amber-box);
+}
+
+.transport-scrub::-moz-range-track {
+  height: 2px;
+  background: var(--hairline-strong);
+}
+
+.transport-scrub::-moz-range-thumb {
+  width: 6px;
+  height: 14px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--amber);
+  box-shadow: var(--glow-amber-box);
+}
+
+.transport-now {
+  color: var(--amber);
+  border-color: var(--amber-outline);
+  letter-spacing: var(--ls-label);
+}
+
+/* the hero readout */
+.transport-utc {
+  font-size: var(--fs-readout);
+  font-variant-numeric: tabular-nums;
+  color: var(--amber);
+  letter-spacing: var(--ls-data);
+  text-shadow: var(--glow-amber-text);
+  white-space: nowrap;
+}
+
+/* ---- transport: compact stepper + split UTC (phone layout only) ---- */
+
+/* the − rate + stepper replaces the six-button warp cluster on phones */
+.transport-stepper {
+  display: none;
+}
+
+.rate-current {
+  min-width: 52px;
+  padding: 0 var(--sp-1);
+  text-align: center;
+  color: var(--amber);
+  font-size: var(--fs-data);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--ls-data);
+  text-shadow: var(--glow-amber-text);
+}
+
+.rate-step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* ---- touch pointers ------------------------------------------------ */
+
+@media (pointer: coarse) {
+  .transport-rates .rate-button {
+    padding: 0 var(--sp-2);
+  }
+
+  .transport-scrub {
+    height: var(--tap);
+  }
+
+  .transport-scrub::-webkit-slider-thumb {
+    width: 14px;
+    height: 28px;
+    margin-top: -13px;
+  }
+
+  .transport-scrub::-moz-range-thumb {
+    width: 14px;
+    height: 28px;
+  }
+}
+
+/* ---- 900–1365px: what the bar lifts ----------------------------------
+   The centred transport bar (852px; 872px on coarse pointers) reaches under
+   the bottom-left HELP / COLORS / HIDE launcher row (right edge ~243px;
+   ~261px coarse) and the bottom-right attribution below ~1366px — lift both
+   above it, but only while the bar is mounted (App sets .has-transport with
+   the ORBITAL layer); the compact layout stacks these in its own cluster.
+   The wider coarse row meets the bar up to ~1394px (1366px iPad Pro
+   landscape), so coarse pointers lift until 1420px, where it clears by
+   ~13px like the fine row does at 1366px.
+   While the HUD is hidden the bar is gone, so the credits (outside the HUD
+   layer) drop back to the edge; the launchers fade out where they are. */
+
+@media (max-width: 1365px), (pointer: coarse) and (max-width: 1419px) {
+  .has-transport:not(.is-compact) .hud-launchers,
+  .has-transport:not(.is-compact):not(.is-hud-hidden) .cesium-credits {
+    bottom: calc(var(--sp-3) + var(--safe-bottom) + var(--transport-h) + var(--sp-2));
+  }
+}
+
+/* ---- compact (phone): two rows (controls / full-width scrub) ---- */
+
+.is-compact .transport-bar {
+  position: static;
+  transform: none;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px var(--sp-2);
+  padding: 6px 8px 4px;
+}
+
+.is-compact .transport-rates {
+  display: none;
+}
+
+.is-compact .transport-stepper {
+  display: flex;
+  order: 1;
+  align-items: center;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+}
+
+.is-compact .transport-stepper .rate-step {
+  min-width: var(--tap-min);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.is-compact .rate-current {
+  min-width: 40px;
+  padding: 0;
+}
+
+/* row 1 must fit play · stepper · UTC · NOW in a 360px phone */
+.is-compact .transport-play {
+  min-width: var(--tap-min);
+  padding: 0;
+}
+
+.is-compact .transport-now {
+  padding: 0 var(--sp-2);
+  order: 3;
+}
+
+.is-compact .transport-utc {
+  display: grid;
+  order: 2;
+  flex: 1 1 auto;
+  grid-template-areas:
+    'date zone'
+    'time time';
+  justify-content: center;
+  column-gap: var(--sp-1);
+  line-height: 1.15;
+  text-align: center;
+}
+
+.is-compact .utc-date,
+.is-compact .utc-zone {
+  color: var(--text-dim);
+  font-size: var(--fs-label);
+  letter-spacing: 0.04em;
+  text-shadow: none;
+}
+
+.is-compact .utc-date {
+  grid-area: date;
+}
+
+.is-compact .utc-zone {
+  grid-area: zone;
+}
+
+.is-compact .utc-time {
+  grid-area: time;
+}
+
+.is-compact .transport-scrub {
+  order: 10;
+  flex: 1 0 100%;
+  width: auto;
+  height: var(--tap-min);
+}
+
+/* ---- compact landscape --------------------------------------------- */
+
+@media (orientation: landscape) {
+  .is-compact .transport-scrub {
+    order: 2;
+    flex: 1 1 120px;
+  }
+
+  .is-compact .transport-utc {
+    order: 4;
+    flex: none;
+  }
+}

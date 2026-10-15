@@ -64,3 +64,20 @@ src/
    both the API and the web client.
 3. Every slice's routes are a factory taking injected deps (`db`, `fetcher`,
    feeds) so tests run against fakes.
+
+## apps/web styles
+
+Plain global CSS, no CSS modules. `src/main.tsx` imports `src/styles/index.css`,
+which `@import`s `tokens.css` (custom properties: palette, type scale, spacing,
+shared geometry) and then one file per HUD component or area.
+
+1. A component's rules live in one file, with its hover, touch, compact,
+   landscape, hidden-HUD and reduced-motion overrides next to the rule they
+   override. Class names are global, so files are named after components,
+   not slices.
+2. The `@import` order in `styles/index.css` is part of the cascade (at equal
+   specificity the later file wins); the order dependencies are listed in
+   that file's header.
+3. Colours come from `tokens.css` or from the user palette
+   (`core/ui/prefsStore`, applied through `--hue`); no new colour literal in
+   component CSS or TSX.

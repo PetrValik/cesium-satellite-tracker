@@ -1,0 +1,48 @@
+/* ============================================================
+   boot overlay — "ACQUIRING CATALOG…" until the TLEs land
+   ============================================================ */
+
+.boot-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 18px;
+  background: var(--scanlines), var(--space);
+}
+
+.boot-text {
+  color: var(--amber);
+  letter-spacing: var(--ls-boot);
+  font-size: var(--fs-callout);
+  text-shadow: var(--glow-amber-text);
+  animation: boot-pulse 1.6s ease-in-out infinite;
+}
+
+/* indeterminate acquisition bar: amber sweep on a hairline */
+.boot-overlay::after {
+  content: '';
+  width: 260px;
+  height: 2px;
+  background:
+    linear-gradient(90deg, transparent, var(--amber) 40%, var(--amber) 60%, transparent)
+      -90px 0 / 90px 2px no-repeat,
+    var(--hairline);
+  animation: boot-sweep 1.4s linear infinite;
+}
+
+@keyframes boot-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes boot-sweep {
+  to {
+    background-position:
+      260px 0,
+      0 0;
+  }
+}
