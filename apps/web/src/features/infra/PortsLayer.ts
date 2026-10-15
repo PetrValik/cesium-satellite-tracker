@@ -9,7 +9,7 @@ import {
 } from 'cesium'
 import type { Scene } from 'cesium'
 import { anchorIcon } from '../../core/engine/icons'
-import { SIGNAL_CYAN } from '../../core/engine/signalColors'
+import { SIGNAL_CYAN, SIGNAL_LABEL } from '../../core/engine/signalColors'
 
 /** Static port descriptor (matches ports.json rows). */
 export interface Port {
@@ -36,7 +36,7 @@ const SCALE_BY_DISTANCE = new NearFarScalar(8e6, 20 / SPRITE_PX, 4e7, 6 / SPRITE
 const ANCHOR_IMAGE_ID = 'icon:anchor'
 
 const LABEL_FONT = '10px monospace'
-const LABEL_FILL = Color.fromCssColorString('#d7dde6')
+const LABEL_FILL = Color.fromCssColorString(SIGNAL_LABEL)
 /** Up-right of the icon (screen space: +x right, -y up). */
 const LABEL_OFFSET = new Cartesian2(8, -8)
 /**

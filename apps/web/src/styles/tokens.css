@@ -54,6 +54,7 @@
           core/ui/prefsStore, applied through --hue) ------------- */
   --signal-white: #f0f4f8; /* AIRCRAFT row in LAYERS */
   --aircraft-ground: #8a93a3; /* on-ground aircraft: core/engine/signalColors SIGNAL_GROUND */
+  --globe-label: #d7dde6; /* port + launch-site labels on the globe: core/engine/signalColors SIGNAL_LABEL */
 
   /* ---- type ------------------------------------------------ */
   --mono: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', ui-monospace, Menlo, monospace;

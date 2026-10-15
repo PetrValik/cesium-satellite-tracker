@@ -212,6 +212,13 @@ export function applyRenderDensity(viewer: Viewer, devicePixelRatio: number): vo
 export function destroyOrbitalViewer(viewer: Viewer): void {
   if (viewer.isDestroyed()) return
   const credits = viewer.cesiumWidget.creditContainer
+  // CesiumWidget.destroy never destroys the widget's own
+  // ScreenSpaceEventHandler (cesium 1.138): its pointer/wheel listeners
+  // stayed bound to every rebuilt-away canvas (and, in Firefox's mouse/touch
+  // fallback, to `document`). Viewer.destroy skips its removeInputAction
+  // calls once it isDestroyed(), so destroying it first is safe.
+  const handler = viewer.screenSpaceEventHandler
+  if (!handler.isDestroyed()) handler.destroy()
   viewer.destroy()
   credits.remove()
 }

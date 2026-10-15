@@ -1,5 +1,6 @@
 /* ============================================================
-   engine fault — the full-screen panel when WebGL cannot start
+   engine fault — the full-screen panel when the globe cannot be built
+   (renderer offline / lost, or an app fault in the globe build)
    ============================================================ */
 
 .engine-error {

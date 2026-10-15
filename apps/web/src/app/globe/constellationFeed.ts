@@ -37,9 +37,20 @@ export class ConstellationFeed {
   constructor(worker: Worker, constellation: ConstellationLayer) {
     this._worker = worker
     this._constellation = constellation
+
+    // Also the rebuild path: the long-lived worker still holds the working
+    // set, but this globe's fresh ConstellationLayer only learns the ids and
+    // classes from a `ready`, so re-init it (ready → setCatalog → tick).
+    // Sent before anything is registered, so a throw here (a DataCloneError
+    // from postMessage) leaves nothing behind — createGlobe's own() never
+    // sees a constructor that threw. The `ready` reply is a later task, so
+    // the message listener below is always in place to receive it.
+    const initialSats = useCatalog.getState().sats
+    if (initialSats.length > 0) this._sendCatalog(initialSats)
+
+    // Listeners, the tick timer and the store subscriptions last.
     worker.addEventListener('message', this._onMessage)
     document.addEventListener('visibilitychange', this._onVisibilityChange)
-
     const tickTimer = setInterval(() => {
       // Hidden tab: nothing is drawn (rAF is paused), so whole-catalog
       // propagation would only drain the battery. _onVisibilityChange resyncs.
@@ -58,12 +69,6 @@ export class ConstellationFeed {
         if (state.jumpNonce !== prev.jumpNonce) this._resync()
       }),
     )
-
-    // Also the rebuild path: the long-lived worker still holds the working
-    // set, but this globe's fresh ConstellationLayer only learns the ids and
-    // classes from a `ready`, so re-init it (ready → setCatalog → tick).
-    const initialSats = useCatalog.getState().sats
-    if (initialSats.length > 0) this._sendCatalog(initialSats)
   }
 
   dispose(): void {

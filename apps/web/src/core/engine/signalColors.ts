@@ -17,3 +17,6 @@ export const SIGNAL_CYAN = '#6ee7ff'
 
 /** Aircraft in the 'ground' band, whatever their category hue. Mirrors tokens.css `--aircraft-ground`. */
 export const SIGNAL_GROUND = '#8a93a3'
+
+/** Port and launch-site name labels on the globe. Mirrors tokens.css `--globe-label`. */
+export const SIGNAL_LABEL = '#d7dde6'

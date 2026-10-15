@@ -16,6 +16,7 @@ import { SelectedSatellite } from '../../features/tracking/SelectedSatellite'
 import { TrackingVisuals } from '../../features/tracking/TrackingVisuals'
 import launchSites from '../../data/launchSites.json'
 import ports from '../../data/ports.json'
+import { rendererStep } from './buildFailure'
 import { ConstellationFeed } from './constellationFeed'
 import { GlobeFollow } from './follow'
 import { startFrameLoop, type FrameCarry } from './frameLoop'
@@ -64,12 +65,18 @@ function restoreCamera(viewer: Viewer): void {
  * Everything built registers its teardown as it is made, and ONE dispose
  * runs those newest first, then destroys the viewer. A throw part way (a
  * 2D canvas or GPU allocation failing — most likely during a context-loss
- * rebuild) runs that same dispose before rethrowing, so nothing of a
- * failed build is left alive.
+ * rebuild — or a bug in the store wiring) runs that same dispose before
+ * rethrowing, so nothing of a failed build is left alive. The viewer and the
+ * Cesium-backed classes (layers, rig, decals) are built inside
+ * `rendererStep`, so the host can tell a renderer failure
+ * (RendererBuildError) from an app bug in the wiring. Those classes' own
+ * setup counts as renderer too — including the infra layers walking their
+ * committed launch-site/port JSON.
  */
 export function createGlobe(container: HTMLElement, options: GlobeOptions): Globe {
+  const basemap = usePrefs.getState().basemap
   // A throwing factory has already removed the divs it and Viewer.js added.
-  const viewer = createOrbitalViewer(container, usePrefs.getState().basemap)
+  const viewer = rendererStep(() => createOrbitalViewer(container, basemap))
 
   const teardown: (() => void)[] = []
   const own = <T extends { dispose(): void }>(resource: T): T => {
@@ -89,18 +96,32 @@ export function createGlobe(container: HTMLElement, options: GlobeOptions): Glob
   try {
     restoreCamera(viewer)
     const scene = viewer.scene
-    const constellation = own(new ConstellationLayer(scene))
-    const tracking = own(new TrackingVisuals(viewer))
-    const rig = own(new CameraRig(viewer))
-    const ships = own(new ShipsLayer(scene))
-    const aircraft = own(new AircraftLayer(scene))
-    // World-oriented flat markers for the selected ship/aircraft: the
-    // camera-facing layer billboard is hidden while selected and this decal
-    // (lying in the map plane, nose along the course) represents it instead.
-    const shipDecal = own(new WorldDecal(scene, shipIcon(), SIGNAL_AMBER))
-    const aircraftDecal = own(new WorldDecal(scene, aircraftIcon(), SIGNAL_AMBER))
-    const launchSitesLayer = own(new LaunchSitesLayer(scene, launchSites))
-    const portsLayer = own(new PortsLayer(scene, ports))
+    // The Cesium scene graph (primitives, entities, sprite canvases); each
+    // registers its teardown as it is made — properties evaluate in order.
+    const {
+      constellation,
+      tracking,
+      rig,
+      ships,
+      aircraft,
+      shipDecal,
+      aircraftDecal,
+      launchSitesLayer,
+      portsLayer,
+    } = rendererStep(() => ({
+      constellation: own(new ConstellationLayer(scene)),
+      tracking: own(new TrackingVisuals(viewer)),
+      rig: own(new CameraRig(viewer)),
+      ships: own(new ShipsLayer(scene)),
+      aircraft: own(new AircraftLayer(scene)),
+      // World-oriented flat markers for the selected ship/aircraft: the
+      // camera-facing layer billboard is hidden while selected and this
+      // decal (lying in the map plane, nose along the course) represents it.
+      shipDecal: own(new WorldDecal(scene, shipIcon(), SIGNAL_AMBER)),
+      aircraftDecal: own(new WorldDecal(scene, aircraftIcon(), SIGNAL_AMBER)),
+      launchSitesLayer: own(new LaunchSitesLayer(scene, launchSites)),
+      portsLayer: own(new PortsLayer(scene, ports)),
+    }))
 
     // Dev-only escape hatch for live debugging in the browser console.
     if (import.meta.env.DEV) {
@@ -157,7 +178,13 @@ export function createGlobe(container: HTMLElement, options: GlobeOptions): Glob
       follow.resume()
     }
   } catch (err) {
-    dispose()
+    // A teardown that throws must not replace the build error: its class
+    // (renderer vs app) decides what the host shows.
+    try {
+      dispose()
+    } catch (cleanupErr) {
+      console.error('[createGlobe] disposing a failed build threw:', cleanupErr)
+    }
     throw err
   }
   return { dispose }
