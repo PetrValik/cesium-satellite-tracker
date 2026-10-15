@@ -1,8 +1,9 @@
 import { BillboardCollection, BlendOption, Cartesian3, Color, NearFarScalar } from 'cesium'
 import type { Billboard, Scene } from 'cesium'
 import { satelliteIcon } from '../../core/engine/icons'
-import { ORBIT_CLASSES } from '../../lib/protocol'
-import type { OrbitClass } from '../../lib/protocol'
+import { DEFAULT_COLORS, type ColorPrefs } from '../../core/ui/prefsStore'
+import { ORBIT_CLASSES, type OrbitClass } from '../../lib/protocol'
+import { interpolateInto, isOccluded } from './snapshotMath'
 
 interface ClassStyle {
   /** Slightly translucent tint multiplied into the white sprite. */
@@ -24,15 +25,7 @@ const ICON_NEAR_M = 4e5
 const ICON_NEAR_PX = 28
 const ICON_FAR_M = 4e7
 
-export type SatellitePalette = Record<OrbitClass, string>
-
-/** Default hues (mirrors core/ui/prefsStore DEFAULT_COLORS.satellites). */
-const DEFAULT_PALETTE: SatellitePalette = {
-  LEO: '#ffb454',
-  MEO: '#6ee7ff',
-  GEO: '#c084fc',
-  HEO: '#f87171',
-}
+type SatellitePalette = ColorPrefs['satellites']
 
 /** Far dot size per class keeps the original pixelSize hierarchy. */
 const FAR_DOT_PX: Record<OrbitClass, number> = { LEO: 1.5, MEO: 2.0, GEO: 2.5, HEO: 2.0 }
@@ -51,31 +44,6 @@ function buildStyles(palette: SatellitePalette): readonly ClassStyle[] {
 }
 
 /**
- * Occlusion sphere for the horizon-culling pre-test: slightly smaller than
- * Earth so satellites near the limb never pop early — anything the margin
- * lets through is still hidden by the depth test.
- */
-const OCCLUSION_RADIUS_M = 6_300_000
-const OCCLUSION_RADIUS_SQ = OCCLUSION_RADIUS_M * OCCLUSION_RADIUS_M
-
-/**
- * True when the segment camera→point passes through the occlusion sphere
- * (i.e. the point is behind the globe). Pure ray–sphere math, no allocation.
- */
-function isOccluded(cx: number, cy: number, cz: number, px: number, py: number, pz: number): boolean {
-  const dxr = px - cx
-  const dyr = py - cy
-  const dzr = pz - cz
-  const a = dxr * dxr + dyr * dyr + dzr * dzr
-  const b = cx * dxr + cy * dyr + cz * dzr
-  const c = cx * cx + cy * cy + cz * cz - OCCLUSION_RADIUS_SQ
-  const disc = b * b - a * c
-  if (disc <= 0 || a === 0) return false
-  const s = (-b - Math.sqrt(disc)) / a
-  return s > 0 && s < 1
-}
-
-/**
  * One fixed atlas id shared by the whole catalog. Billboard.setImage(id, …)
  * routes through the collection's id-keyed texture cache, so every billboard
  * resolves to the SAME atlas entry — passing the canvas as `image:` in add()
@@ -87,12 +55,6 @@ const SATELLITE_IMAGE_ID = 'icon:satellite'
 // Module-scope scratch: advance() runs every frame for thousands of
 // billboards and must not allocate.
 const scratchPosition = new Cartesian3()
-
-/**
- * Below this arc between samples, a straight lerp is indistinguishable from
- * the spherical arc (sagitta < ~2 km at LEO radius) and much cheaper.
- */
-const LERP_ANGLE_RAD = 0.02
 
 /**
  * Extrapolation bounds for the interpolation parameter: slightly outside the
@@ -124,7 +86,7 @@ export class ConstellationLayer {
   private readonly _indexByNoradId = new Map<number, number>()
   private _selectedNoradId: number | null = null
   private _visible = true
-  private _styles: readonly ClassStyle[] = buildStyles(DEFAULT_PALETTE)
+  private _styles: readonly ClassStyle[] = buildStyles(DEFAULT_COLORS.satellites)
   /** Class byte per billboard (kept for palette swaps). */
   private _classes = new Uint8Array(0)
 
@@ -258,44 +220,13 @@ export class ConstellationLayer {
         continue
       }
 
-      let x = bx
-      let y = by
-      let z = bz
       if (interpolate) {
-        const ax = prev![3 * i]
-        const ay = prev![3 * i + 1]
-        const az = prev![3 * i + 2]
-        if (!Number.isNaN(ax) && !Number.isNaN(ay) && !Number.isNaN(az)) {
-          const ra = Math.sqrt(ax * ax + ay * ay + az * az)
-          const rb = Math.sqrt(bx * bx + by * by + bz * bz)
-          if (ra > 0 && rb > 0) {
-            let cos = (ax * bx + ay * by + az * bz) / (ra * rb)
-            if (cos > 1) cos = 1
-            else if (cos < -1) cos = -1
-            const theta = Math.acos(cos)
-            if (theta < LERP_ANGLE_RAD) {
-              x = ax + (bx - ax) * t
-              y = ay + (by - ay) * t
-              z = az + (bz - az) * t
-            } else {
-              // Slerp the direction, lerp the radius: for a near-circular
-              // orbit this follows the true arc; t outside [0,1] continues
-              // along the same arc (graceful extrapolation between ticks).
-              const sinTheta = Math.sin(theta)
-              const wa = Math.sin((1 - t) * theta) / (sinTheta * ra)
-              const wb = Math.sin(t * theta) / (sinTheta * rb)
-              const r = ra + (rb - ra) * t
-              x = (ax * wa + bx * wb) * r
-              y = (ay * wa + by * wb) * r
-              z = (az * wa + bz * wb) * r
-            }
-          }
-        }
+        interpolateInto(prev, curr, i, t, scratchPosition)
+      } else {
+        scratchPosition.x = bx
+        scratchPosition.y = by
+        scratchPosition.z = bz
       }
-
-      scratchPosition.x = x
-      scratchPosition.y = y
-      scratchPosition.z = z
       billboard.position = scratchPosition
       billboard.show = i !== selectedIndex
     }

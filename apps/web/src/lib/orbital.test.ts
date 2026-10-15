@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest'
+import { eciToEcf, gstime, propagate } from 'satellite.js'
 import {
   classifyOrbit,
   createSatrec,
+  createSatStateEcef,
   footprintRadiusM,
   orbitalPeriodMinutes,
   predictPasses,
+  propagateBatchEcefM,
   propagateEcef,
-  sampleOrbitTrack,
+  rotateEciKmToEcefM,
+  sampleOrbitRingEci,
 } from './orbital'
 
 /** ISS (ZARYA), epoch 2026-07-10T03:41:07.908Z (day 191.15356376 of 2026). */
@@ -20,6 +24,15 @@ const ISS_INCLINATION_DEG = 51.6302
  * digits are irrelevant — the line just has to stay 69 characters.
  */
 const GEO_TLE2 = '2 25544  51.6302 186.4276 0006683 277.8890  82.1339  1.00270000575314'
+
+/**
+ * Same element set with B* rewritten to 0.99 (line 1, cols 54-61): it parses
+ * and propagates at epoch, but SGP4 reports it decayed one day later.
+ */
+const DECAYING_TLE1 = '1 25544U 98067A   26191.15356376  .00005628  00000+0  99000-0 0  9998'
+
+/** Thirty years past epoch SGP4 fails for the ISS element set (satellite.js 6.0.2). */
+const THIRTY_YEARS_MS = 30 * 365 * 86_400_000
 
 /** Julian date of the Unix epoch. */
 const JD_UNIX_EPOCH = 2440587.5
@@ -88,41 +101,131 @@ describe('propagateEcef', () => {
     expect(lonDeg).toBeGreaterThanOrEqual(-180)
     expect(lonDeg).toBeLessThanOrEqual(180)
   })
+
+  it('stays physical over one full period: LEO radius, latitude bounded by inclination', () => {
+    const satrec = issSatrec()
+    const epochMs = tleEpochMs(satrec)
+    const periodMs = orbitalPeriodMinutes(satrec) * 60_000
+    const out = createSatStateEcef()
+    for (let i = 0; i < 128; i++) {
+      const state = propagateEcef(satrec, epochMs + (periodMs * i) / 127, out)
+      expect(state).not.toBeNull()
+      const r = Math.hypot(...out.positionEcefM)
+      expect(r).toBeGreaterThan(6_600_000) // metres from Earth's centre
+      expect(r).toBeLessThan(6_900_000)
+      // Small geodetic margin: geodetic latitude slightly exceeds geocentric.
+      expect(Math.abs(out.latDeg)).toBeLessThanOrEqual(ISS_INCLINATION_DEG + 0.5)
+      expect(Math.abs(out.lonDeg)).toBeLessThanOrEqual(180)
+    }
+  })
+
+  it('converts ECI km to ECEF m exactly as satellite.js eciToEcf, scaled by 1000', () => {
+    const satrec = issSatrec()
+    for (const offsetMs of [0, 600_000, 3_600_000, 86_400_000]) {
+      const epochMs = tleEpochMs(satrec) + offsetMs
+      const state = propagateEcef(satrec, epochMs)!
+      const pv = propagate(satrec, new Date(epochMs))!
+      const gmst = gstime(new Date(epochMs))
+      const ecfKm = eciToEcf(pv.position, gmst)
+      // Bit-exact: the one conversion site evaluates eciToEcf's expression.
+      expect(state.positionEcefM).toEqual([ecfKm.x * 1000, ecfKm.y * 1000, ecfKm.z * 1000])
+      expect(state.gmstRad).toBe(gmst)
+    }
+  })
+
+  it('fills `out` in place and returns it, matching a fresh result', () => {
+    const satrec = issSatrec()
+    const epochMs = tleEpochMs(satrec) + 1_234_567
+    const out = createSatStateEcef()
+    const positionRef = out.positionEcefM
+    const result = propagateEcef(satrec, epochMs, out)
+    expect(result).toBe(out)
+    expect(out.positionEcefM).toBe(positionRef) // tuple reused, not replaced
+    expect(out).toEqual(propagateEcef(satrec, epochMs))
+  })
+
+  it('returns null and leaves `out` untouched when SGP4 fails', () => {
+    const satrec = issSatrec()
+    const out = createSatStateEcef()
+    const before = structuredClone(out)
+    expect(propagateEcef(satrec, tleEpochMs(satrec) + THIRTY_YEARS_MS, out)).toBeNull()
+    expect(out).toEqual(before)
+  })
 })
 
-describe('sampleOrbitTrack', () => {
-  it('returns finite arrays of the requested length over one period', () => {
-    const satrec = issSatrec()
-    const samples = 128
-    const track = sampleOrbitTrack(satrec, tleEpochMs(satrec), samples)
 
-    expect(track.orbitEcef).toHaveLength(3 * samples)
-    expect(track.groundTrack).toHaveLength(2 * samples)
-    expect(track.periodMinutes).toBeCloseTo(orbitalPeriodMinutes(satrec), 10)
+describe('propagateBatchEcefM', () => {
+  it('keeps every slot, NaN-fills failures, counts them and matches propagateEcef', () => {
+    const iss = issSatrec()
+    const decaying = createSatrec(DECAYING_TLE1, ISS_TLE2)
+    expect(decaying).not.toBeNull()
+    const epochMs = tleEpochMs(iss) + 2 * 86_400_000 // decaying copy is gone by now
+    const satrecs = [iss, null, decaying, iss]
+    const out = new Float32Array(3 * satrecs.length)
 
-    for (let i = 0; i < track.orbitEcef.length; i++) {
-      expect(Number.isFinite(track.orbitEcef[i])).toBe(true)
+    expect(propagateBatchEcefM(satrecs, epochMs, out)).toBe(2)
+
+    const single = propagateEcef(issSatrec(), epochMs)!
+    for (const slot of [0, 3]) {
+      for (let k = 0; k < 3; k++) {
+        expect(out[3 * slot + k]).toBe(Math.fround(single.positionEcefM[k]))
+      }
     }
-    // Every position should sit at LEO altitude (meters from Earth center).
-    for (let i = 0; i < samples; i++) {
-      const r = Math.hypot(
-        track.orbitEcef[3 * i],
-        track.orbitEcef[3 * i + 1],
-        track.orbitEcef[3 * i + 2],
-      )
-      expect(r).toBeGreaterThan(6_600_000)
+    for (const slot of [1, 2]) {
+      for (let k = 0; k < 3; k++) expect(Number.isNaN(out[3 * slot + k])).toBe(true)
+    }
+  })
+
+  it('returns 0 and writes nothing for an empty working set', () => {
+    const out = new Float32Array(0)
+    expect(propagateBatchEcefM([], 0, out)).toBe(0)
+  })
+})
+
+describe('rotateEciKmToEcefM', () => {
+  it('rotates the ECI ring bit-exactly as eciToEcf × 1000', () => {
+    const satrec = issSatrec()
+    const epochMs = tleEpochMs(satrec)
+    const ring = sampleOrbitRingEci(satrec, epochMs, 180)
+    const n = ring.eciKm.length / 3
+    const out = Array.from({ length: n }, () => ({ x: 0, y: 0, z: 0 }))
+    const gmst = gstime(new Date(epochMs + 5_000_000))
+
+    rotateEciKmToEcefM(ring.eciKm, gmst, out)
+
+    for (let j = 0; j < n; j++) {
+      const eci = { x: ring.eciKm[3 * j], y: ring.eciKm[3 * j + 1], z: ring.eciKm[3 * j + 2] }
+      const ecfKm = eciToEcf(eci, gmst)
+      expect(out[j]).toEqual({ x: ecfKm.x * 1000, y: ecfKm.y * 1000, z: ecfKm.z * 1000 })
+      const r = Math.hypot(out[j].x, out[j].y, out[j].z)
+      expect(r).toBeGreaterThan(6_650_000) // metres, not kilometres
       expect(r).toBeLessThan(6_900_000)
     }
-    // Ground-track latitude is bounded by the inclination (small geodetic
-    // margin: geodetic latitude slightly exceeds geocentric latitude).
-    for (let i = 0; i < samples; i++) {
-      const lon = track.groundTrack[2 * i]
-      const lat = track.groundTrack[2 * i + 1]
-      expect(Number.isFinite(lon)).toBe(true)
-      expect(Number.isFinite(lat)).toBe(true)
-      expect(Math.abs(lat)).toBeLessThanOrEqual(ISS_INCLINATION_DEG + 0.5)
-      expect(Math.abs(lon)).toBeLessThanOrEqual(180)
-    }
+  })
+
+  it('puts the satellite on its ring: sample 0 at the epoch GMST is the live position', () => {
+    const satrec = issSatrec()
+    const epochMs = tleEpochMs(satrec) + 777_000
+    const ring = sampleOrbitRingEci(satrec, epochMs, 180)
+    const out = [{ x: 0, y: 0, z: 0 }]
+    rotateEciKmToEcefM(ring.eciKm, gstime(new Date(epochMs)), out)
+    const live = propagateEcef(satrec, epochMs)!
+    expect([out[0].x, out[0].y, out[0].z]).toEqual(live.positionEcefM)
+  })
+
+  it('writes only as many points as both sides hold', () => {
+    const eciKm = new Float64Array([7000, 0, 0, 0, 7000, 0])
+    const out = [{ x: -1, y: -1, z: -1 }]
+    rotateEciKmToEcefM(eciKm, 0, out)
+    expect(out).toEqual([{ x: 7_000_000, y: 0, z: 0 }])
+    const roomy = Array.from({ length: 3 }, () => ({ x: -1, y: -1, z: -1 }))
+    rotateEciKmToEcefM(eciKm, Math.PI / 2, roomy)
+    // +90° GMST: ECI +x maps to ECEF −y, ECI +y to ECEF +x.
+    expect(roomy[0].x).toBeCloseTo(0, 6)
+    expect(roomy[0].y).toBeCloseTo(-7_000_000, 6)
+    expect(roomy[1].x).toBeCloseTo(7_000_000, 6)
+    expect(roomy[1].y).toBeCloseTo(0, 6)
+    expect(roomy[2]).toEqual({ x: -1, y: -1, z: -1 }) // untouched
   })
 })
 
@@ -182,8 +285,7 @@ describe('footprintRadiusM', () => {
 })
 
 describe('sampleOrbitRingEci', () => {
-  it('returns a closed, finite ring at orbital radius', async () => {
-    const { sampleOrbitRingEci } = await import('./orbital')
+  it('returns a closed, finite ring at orbital radius', () => {
     const satrec = issSatrec()
     const ring = sampleOrbitRingEci(satrec, tleEpochMs(satrec), 180)
 
@@ -207,8 +309,7 @@ describe('sampleOrbitRingEci', () => {
     }
   })
 
-  it('NaN-fills the ring for an unpropagatable satrec', async () => {
-    const { sampleOrbitRingEci } = await import('./orbital')
+  it('NaN-fills the ring for an unpropagatable satrec', () => {
     const satrec = issSatrec()
     // 30 years after epoch SGP4 fails for a decayed LEO element set — if it
     // ever succeeds, the finite check below just passes trivially instead.

@@ -26,7 +26,8 @@ function tintedCopy(image: HTMLCanvasElement, tintCss: string): HTMLCanvasElemen
   const canvas = document.createElement('canvas')
   canvas.width = image.width
   canvas.height = image.height
-  const ctx = canvas.getContext('2d')!
+  const ctx = canvas.getContext('2d')
+  if (ctx === null) throw new Error('2D canvas context unavailable for the decal tint')
   ctx.fillStyle = tintCss
   ctx.fillRect(0, 0, canvas.width, canvas.height)
   ctx.globalCompositeOperation = 'destination-in'

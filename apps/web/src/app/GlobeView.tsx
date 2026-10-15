@@ -24,12 +24,17 @@
  * order and every Cesium access is isDestroyed-guarded.
  */
 import { useEffect, useRef, useState } from 'react'
-import { ScreenSpaceEventHandler, ScreenSpaceEventType, type Cartesian2 } from 'cesium'
+import {
+  Cartesian3,
+  ScreenSpaceEventHandler,
+  ScreenSpaceEventType,
+  type Cartesian2,
+  type Viewer,
+} from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
-import { Cartesian3 } from 'cesium'
+import type { SatRec } from 'satellite.js'
+import { SHIP_TYPES, type Aircraft, type Ship } from '@orbital-ops/shared'
 import { CameraRig } from '../core/engine/CameraRig'
-import { aircraftIcon, shipIcon } from '../core/engine/icons'
-import { WorldDecal } from '../core/engine/WorldDecal'
 import {
   applyRenderDensity,
   createOrbitalViewer,
@@ -43,38 +48,42 @@ import {
   pickWindowCssPx,
   pickWindowPx,
 } from '../core/engine/displayDensity'
+import { aircraftIcon, shipIcon } from '../core/engine/icons'
+import { SIGNAL_AMBER } from '../core/engine/signalColors'
+import { WorldDecal } from '../core/engine/WorldDecal'
 import { isSimLive, simClock, SIM_RATES } from '../core/sim/simClock'
 import { useFollow } from '../core/ui/followStore'
 import { useHud } from '../core/ui/hudStore'
+import { useMode, type OpsMode } from '../core/ui/modeStore'
 import { usePrefs } from '../core/ui/prefsStore'
 import { useSheet } from '../core/ui/sheetStore'
-import { ConstellationLayer } from '../features/constellation/ConstellationLayer'
-import { GroundTrackWindow } from '../features/tracking/GroundTrackWindow'
-import { TrackingVisuals } from '../features/tracking/TrackingVisuals'
-import { SHIP_TYPES } from '@orbital-ops/shared'
 import { AircraftLayer } from '../features/airspace/AircraftLayer'
-import { AIRCRAFT_CATEGORIES, categoryOf } from '../features/airspace/aircraftCategory'
+import { categoryOf } from '../features/airspace/aircraftCategory'
+import { aircraftPositionAt, type AircraftPosition } from '../features/airspace/aircraftMotion'
 import { ALT_BANDS, bandOf, useAircraft, type AircraftState } from '../features/airspace/aircraftStore'
+import { useCatalog } from '../features/catalog/catalogStore'
+import { ConstellationLayer } from '../features/constellation/ConstellationLayer'
 import { LaunchSitesLayer } from '../features/infra/LaunchSitesLayer'
 import { PortsLayer } from '../features/infra/PortsLayer'
 import { ShipsLayer } from '../features/maritime/ShipsLayer'
+import { shipBearingDeg, shipPositionAt, type ShipPosition } from '../features/maritime/shipMotion'
 import { useShips, type ShipsState } from '../features/maritime/shipsStore'
-import { useCatalog } from '../features/catalog/catalogStore'
+import { GroundTrackWindow } from '../features/tracking/GroundTrackWindow'
 import { useTelemetry } from '../features/tracking/telemetryStore'
-import { useMode } from '../core/ui/modeStore'
-import launchSites from '../data/launchSites.json'
-import ports from '../data/ports.json'
+import { TrackingVisuals } from '../features/tracking/TrackingVisuals'
+import { AIRCRAFT_CATEGORIES } from '../lib/aircraftCategories'
 import {
   classifyOrbit,
   createSatrec,
-  footprintRadiusM,
-  gmstAt,
+  createSatStateEcef,
   orbitalPeriodMinutes,
   propagateEcef,
   sampleOrbitRingEci,
+  type SatStateEcef,
 } from '../lib/orbital'
-import type { SatRec } from 'satellite.js'
-import type { WorkerRequest, WorkerResponse } from '../lib/protocol'
+import type { SatInit, WorkerRequest, WorkerResponse } from '../lib/protocol'
+import launchSites from '../data/launchSites.json'
+import ports from '../data/ports.json'
 import { deselectInMode, hasSelectionInMode, resolveTap } from './selectionMode'
 
 /** Wall-clock ms between constellation ticks; tighter under heavy time warp. */
@@ -83,6 +92,15 @@ function tickIntervalMs(rate: number): number {
 }
 
 const TELEMETRY_INTERVAL_MS = 200
+
+/**
+ * Lowest altitude the selected ship/aircraft decal is drawn at — a height-0
+ * quad z-fights the globe (depthTestAgainstTerrain). The follow camera
+ * targets the very same point, so camera and decal never disagree.
+ */
+const DECAL_MIN_ALT_M = 50
+/** The orbital follow range is sized from this until a satellite's altitude is known. */
+const DEFAULT_FOLLOW_ALT_KM = 400
 
 /** A lost WebGL context gets this long to come back by itself before the engine is rebuilt anyway. */
 const CONTEXT_RESTORE_GRACE_MS = 1500
@@ -164,19 +182,18 @@ export function GlobeView() {
     // viewer from being built that nothing could feed.
     if (!container || !worker) return
 
-    let viewer
-    try {
-      viewer = createOrbitalViewer(container, usePrefs.getState().basemap)
-    } catch (err) {
+    /**
+     * A build that threw — the viewer, or anything built on it — ends here
+     * with nothing of it left alive: a first build shows the error panel; a
+     * rebuild after context loss retries on a fresh epoch, within the
+     * recovery budget. Returns the effect cleanup for a pending retry.
+     */
+    const failBuild = (err: unknown): (() => void) | undefined => {
       const message = err instanceof Error ? err.message : String(err)
-      // Viewer.js (1.138) appends its .cesium-viewer div before building the
-      // widget and never removes it on a throw — a retry would stack under it.
-      container.replaceChildren()
       if (engineEpoch === 0 || !takeRecoverySlot(recoveryLogRef, performance.now())) {
         // Init failure is only observable from inside this effect.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setEngineError({ kind: engineEpoch === 0 ? 'init' : 'lost', message })
-        return
+        return undefined
       }
       // A rebuild after context loss: on mobile the GPU is often not back
       // yet. Try once more on a fresh epoch after a pause — never while
@@ -198,36 +215,72 @@ export function GlobeView() {
       }
     }
 
+    let viewer: Viewer
+    try {
+      // A throwing factory has already removed the divs it and Viewer.js added.
+      viewer = createOrbitalViewer(container, usePrefs.getState().basemap)
+    } catch (err) {
+      return failBuild(err)
+    }
+
+    // Every Cesium object of this epoch is built inside one try: a throw part
+    // way (a 2D canvas or GPU allocation failing — most likely during a
+    // context-loss rebuild) disposes what was already built, newest first,
+    // then the viewer (which takes anything half-built with it), and goes
+    // down the same path as a viewer that never came up.
+    const built: { dispose(): void }[] = []
+    const own = <T extends { dispose(): void }>(resource: T): T => {
+      built.push(resource)
+      return resource
+    }
+    let constellation: ConstellationLayer
+    let tracking: TrackingVisuals
+    let rig: CameraRig
+    let shipsLayer: ShipsLayer
+    let aircraftLayer: AircraftLayer
+    let shipDecal: WorldDecal
+    let aircraftDecal: WorldDecal
+    let launchSitesLayer: LaunchSitesLayer
+    let portsLayer: PortsLayer
+    let pickHandler: ScreenSpaceEventHandler
+    try {
+      // Reopen where the user left off (free camera only; follow overrides).
+      const savedCamera = usePrefs.getState().lastCamera
+      if (savedCamera !== null) {
+        viewer.camera.setView({
+          destination: new Cartesian3(savedCamera.x, savedCamera.y, savedCamera.z),
+          orientation: {
+            heading: savedCamera.headingRad,
+            pitch: savedCamera.pitchRad,
+            roll: savedCamera.rollRad,
+          },
+        })
+      }
+      constellation = own(new ConstellationLayer(viewer.scene))
+      tracking = own(new TrackingVisuals(viewer))
+      rig = own(new CameraRig(viewer))
+      shipsLayer = own(new ShipsLayer(viewer.scene))
+      aircraftLayer = own(new AircraftLayer(viewer.scene))
+      // World-oriented flat markers for the selected ship/aircraft: the
+      // camera-facing layer billboard is hidden while selected and this decal
+      // (lying in the map plane, nose along the course) represents it instead.
+      shipDecal = own(new WorldDecal(viewer.scene, shipIcon(), SIGNAL_AMBER))
+      aircraftDecal = own(new WorldDecal(viewer.scene, aircraftIcon(), SIGNAL_AMBER))
+      launchSitesLayer = own(new LaunchSitesLayer(viewer.scene, launchSites))
+      portsLayer = own(new PortsLayer(viewer.scene, ports))
+      // Last: it has destroy(), not dispose(), and nothing follows it here.
+      pickHandler = new ScreenSpaceEventHandler(viewer.scene.canvas)
+    } catch (err) {
+      for (let i = built.length - 1; i >= 0; i--) built[i].dispose()
+      destroyOrbitalViewer(viewer)
+      return failBuild(err)
+    }
+
     // Dev-only escape hatch for live debugging in the browser console.
     if (import.meta.env.DEV) {
       ;(window as unknown as { __opsViewer?: unknown }).__opsViewer = viewer
     }
 
-    // Reopen where the user left off (free camera only; follow overrides).
-    const savedCamera = usePrefs.getState().lastCamera
-    if (savedCamera !== null) {
-      viewer.camera.setView({
-        destination: new Cartesian3(savedCamera.x, savedCamera.y, savedCamera.z),
-        orientation: {
-          heading: savedCamera.headingRad,
-          pitch: savedCamera.pitchRad,
-          roll: savedCamera.rollRad,
-        },
-      })
-    }
-
-    const constellation = new ConstellationLayer(viewer.scene)
-    const tracking = new TrackingVisuals(viewer)
-    const rig = new CameraRig(viewer)
-    const shipsLayer = new ShipsLayer(viewer.scene)
-    const aircraftLayer = new AircraftLayer(viewer.scene)
-    // World-oriented flat markers for the selected ship/aircraft: the
-    // camera-facing layer billboard is hidden while selected and this decal
-    // (lying in the map plane, nose along the course) represents it instead.
-    const shipDecal = new WorldDecal(viewer.scene, shipIcon(), '#ffb454')
-    const aircraftDecal = new WorldDecal(viewer.scene, aircraftIcon(), '#ffb454')
-    const launchSitesLayer = new LaunchSitesLayer(viewer.scene, launchSites)
-    const portsLayer = new PortsLayer(viewer.scene, ports)
     const post = (msg: WorkerRequest) => worker.postMessage(msg)
 
     // --- live domain layers: data (type/band filtered) + layer visibility ---
@@ -246,10 +299,9 @@ export function GlobeView() {
       )
     }
 
-    shipsLayer.setShips(filteredShips(useShips.getState()))
-    aircraftLayer.setAircraft(filteredAircraft(useAircraft.getState()))
     // A rebuild (or HMR) mounts with a selection already in the stores; the
-    // subscriptions below only see changes, so apply it once here.
+    // subscriptions below only see changes, so apply it once here — before
+    // applyPalettes() first feeds the layers, which then hide it.
     shipsLayer.setSelected(useShips.getState().selectedMmsi)
     aircraftLayer.setSelected(useAircraft.getState().selectedIcao)
 
@@ -277,7 +329,7 @@ export function GlobeView() {
     launchSitesLayer.setVisible(useMode.getState().launchSites)
     portsLayer.setVisible(useMode.getState().ports)
 
-    // --- user palettes (persisted prefs) ---
+    // --- user palettes (persisted prefs); also the layers' first feed ---
     const applyPalettes = () => {
       const { colors } = usePrefs.getState()
       aircraftLayer.setPalette(colors.aircraft)
@@ -300,9 +352,11 @@ export function GlobeView() {
       if (state.selectedMmsi !== prev.selectedMmsi) {
         shipsLayer.setSelected(state.selectedMmsi)
         if (state.selectedMmsi !== null) {
-          // Selecting a vessel locks the camera onto it (the ask: click → fly & ride).
-          useFollow.getState().setFollowing(true)
-          engageFollow()
+          // Selecting a vessel locks the camera onto it (the ask: click → fly
+          // & ride). A fresh lock engages through the follow subscription; an
+          // existing one is re-pointed here — never both (one fly-in, not two).
+          if (useFollow.getState().following) engageFollow()
+          else useFollow.getState().setFollowing(true)
         } else {
           shipDecal.hide()
           if (useMode.getState().mode === 'maritime') useFollow.getState().setFollowing(false)
@@ -320,8 +374,8 @@ export function GlobeView() {
       if (state.selectedIcao !== prev.selectedIcao) {
         aircraftLayer.setSelected(state.selectedIcao)
         if (state.selectedIcao !== null) {
-          useFollow.getState().setFollowing(true)
-          engageFollow()
+          if (useFollow.getState().following) engageFollow()
+          else useFollow.getState().setFollowing(true)
         } else {
           aircraftDecal.hide()
           if (useMode.getState().mode === 'airspace') useFollow.getState().setFollowing(false)
@@ -369,47 +423,72 @@ export function GlobeView() {
     let trackAnchorMs = 0
     let trackPeriodMs = 0
 
+    // Reused propagation state for the selected satellite (per frame).
+    const liveState = createSatStateEcef()
+
     // --- camera follow-lock targets ---
-    const DEG = Math.PI / 180
     const followSatPos = new Cartesian3()
     let followSatValid = false
-    let lastAltKm = 400
+    let lastAltKm = DEFAULT_FOLLOW_ALT_KM
     const liveTargetScratch = new Cartesian3()
+    const shipPos: ShipPosition = { latDeg: 0, lonDeg: 0 }
+    const aircraftPos: AircraftPosition = { latDeg: 0, lonDeg: 0, altM: 0 }
+
+    /** Hold a propagated state as the orbital follow target and range basis. */
+    const holdFollowSat = (state: SatStateEcef) => {
+      followSatPos.x = state.positionEcefM[0]
+      followSatPos.y = state.positionEcefM[1]
+      followSatPos.z = state.positionEcefM[2]
+      followSatValid = true
+      lastAltKm = state.altKm
+    }
 
     /**
-     * Selected ship, dead-reckoned to wall-now. Bearing is true heading
-     * first, COG as the fallback — the same rule as the decal pose below,
-     * so the follow camera tracks exactly the point the decal occupies.
+     * The selected ship dead-reckoned to `wallNowMs` into `shipPos` — the
+     * slice's own motion rule, the one its layer uses — or undefined when
+     * none is selected. Decal and follow camera both pose from this.
      */
-    const shipTarget = (): Cartesian3 | null => {
+    const poseSelectedShip = (wallNowMs: number): Ship | undefined => {
       const st = useShips.getState()
       const ship = st.selectedMmsi === null ? undefined : st.byMmsi.get(st.selectedMmsi)
-      if (!ship) return null
-      const dt = Math.min((Date.now() - ship.tsMs) / 1000, 1800)
-      const v = ship.sogKn >= 0.2 ? ship.sogKn * 0.514444 : 0
-      const bearing = (ship.hdgDeg ?? ship.cogDeg) * DEG
-      const lat = ship.latDeg + (v * Math.cos(bearing) * dt) / 111_320
-      const lon =
-        ship.lonDeg +
-        (v * Math.sin(bearing) * dt) / (111_320 * Math.max(0.01, Math.cos(ship.latDeg * DEG)))
-      return Cartesian3.fromDegrees(lon, lat, 0, undefined, liveTargetScratch)
+      if (ship) shipPositionAt(ship, wallNowMs, shipPos)
+      return ship
     }
 
-    /** Selected aircraft, dead-reckoned to wall-now. */
-    const aircraftTarget = (): Cartesian3 | null => {
+    /** Same for the selected aircraft into `aircraftPos`, lifted to DECAL_MIN_ALT_M. */
+    const poseSelectedAircraft = (wallNowMs: number): Aircraft | undefined => {
       const st = useAircraft.getState()
       const a = st.selectedIcao === null ? undefined : st.byIcao.get(st.selectedIcao)
-      if (!a) return null
-      const dt = Math.min((Date.now() - a.tsMs) / 1000, 900)
-      const v = a.velocityMs ?? 0
-      const bearing = (a.trackDeg ?? 0) * DEG
-      const lat = a.latDeg + (v * Math.cos(bearing) * dt) / 111_320
-      const lon =
-        a.lonDeg +
-        (v * Math.sin(bearing) * dt) / (111_320 * Math.max(0.01, Math.cos(a.latDeg * DEG)))
-      const alt = Math.max(0, (a.altM ?? 0) + (a.verticalRateMs ?? 0) * dt)
-      return Cartesian3.fromDegrees(lon, lat, alt, undefined, liveTargetScratch)
+      if (a) {
+        aircraftPositionAt(a, wallNowMs, aircraftPos)
+        aircraftPos.altM = Math.max(DECAL_MIN_ALT_M, aircraftPos.altM)
+      }
+      return a
     }
+
+    /** Follow target: exactly the point the selected ship's decal occupies. */
+    const shipTarget = (): Cartesian3 | null =>
+      poseSelectedShip(Date.now()) === undefined
+        ? null
+        : Cartesian3.fromDegrees(
+            shipPos.lonDeg,
+            shipPos.latDeg,
+            DECAL_MIN_ALT_M,
+            undefined,
+            liveTargetScratch,
+          )
+
+    /** Follow target: exactly the point the selected aircraft's decal occupies. */
+    const aircraftTarget = (): Cartesian3 | null =>
+      poseSelectedAircraft(Date.now()) === undefined
+        ? null
+        : Cartesian3.fromDegrees(
+            aircraftPos.lonDeg,
+            aircraftPos.latDeg,
+            aircraftPos.altM,
+            undefined,
+            liveTargetScratch,
+          )
 
     /** Point the rig at the current mode's selection (idempotent). */
     const engageFollow = () => {
@@ -455,6 +534,7 @@ export function GlobeView() {
       // failed TLE can't leave them displayed under the new selection.
       selectedSatrec = null
       followSatValid = false
+      lastAltKm = DEFAULT_FOLLOW_ALT_KM
       groundWindow = null
       tracking.clear()
       useTelemetry.getState().clear()
@@ -475,7 +555,13 @@ export function GlobeView() {
         orbitClass: classifyOrbit(satrec),
         periodMinutes: orbitalPeriodMinutes(satrec),
       })
-      refreshTrack(simClock.get().epochMs)
+      const epochMs = simClock.get().epochMs
+      refreshTrack(epochMs)
+      // Seed the follow target now: engageFollow below (and a resumed lock
+      // after a rebuild) runs before the next frame would, and must size the
+      // range for THIS satellite, not the previous one.
+      const seed = propagateEcef(satrec, epochMs, liveState)
+      if (seed) holdFollowSat(seed)
       // Following a previous satellite → carry the lock over to the new one.
       if (useFollow.getState().following && useMode.getState().mode === 'orbital') engageFollow()
     }
@@ -517,7 +603,7 @@ export function GlobeView() {
     }
     worker.addEventListener('message', onWorkerMessage)
 
-    const sendCatalog = (sats: { noradId: number; tle1: string; tle2: string }[]) => {
+    const sendCatalog = (sats: readonly SatInit[]) => {
       workerReady = false
       tickBusy = false
       post({
@@ -657,37 +743,25 @@ export function GlobeView() {
     const aircraftIdOf = (hit: unknown) =>
       aircraftDecal.owns(hit) ? useAircraft.getState().selectedIcao : aircraftLayer.idOf(hit)
 
-    // Each walks the hits nearest-first and takes its layer's first claim.
-    const trySat = (hits: readonly unknown[]) => {
-      for (const hit of hits) {
-        const id = satIdOf(hit)
-        if (id === null) continue
-        useMode.getState().setMode('orbital')
-        useCatalog.getState().select(id)
-        return true
+    // A claimer walks the hits nearest-first and takes its layer's first
+    // claim: it focuses that layer's mode and selects the object there.
+    const claimer =
+      <Id,>(idOf: (hit: unknown) => Id | null, mode: OpsMode, select: (id: Id) => void) =>
+      (hits: readonly unknown[]): boolean => {
+        for (const hit of hits) {
+          const id = idOf(hit)
+          if (id === null) continue
+          useMode.getState().setMode(mode)
+          select(id)
+          return true
+        }
+        return false
       }
-      return false
-    }
-    const tryShip = (hits: readonly unknown[]) => {
-      for (const hit of hits) {
-        const mmsi = shipIdOf(hit)
-        if (mmsi === null) continue
-        useMode.getState().setMode('maritime')
-        useShips.getState().select(mmsi)
-        return true
-      }
-      return false
-    }
-    const tryAircraft = (hits: readonly unknown[]) => {
-      for (const hit of hits) {
-        const icao = aircraftIdOf(hit)
-        if (icao === null) continue
-        useMode.getState().setMode('airspace')
-        useAircraft.getState().select(icao)
-        return true
-      }
-      return false
-    }
+    const trySat = claimer(satIdOf, 'orbital', (id) => useCatalog.getState().select(id))
+    const tryShip = claimer(shipIdOf, 'maritime', (mmsi) => useShips.getState().select(mmsi))
+    const tryAircraft = claimer(aircraftIdOf, 'airspace', (icao) =>
+      useAircraft.getState().select(icao),
+    )
 
     // Context-loss state (driven by the recovery section below). While the
     // context is gone or a rebuild is pending, a pick reads a dead buffer
@@ -696,7 +770,6 @@ export function GlobeView() {
     let contextLost = false
     let recoveryRequested = false
 
-    const pickHandler = new ScreenSpaceEventHandler(canvas)
     pickHandler.setInputAction((movement: { position: Cartesian2 }) => {
       const scene = viewer.scene
       if (scene.isDestroyed() || contextLost || recoveryRequested) return
@@ -845,8 +918,9 @@ export function GlobeView() {
       constellation.advance(epochMs)
       // Live domains dead-reckon on wall time (they can't time-travel);
       // both layers self-gate to one update per ~250 ms.
-      shipsLayer.advance(Date.now())
-      aircraftLayer.advance(Date.now())
+      const wallNowMs = Date.now()
+      shipsLayer.advance(wallNowMs)
+      aircraftLayer.advance(wallNowMs)
 
       if (selectedSatrec) {
         // Re-sample the orbit ring when sim time leaves the sampled window;
@@ -855,19 +929,10 @@ export function GlobeView() {
           refreshTrack(epochMs)
         }
         if (groundWindow) tracking.setGroundTrack(groundWindow.update(epochMs))
-        const live = propagateEcef(selectedSatrec, epochMs)
+        const live = propagateEcef(selectedSatrec, epochMs, liveState)
         if (live) {
-          followSatPos.x = live.positionEcefM[0]
-          followSatPos.y = live.positionEcefM[1]
-          followSatPos.z = live.positionEcefM[2]
-          followSatValid = true
-          lastAltKm = live.altKm
-          tracking.updateLive({
-            positionEcefM: live.positionEcefM,
-            footprintRadiusM: footprintRadiusM(live.altKm),
-            name: selectedName,
-            gmstRad: gmstAt(epochMs),
-          })
+          holdFollowSat(live)
+          tracking.updateLive(live, selectedName)
           if (now - lastTelemetry > TELEMETRY_INTERVAL_MS) {
             lastTelemetry = now
             useTelemetry.getState().update({
@@ -879,43 +944,33 @@ export function GlobeView() {
           }
         }
       }
-      // Selected ship/aircraft world decals: dead-reckoned to wall-now,
-      // world-oriented (ship bow along true heading with COG fallback,
-      // aircraft nose along track), screen-proportional size.
+      // Selected ship/aircraft world decals: at the same dead-reckoned point
+      // the follow camera targets (poseSelected*), world-oriented — ship bow
+      // along shipBearingDeg, falling back to COG because the decal always
+      // needs some bearing, even for a headingless moored ship; aircraft
+      // nose along track, north when none — screen-proportional size.
       // Skipped entirely while the clock is not live — applyLiveVisibility
       // hid them, and setPose re-shows them on the first live frame.
       if (clockLive) {
-        const selMmsi = useShips.getState().selectedMmsi
-        if (selMmsi !== null) {
-          const ship = useShips.getState().byMmsi.get(selMmsi)
-          if (ship) {
-            const dtS = Math.min((Date.now() - ship.tsMs) / 1000, 1800)
-            const v = ship.sogKn >= 0.2 ? ship.sogKn * 0.514444 : 0
-            // True heading (bow) first; COG as the fallback — the decal
-            // always needs some bearing, even for a headingless moored ship.
-            const bearingDeg = ship.hdgDeg ?? ship.cogDeg
-            const brg = bearingDeg * DEG
-            const lat = ship.latDeg + (v * Math.cos(brg) * dtS) / 111_320
-            const lon =
-              ship.lonDeg +
-              (v * Math.sin(brg) * dtS) / (111_320 * Math.max(0.01, Math.cos(ship.latDeg * DEG)))
-            shipDecal.setPose(lon, lat, 50, bearingDeg, viewer.camera.positionWC)
-          }
+        const ship = poseSelectedShip(wallNowMs)
+        if (ship) {
+          shipDecal.setPose(
+            shipPos.lonDeg,
+            shipPos.latDeg,
+            DECAL_MIN_ALT_M,
+            shipBearingDeg(ship) ?? ship.cogDeg,
+            viewer.camera.positionWC,
+          )
         }
-        const selIcao = useAircraft.getState().selectedIcao
-        if (selIcao !== null) {
-          const a = useAircraft.getState().byIcao.get(selIcao)
-          if (a) {
-            const dtS = Math.min((Date.now() - a.tsMs) / 1000, 900)
-            const v = a.velocityMs ?? 0
-            const brg = (a.trackDeg ?? 0) * DEG
-            const lat = a.latDeg + (v * Math.cos(brg) * dtS) / 111_320
-            const lon =
-              a.lonDeg +
-              (v * Math.sin(brg) * dtS) / (111_320 * Math.max(0.01, Math.cos(a.latDeg * DEG)))
-            const alt = Math.max(50, (a.altM ?? 0) + (a.verticalRateMs ?? 0) * dtS)
-            aircraftDecal.setPose(lon, lat, alt, a.trackDeg ?? 0, viewer.camera.positionWC)
-          }
+        const aircraft = poseSelectedAircraft(wallNowMs)
+        if (aircraft) {
+          aircraftDecal.setPose(
+            aircraftPos.lonDeg,
+            aircraftPos.latDeg,
+            aircraftPos.altM,
+            aircraft.trackDeg ?? 0,
+            viewer.camera.positionWC,
+          )
         }
       }
       rig.update(dt)

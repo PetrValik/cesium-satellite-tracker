@@ -10,18 +10,23 @@ import {
 } from 'cesium'
 import type { Entity, Viewer } from 'cesium'
 import { satelliteIcon } from '../../core/engine/icons'
+import { SIGNAL_AMBER, SIGNAL_CYAN } from '../../core/engine/signalColors'
+import { footprintRadiusM, rotateEciKmToEcefM, type SatStateEcef } from '../../lib/orbital'
 
-const ORBIT_COLOR = Color.fromCssColorString('#ffb454').withAlpha(0.8) // signal amber
-const GROUND_TRACK_COLOR = Color.fromCssColorString('#6ee7ff').withAlpha(0.6) // cyan
-const MARKER_COLOR = Color.fromCssColorString('#ffb454')
+// The selection is always signal amber — like the ship/aircraft decals — and
+// never the satellite's orbit-class palette hue: amber is what marks "the
+// one you picked" in every domain.
+const ORBIT_COLOR = Color.fromCssColorString(SIGNAL_AMBER).withAlpha(0.8)
+const GROUND_TRACK_COLOR = Color.fromCssColorString(SIGNAL_CYAN).withAlpha(0.6)
+const MARKER_COLOR = Color.fromCssColorString(SIGNAL_AMBER)
 /**
  * The ground track floats slightly above the ellipsoid: enough to never
  * z-fight the globe surface, far too little to read as "in orbit" (the
  * tracked satellites fly hundreds of km up).
  */
 const GROUND_TRACK_HEIGHT_M = 10_000
-const FOOTPRINT_FILL = Color.fromCssColorString('#ffb454').withAlpha(0.06)
-const FOOTPRINT_OUTLINE = Color.fromCssColorString('#ffb454').withAlpha(0.35)
+const FOOTPRINT_FILL = Color.fromCssColorString(SIGNAL_AMBER).withAlpha(0.06)
+const FOOTPRINT_OUTLINE = Color.fromCssColorString(SIGNAL_AMBER).withAlpha(0.35)
 /** Up-right of the marker (screen space: +x right, -y up). */
 const LABEL_OFFSET = new Cartesian2(12, -12)
 
@@ -176,10 +181,11 @@ export class TrackingVisuals {
   }
 
   /**
-   * Replace the ground-track window: [lonDeg, latDeg] pairs. Called on a
-   * sim-time cadence so the trail recedes behind the satellite while new
-   * path grows ahead. Mutates the position pool in place; the dynamic
-   * polyline picks the change up on its next evaluation.
+   * Replace the ground-track window: [lonDeg, latDeg] pairs. Called every
+   * frame with GroundTrackWindow's sliding window, so the trail recedes
+   * behind the satellite while new path grows ahead. Mutates the position
+   * pool in place; the dynamic polyline picks the change up on its next
+   * evaluation.
    */
   setGroundTrack(track: Float64Array): void {
     if (this._isUnusable()) return
@@ -196,50 +202,41 @@ export class TrackingVisuals {
     this._ground.show = count >= 2
   }
 
-  /** Rotate the ECI ring into ECEF meters for the current GMST (in place). */
+  /**
+   * Rotate the ECI ring into ECEF meters for the current GMST, in place. The
+   * frame and unit math (rotation about +Z, km→m) is lib/orbital's — this
+   * class never scales or rotates a position itself.
+   */
   private _refreshRing(): void {
     const eci = this._ringEciKm
     if (eci === null || this._ringGmst === this._liveGmst) return
     this._ringGmst = this._liveGmst
-    // ECI→ECEF is a rotation about +Z by GMST (same convention as
-    // satellite.js eciToEcf), plus the km→m scale.
-    const cos = Math.cos(this._liveGmst)
-    const sin = Math.sin(this._liveGmst)
-    for (let i = 0, j = 0; i < eci.length; i += 3, j++) {
-      const x = eci[i]
-      const y = eci[i + 1]
-      const out = this._ringPositions[j]
-      out.x = (x * cos + y * sin) * 1000
-      out.y = (-x * sin + y * cos) * 1000
-      out.z = eci[i + 2] * 1000
-    }
+    rotateEciKmToEcefM(eci, this._liveGmst, this._ringPositions)
   }
 
   /**
    * Per-frame update of the live marker, label, footprint, and the GMST used
-   * to orient the orbit ring. footprintRadiusM <= 0 hides the footprint.
+   * to orient the orbit ring, from the caller's reused propagation state
+   * (`propagateEcef(…, out)`) — nothing is allocated on either side. A
+   * non-positive footprint radius (lib/orbital.footprintRadiusM) hides the
+   * footprint.
    */
-  updateLive(payload: {
-    positionEcefM: [number, number, number]
-    footprintRadiusM: number
-    name: string
-    gmstRad: number
-  }): void {
+  updateLive(state: Readonly<SatStateEcef>, name: string): void {
     if (this._isUnusable()) return
 
-    this._liveGmst = payload.gmstRad
-    const p = payload.positionEcefM
+    this._liveGmst = state.gmstRad
+    const p = state.positionEcefM
     this._livePosition.x = p[0]
     this._livePosition.y = p[1]
     this._livePosition.z = p[2]
     this._marker.show = true
     // ConstantProperty.setValue no-ops when the string is unchanged.
-    this._labelText.setValue(payload.name)
+    this._labelText.setValue(name)
 
     // Sub-satellite point: geodetic projection of the ECEF position onto the
     // ellipsoid at height 0.
     const carto = Cartographic.fromCartesian(this._livePosition, undefined, scratchCartographic)
-    const radius = payload.footprintRadiusM
+    const radius = footprintRadiusM(state.altKm)
     if (carto !== undefined && radius > 0) {
       Cartesian3.fromRadians(carto.longitude, carto.latitude, 0, undefined, this._footprintCenter)
       this._footprintRadiusM = radius

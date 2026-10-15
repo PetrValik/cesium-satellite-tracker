@@ -9,6 +9,7 @@ import {
 } from 'cesium'
 import type { Scene } from 'cesium'
 import { anchorIcon } from '../../core/engine/icons'
+import { SIGNAL_CYAN } from '../../core/engine/signalColors'
 
 /** Static port descriptor (matches ports.json rows). */
 export interface Port {
@@ -18,7 +19,7 @@ export interface Port {
   lonDeg: number
 }
 
-const ICON_COLOR = Color.fromCssColorString('#6ee7ff') // cyan
+const ICON_COLOR = Color.fromCssColorString(SIGNAL_CYAN)
 
 /**
  * Distance scaling: the anchor sprite is 64 px and Billboard.scale
@@ -111,28 +112,6 @@ export class PortsLayer {
     if (this._isUnusable()) return
     this._billboards.show = visible
     this._labels.show = visible
-  }
-
-  /**
-   * Returns the port id under the cursor if the picked primitive (billboard
-   * or label) belongs to this layer, else null.
-   */
-  pick(windowPosition: Cartesian2, scene: Scene): string | null {
-    if (scene.isDestroyed() || this._billboards.isDestroyed() || this._labels.isDestroyed()) {
-      return null
-    }
-    // Scene.pick returns { primitive, collection, id } for billboards and labels.
-    const picked = scene.pick(windowPosition) as
-      | { collection?: unknown; id?: unknown }
-      | undefined
-    if (
-      picked !== undefined &&
-      (picked.collection === this._billboards || picked.collection === this._labels) &&
-      typeof picked.id === 'string'
-    ) {
-      return picked.id
-    }
-    return null
   }
 
   dispose(): void {
