@@ -9,6 +9,7 @@ import {
 } from 'cesium'
 import type { Scene } from 'cesium'
 import { rocketIcon } from '../../core/engine/icons'
+import { SIGNAL_AMBER } from '../../core/engine/signalColors'
 
 /** Static launch-site descriptor (matches launchSites.json rows). */
 export interface LaunchSite {
@@ -18,7 +19,7 @@ export interface LaunchSite {
   lonDeg: number
 }
 
-const ICON_COLOR = Color.fromCssColorString('#ffb454') // signal amber
+const ICON_COLOR = Color.fromCssColorString(SIGNAL_AMBER)
 
 /**
  * Distance scaling: the rocket sprite is 64 px and Billboard.scale
@@ -111,28 +112,6 @@ export class LaunchSitesLayer {
     if (this._isUnusable()) return
     this._billboards.show = visible
     this._labels.show = visible
-  }
-
-  /**
-   * Returns the site id under the cursor if the picked primitive (billboard
-   * or label) belongs to this layer, else null.
-   */
-  pick(windowPosition: Cartesian2, scene: Scene): string | null {
-    if (scene.isDestroyed() || this._billboards.isDestroyed() || this._labels.isDestroyed()) {
-      return null
-    }
-    // Scene.pick returns { primitive, collection, id } for billboards and labels.
-    const picked = scene.pick(windowPosition) as
-      | { collection?: unknown; id?: unknown }
-      | undefined
-    if (
-      picked !== undefined &&
-      (picked.collection === this._billboards || picked.collection === this._labels) &&
-      typeof picked.id === 'string'
-    ) {
-      return picked.id
-    }
-    return null
   }
 
   dispose(): void {

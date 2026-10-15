@@ -13,7 +13,7 @@ import {
 } from 'cesium'
 import { msaaSamplesFor, resolutionScaleFor, skipCanvasAntialias } from './displayDensity'
 
-export type Basemap = 'streets' | 'topo' | 'satellite'
+type Basemap = 'streets' | 'topo' | 'satellite' // mirrors core/ui/prefsStore Basemap
 
 /**
  * Keyless basemap providers. TOPO carries hillshaded relief ("mountains"),
@@ -50,14 +50,14 @@ export function setViewerBasemap(viewer: Viewer, basemap: Basemap): void {
 }
 
 /**
- * Engine-layer viewer factory for Orbital Ops. No React in here — components
- * consume this through thin hooks.
+ * Engine-layer viewer factory for Orbital Ops. No React in here —
+ * app/GlobeView composes it directly.
  *
- * Two provisioning modes:
- * - With `VITE_CESIUM_TOKEN`: Cesium Ion world terrain + default Ion imagery.
- * - Without a token (hard requirement): keyless OpenStreetMap imagery +
- *   ellipsoid terrain, and Ion is never touched (no token set, no Ion asset
- *   requests, no console error spam).
+ * Imagery always comes from the chosen keyless basemap. Two terrain modes:
+ * - With `VITE_CESIUM_TOKEN`: Cesium Ion world terrain — the token's only
+ *   use.
+ * - Without a token (hard requirement): ellipsoid terrain, and Ion is never
+ *   touched (no token set, no Ion asset requests, no console error spam).
  */
 export function createOrbitalViewer(container: HTMLElement, basemap: Basemap = 'streets'): Viewer {
   const token = import.meta.env.VITE_CESIUM_TOKEN as string | undefined

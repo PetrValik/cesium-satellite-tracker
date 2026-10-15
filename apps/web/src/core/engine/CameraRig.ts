@@ -1,6 +1,7 @@
 import {
   BoundingSphere,
   Cartesian3,
+  Cartographic,
   Math as CesiumMath,
   Matrix4,
   Transforms,
@@ -37,6 +38,7 @@ const scratchTarget = new Cartesian3()
 const scratchLocalPosition = new Cartesian3()
 const scratchLocalDirection = new Cartesian3()
 const scratchLocalUp = new Cartesian3()
+const scratchCartographic = new Cartographic()
 
 /**
  * Keyboard camera movement + follow-lock.
@@ -201,7 +203,10 @@ export class CameraRig {
       // LEO range down to airport range.
       const distance = this._getTarget !== null
         ? Cartesian3.magnitude(camera.position) // position is target-local while following
-        : this._viewer.scene.globe.ellipsoid.cartesianToCartographic(camera.position)?.height ?? 1e6
+        : this._viewer.scene.globe.ellipsoid.cartesianToCartographic(
+            camera.position,
+            scratchCartographic,
+          )?.height ?? 1e6
       const step = Math.max(distance, MIN_FOLLOW_RANGE_M) * ZOOM_PER_S * dt
       if (zoomIn) camera.zoomIn(step)
       if (zoomOut) camera.zoomOut(step)

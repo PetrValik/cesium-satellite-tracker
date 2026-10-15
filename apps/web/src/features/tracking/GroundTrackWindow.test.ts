@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createSatrec } from '../../lib/orbital'
+import type { SatRec } from 'satellite.js'
+import { createSatrec, orbitalPeriodMinutes, propagateEcef } from '../../lib/orbital'
 import { GroundTrackWindow } from './GroundTrackWindow'
 
 /** ISS (ZARYA), epoch 2026-07-10 — same fixture as orbital.test.ts. */
@@ -11,6 +12,29 @@ function setup() {
   const satrec = createSatrec(ISS_TLE1, ISS_TLE2)!
   const epochMs = (satrec.jdsatepoch - JD_UNIX_EPOCH) * 86_400_000
   return { satrec, epochMs, window: new GroundTrackWindow(satrec) }
+}
+
+/**
+ * From-scratch reference: every grid sample is a pure function of k, so the
+ * incremental window must equal propagating the whole window afresh.
+ */
+function referenceWindow(satrec: SatRec, epochMs: number): number[] {
+  const periodMs = orbitalPeriodMinutes(satrec) * 60_000
+  const stepMs = periodMs / 128
+  const startMs = epochMs - periodMs * 0.15
+  const endMs = startMs + periodMs
+  const out: number[] = []
+  const exact = (tMs: number) => {
+    const s = propagateEcef(satrec, tMs)
+    if (s) out.push(s.lonDeg, s.latDeg)
+  }
+  exact(startMs)
+  for (let k = Math.ceil(startMs / stepMs); k <= Math.floor(endMs / stepMs); k++) {
+    const s = propagateEcef(satrec, k * stepMs)
+    out.push(s ? s.lonDeg : Number.NaN, s ? s.latDeg : Number.NaN)
+  }
+  exact(endMs)
+  return out
 }
 
 describe('GroundTrackWindow', () => {
@@ -50,5 +74,34 @@ describe('GroundTrackWindow', () => {
     for (let i = 1; i < rewound.length; i += 2) {
       expect(Math.abs(rewound[i])).toBeLessThanOrEqual(51.8)
     }
+  })
+
+  it('matches the from-scratch window exactly across slides, jumps and rewinds', () => {
+    const { satrec, epochMs, window } = setup()
+    const stepMs = ((2 * Math.PI) / satrec.no) * 60_000 / 128
+    const offsets = [
+      0, 16, 1_000, stepMs / 2, stepMs, 3 * stepMs, -2 * stepMs, 2 * stepMs + 7, // slides
+      -3_600_000, 86_400_000, 86_400_000 + 0.9 * 128 * stepMs, 5, // jumps + rewind
+    ]
+    let t = epochMs
+    for (const offset of offsets) {
+      t += offset
+      expect(Array.from(window.update(t))).toEqual(referenceWindow(satrec, t))
+    }
+    // A deterministic pseudo-random walk across many frames.
+    let seed = 12345
+    for (let i = 0; i < 300; i++) {
+      seed = (seed * 1103515245 + 12345) % 2 ** 31
+      t += ((seed / 2 ** 31) - 0.3) * 4 * stepMs
+      expect(Array.from(window.update(t))).toEqual(referenceWindow(satrec, t))
+    }
+  })
+
+  it('returns the same view object while the window length is unchanged (no per-frame allocation)', () => {
+    const { epochMs, window } = setup()
+    const a = window.update(epochMs)
+    const b = window.update(epochMs)
+    expect(b).toBe(a)
+    expect(b.buffer).toBe(window.update(epochMs + 60_000).buffer) // always the one buffer
   })
 })

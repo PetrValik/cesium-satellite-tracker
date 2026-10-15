@@ -1,7 +1,8 @@
 /**
- * Message protocol between the main thread and the propagation worker.
- * Positions are ECEF meters (Cesium's fixed frame); satellite.js works in
- * ECI km internally — conversion happens inside the worker/orbital lib.
+ * Message protocol between the main thread and the propagation worker, plus
+ * the pass-prediction types `lib/orbital` returns. Positions are ECEF meters
+ * (Cesium's fixed frame); satellite.js works in ECI km internally — the
+ * conversion happens inside `lib/orbital`, never at a call site.
  */
 
 export const ORBIT_CLASSES = ['LEO', 'MEO', 'GEO', 'HEO'] as const
@@ -41,17 +42,6 @@ export type WorkerRequest =
   | { type: 'init'; sats: SatInit[] }
   /** Propagate the whole working set to one sim time. */
   | { type: 'tick'; epochMs: number }
-  /** Sample orbit path + ground track for one satellite starting at epochMs. */
-  | { type: 'track'; noradId: number; epochMs: number }
-  /** Predict passes over an observer within [startMs, startMs + hours]. */
-  | {
-      type: 'passes'
-      requestId: number
-      noradId: number
-      observer: ObserverGeo
-      startMs: number
-      hours: number
-    }
 
 export type WorkerResponse =
   /** init result; indexes of noradIds/classes match the init order. */
@@ -62,18 +52,5 @@ export type WorkerResponse =
    * Transferable; main thread must not retain across ticks.
    */
   | { type: 'positions'; epochMs: number; positions: Float32Array }
-  /**
-   * Track result: orbitEcef = ECEF meters over one orbital period from
-   * epochMs (each sample at its own future time); groundTrack = [lonDeg,
-   * latDeg] pairs over the same window.
-   */
-  | {
-      type: 'track'
-      noradId: number
-      epochMs: number
-      periodMinutes: number
-      orbitEcef: Float64Array
-      groundTrack: Float64Array
-    }
-  | { type: 'passes'; requestId: number; noradId: number; passes: PassPrediction[] }
+  /** A request failed (unknown type, or a handler threw); the worker stays alive. */
   | { type: 'error'; message: string }

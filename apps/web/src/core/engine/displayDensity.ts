@@ -38,7 +38,7 @@ export const DEFAULT_MSAA_SAMPLES = 4
  * pixel density itself smooths edges, and 4× multisampled colour + depth at
  * that resolution is the largest single GPU allocation in the scene.
  */
-export const NO_MSAA_MIN_DPR = 2
+const NO_MSAA_MIN_DPR = 2
 
 /** `viewer.resolutionScale` that caps the effective pixel ratio at MAX_RENDER_PIXEL_RATIO. */
 export function resolutionScaleFor(devicePixelRatio: number): number {

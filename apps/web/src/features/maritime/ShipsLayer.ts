@@ -1,20 +1,17 @@
 import { BillboardCollection, BlendOption, Cartesian3, Color, NearFarScalar } from 'cesium'
 import type { Billboard, Scene } from 'cesium'
-import { shipIcon } from '../../core/engine/icons'
 import type { Ship, ShipType } from '@orbital-ops/shared'
+import { shipIcon } from '../../core/engine/icons'
+import { travelAxis } from '../../core/engine/travelAxis'
+import { DEFAULT_COLORS, type ColorPrefs } from '../../core/ui/prefsStore'
+import {
+  shipBearingDeg,
+  shipDeadReckonSec,
+  shipVelocity,
+  type ShipVelocity,
+} from './shipMotion'
 
-export type ShipPalette = Record<ShipType, string>
-
-/** Default hues (mirrors core/ui/prefsStore DEFAULT_COLORS.ships). */
-const DEFAULT_PALETTE: ShipPalette = {
-  cargo: '#6ee7ff',
-  tanker: '#ffb454',
-  passenger: '#c084fc',
-  fishing: '#7dd87d',
-  highspeed: '#f0f4f8',
-  military: '#f87171',
-  other: '#8a93a3',
-}
+type ShipPalette = ColorPrefs['ships']
 
 function buildColors(palette: ShipPalette): Record<ShipType, Color> {
   const out = {} as Record<ShipType, Color>
@@ -51,23 +48,12 @@ const SHIP_IMAGE_ID = 'icon:ship'
  */
 const EYE_OFFSET = new Cartesian3(0, 0, -1500)
 
-const KNOTS_TO_MS = 0.514444
-/** Metres per degree of latitude (and of longitude at the equator). */
-const METERS_PER_DEG = 111_320
-const RAD_PER_DEG = Math.PI / 180
-/** Below this speed over ground the vessel is treated as moored (no dead reckoning). */
-const MOORED_SOG_KN = 0.2
 /**
  * Ships crawl relative to pixels: even at 30 kn a vessel covers ~4 m in
  * 250 ms, far below one pixel at any usable zoom, so advancing more often is
  * pure waste.
  */
 const MIN_ADVANCE_INTERVAL_MS = 250
-/**
- * cos(lat) floor for the equirectangular longitude step: keeps the division
- * sane for the (data-error) case of a vessel reported at a pole.
- */
-const MIN_COS_LAT = 0.01
 
 // Module-scope scratch: advance() runs over thousands of billboards and must
 // not allocate. Safe to share because Billboard's `position` setter clones
@@ -77,38 +63,11 @@ const scratchPosition = new Cartesian3()
 // reason: both the Billboard constructor and the `alignedAxis` setter clone
 // the value into the billboard's internal Cartesian3 (cesium 1.138).
 const scratchAxis = new Cartesian3()
+// Scratch for _storeState's velocity (feed cadence, but no reason to allocate).
+const scratchVelocity: ShipVelocity = { vLatDegS: 0, vLonDegS: 0 }
 
 /**
- * ECEF unit vector of horizontal travel for a bearing (degrees clockwise
- * from north) at (latDeg, lonDeg), using the local ENU basis
- *   east  = (-sinLon, cosLon, 0)
- *   north = (-sinLat·cosLon, -sinLat·sinLon, cosLat)
- *   dir   = east·sin(brg) + north·cos(brg)
- * east and north are orthonormal, so dir is unit-length by construction.
- */
-function travelAxis(
-  latDeg: number,
-  lonDeg: number,
-  bearingDeg: number,
-  result: Cartesian3,
-): Cartesian3 {
-  const latRad = latDeg * RAD_PER_DEG
-  const lonRad = lonDeg * RAD_PER_DEG
-  const bearingRad = bearingDeg * RAD_PER_DEG
-  const sinLat = Math.sin(latRad)
-  const cosLat = Math.cos(latRad)
-  const sinLon = Math.sin(lonRad)
-  const cosLon = Math.cos(lonRad)
-  const sinBrg = Math.sin(bearingRad)
-  const cosBrg = Math.cos(bearingRad)
-  result.x = -sinLon * sinBrg - sinLat * cosLon * cosBrg
-  result.y = cosLon * sinBrg - sinLat * sinLon * cosBrg
-  result.z = cosLat * cosBrg
-  return result
-}
-
-/**
- * World-space alignedAxis for a ship's glyph. Bearing priority: AIS true
+ * World-space alignedAxis for a ship's glyph, along shipBearingDeg: AIS true
  * heading (bow direction) when broadcast — anchored ships point their bow
  * somewhere real, so heading is meaningful even at sog 0 — else COG, but
  * only when the vessel is making way: below steerageway COG is noise (and
@@ -118,7 +77,7 @@ function travelAxis(
  * it (cesium 1.138).
  */
 function glyphAxis(ship: Ship): Cartesian3 {
-  const bearing = ship.hdgDeg ?? (ship.sogKn >= MOORED_SOG_KN ? ship.cogDeg : null)
+  const bearing = shipBearingDeg(ship)
   if (bearing === null) return Cartesian3.ZERO
   return travelAxis(ship.latDeg, ship.lonDeg, bearing, scratchAxis)
 }
@@ -126,8 +85,9 @@ function glyphAxis(ship: Ship): Cartesian3 {
 /**
  * The AIS vessel layer: one BillboardCollection, one tinted hull sprite per
  * ship, keyed by MMSI. Between feed polls `advance()` dead-reckons every
- * moving vessel from its last report (constant course/speed, cheap
- * equirectangular step), gated to at most once per 250 ms. Each moving hull
+ * moving vessel from its last report along COG (shipMotion — the same rule
+ * the selected-vessel decal and follow camera use), gated to at most once
+ * per 250 ms and frozen after SHIP_MAX_DEAD_RECKON_MS. Each moving hull
  * points along its bearing via world-space Billboard.alignedAxis (an ECEF
  * unit direction; sprite-up follows its screen projection, which Cesium
  * recomputes every frame, so the bearing reads correctly from any camera
@@ -149,7 +109,7 @@ export class ShipsLayer {
   private readonly _indexByMmsi = new Map<number, number>()
   private _selectedMmsi: number | null = null
   private _lastAdvanceMs = 0
-  private _colors: Record<ShipType, Color> = buildColors(DEFAULT_PALETTE)
+  private _colors: Record<ShipType, Color> = buildColors(DEFAULT_COLORS.ships)
 
   // Dead-reckoning state in billboard-index order. Positions are re-derived
   // from the *report* each pass (lat0 + vLat * dt), so the reckoning never
@@ -233,7 +193,8 @@ export class ShipsLayer {
 
   /**
    * Dead-reckon every moving vessel to wall-clock `wallNowMs`. No-op unless
-   * at least 250 ms elapsed since the last pass. Orientation costs nothing
+   * at least 250 ms elapsed since the last pass; extrapolation is clamped to
+   * SHIP_MAX_DEAD_RECKON_MS past the report. Orientation costs nothing
    * here: alignedAxis is world-space and set once per feed snapshot, and
    * Cesium re-projects it to the screen every frame on its own. Zero
    * allocations: one shared scratch Cartesian3.
@@ -253,8 +214,8 @@ export class ShipsLayer {
       const vLat = this._vLat[i]
       const vLon = this._vLon[i]
       if (vLat === 0 && vLon === 0) continue // moored (sog < 0.2 kn)
-      const dtSec = (wallNowMs - this._tsMs[i]) / 1000
-      if (dtSec <= 0) continue
+      const dtSec = shipDeadReckonSec(this._tsMs[i], wallNowMs)
+      if (dtSec === 0) continue
       Cartesian3.fromDegrees(
         this._lon0[i] + vLon * dtSec,
         this._lat0[i] + vLat * dtSec,
@@ -299,12 +260,12 @@ export class ShipsLayer {
     return collection === this._billboards && typeof id === 'number' ? id : null
   }
 
-  /** Show or hide the whole layer (billboards keep updating while hidden). */
   /** Swap the per-type hues; the caller re-feeds the working set to recolor. */
   setPalette(palette: ShipPalette): void {
     this._colors = buildColors(palette)
   }
 
+  /** Show or hide the whole layer (billboards keep updating while hidden). */
   setVisible(visible: boolean): void {
     if (this._isUnusable()) return
     this._billboards.show = visible
@@ -331,24 +292,17 @@ export class ShipsLayer {
   }
 
   /**
-   * Record the report and the precomputed surface velocity in
-   * degrees/second (equirectangular: dLat = v·cos(brg)/111320,
-   * dLon = v·sin(brg)/(111320·cos(lat))) so advance() does no trigonometry.
+   * Record the report and its precomputed surface velocity in degrees/second
+   * (shipVelocity: along COG, zero when moored) so advance() does no
+   * trigonometry.
    */
   private _storeState(index: number, ship: Ship): void {
     this._lat0[index] = ship.latDeg
     this._lon0[index] = ship.lonDeg
     this._tsMs[index] = ship.tsMs
-    if (ship.sogKn < MOORED_SOG_KN) {
-      this._vLat[index] = 0
-      this._vLon[index] = 0
-      return
-    }
-    const bearingRad = ship.cogDeg * RAD_PER_DEG
-    const speedMs = ship.sogKn * KNOTS_TO_MS
-    const cosLat = Math.max(Math.cos(ship.latDeg * RAD_PER_DEG), MIN_COS_LAT)
-    this._vLat[index] = (speedMs * Math.cos(bearingRad)) / METERS_PER_DEG
-    this._vLon[index] = (speedMs * Math.sin(bearingRad)) / (METERS_PER_DEG * cosLat)
+    const v = shipVelocity(ship, scratchVelocity)
+    this._vLat[index] = v.vLatDegS
+    this._vLon[index] = v.vLonDegS
   }
 
   private _isUnusable(): boolean {

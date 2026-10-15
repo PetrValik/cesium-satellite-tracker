@@ -1,19 +1,26 @@
 import { BillboardCollection, BlendOption, Cartesian3, Color, NearFarScalar } from 'cesium'
 import type { Billboard, Scene } from 'cesium'
-import { aircraftIcon } from '../../core/engine/icons'
 import type { Aircraft } from '@orbital-ops/shared'
+import { aircraftIcon } from '../../core/engine/icons'
+import { travelAxis } from '../../core/engine/travelAxis'
+import { DEFAULT_COLORS, type ColorPrefs } from '../../core/ui/prefsStore'
+import { AIRCRAFT_CATEGORIES } from '../../lib/aircraftCategories'
 import { categoryOf } from './aircraftCategory'
+import { aircraftDeadReckonSec, aircraftVelocity, type AircraftVelocity } from './aircraftMotion'
+import { bandOf, type AltBand } from './aircraftStore'
 
-/** On-ground aircraft render flat grey regardless of the category hue. */
+/** The 'ground' band (on ground, or no altitude) renders flat grey regardless of the category hue. */
 const COLOR_GROUND = Color.fromCssColorString('#8a93a3').withAlpha(0.95)
 
-/** Altitude drives the shade of the category hue: darker low, full bright high. */
-const BAND_SHADE = { low: 0.55, mid: 0.78, high: 1.0 } as const
+type AirborneBand = Exclude<AltBand, 'ground'>
 
-export type AircraftPalette = Record<'civil' | 'cargo' | 'military', string>
+/** Altitude band drives the shade of the category hue: darker low, full bright high. */
+const BAND_SHADE: Record<AirborneBand, number> = { low: 0.55, mid: 0.78, high: 1.0 }
 
-/** Precomputed tint per category x altitude band. */
-type ShadedPalette = Record<keyof AircraftPalette, { low: Color; mid: Color; high: Color }>
+type AircraftPalette = ColorPrefs['aircraft']
+
+/** Precomputed tint per category x airborne altitude band. */
+type ShadedPalette = Record<keyof AircraftPalette, Record<AirborneBand, Color>>
 
 function shade(hex: string, factor: number): Color {
   const c = Color.fromCssColorString(hex)
@@ -22,7 +29,7 @@ function shade(hex: string, factor: number): Color {
 
 function buildShadedPalette(palette: AircraftPalette): ShadedPalette {
   const out = {} as ShadedPalette
-  for (const key of ['civil', 'cargo', 'military'] as const) {
+  for (const key of AIRCRAFT_CATEGORIES) {
     out[key] = {
       low: shade(palette[key], BAND_SHADE.low),
       mid: shade(palette[key], BAND_SHADE.mid),
@@ -59,21 +66,8 @@ const AIRCRAFT_IMAGE_ID = 'icon:aircraft'
  */
 const EYE_OFFSET = new Cartesian3(0, 0, -1000)
 
-/** Metres per degree of latitude (and of longitude at the equator). */
-const METERS_PER_DEG = 111_320
-const RAD_PER_DEG = Math.PI / 180
 /** Advancing more than ~4×/s buys nothing visible for aircraft-scale motion. */
 const MIN_ADVANCE_INTERVAL_MS = 250
-/**
- * Dead-reckoning horizon: state vectors older than this are frozen at their
- * 15-minute extrapolation so stale aircraft don't fly off across the globe.
- */
-const MAX_DEAD_RECKON_MS = 15 * 60 * 1000
-/**
- * cos(lat) floor for the equirectangular longitude step: keeps the division
- * sane for the (data-error) case of an aircraft reported at a pole.
- */
-const MIN_COS_LAT = 0.01
 
 // Module-scope scratch: advance() runs over thousands of billboards and must
 // not allocate. Safe to share because Billboard's `position` setter clones
@@ -83,58 +77,29 @@ const scratchPosition = new Cartesian3()
 // reason: both the Billboard constructor and the `alignedAxis` setter clone
 // the value into the billboard's internal Cartesian3 (cesium 1.138).
 const scratchAxis = new Cartesian3()
-
-/**
- * ECEF unit vector of horizontal travel for a bearing (degrees clockwise
- * from north) at (latDeg, lonDeg), using the local ENU basis
- *   east  = (-sinLon, cosLon, 0)
- *   north = (-sinLat·cosLon, -sinLat·sinLon, cosLat)
- *   dir   = east·sin(brg) + north·cos(brg)
- * east and north are orthonormal, so dir is unit-length by construction.
- */
-function travelAxis(
-  latDeg: number,
-  lonDeg: number,
-  bearingDeg: number,
-  result: Cartesian3,
-): Cartesian3 {
-  const latRad = latDeg * RAD_PER_DEG
-  const lonRad = lonDeg * RAD_PER_DEG
-  const bearingRad = bearingDeg * RAD_PER_DEG
-  const sinLat = Math.sin(latRad)
-  const cosLat = Math.cos(latRad)
-  const sinLon = Math.sin(lonRad)
-  const cosLon = Math.cos(lonRad)
-  const sinBrg = Math.sin(bearingRad)
-  const cosBrg = Math.cos(bearingRad)
-  result.x = -sinLon * sinBrg - sinLat * cosLon * cosBrg
-  result.y = cosLon * sinBrg - sinLat * sinLon * cosBrg
-  result.z = cosLat * cosBrg
-  return result
-}
+// Scratch for _storeState's velocity (feed cadence, but no reason to allocate).
+const scratchVelocity: AircraftVelocity = { vLatDegS: 0, vLonDegS: 0, vAltMS: 0 }
 
 /**
  * Color for a state vector (chosen at set time, not re-derived per frame):
- * hue from the heuristic category, shade from the altitude band — so the
- * filter toggles never change what a color means.
+ * hue from the heuristic category, shade from the store's own `bandOf` — the
+ * band the filter uses — so the filter toggles never change what a color
+ * means.
  */
 function colorFor(aircraft: Aircraft, palette: ShadedPalette): Color {
-  if (aircraft.onGround) return COLOR_GROUND
-  const shades = palette[categoryOf(aircraft)]
-  const altM = aircraft.altM ?? 0
-  if (altM < 3000) return shades.low
-  if (altM <= 9000) return shades.mid
-  return shades.high
+  const band = bandOf(aircraft)
+  return band === 'ground' ? COLOR_GROUND : palette[categoryOf(aircraft)][band]
 }
 
 /**
  * The ADS-B aircraft layer: one BillboardCollection, one tinted airliner
  * sprite per aircraft, keyed by ICAO 24-bit address. Between feed polls
  * `advance()` dead-reckons every aircraft with a usable velocity/track along
- * its track (cheap equirectangular step) plus vertical rate on altitude,
- * gated to at most once per 250 ms and clamped to 15 minutes of
- * extrapolation. Each glyph points along its reported track via world-space
- * Billboard.alignedAxis (the ECEF travel direction; sprite-up follows its
+ * its track plus vertical rate on altitude (aircraftMotion — the same rule
+ * the selected-aircraft decal and follow camera use), gated to at most once
+ * per 250 ms and clamped to AIRCRAFT_MAX_DEAD_RECKON_MS. Each glyph points
+ * along its reported track via world-space Billboard.alignedAxis (the ECEF
+ * travel direction, core/engine/travelAxis; sprite-up follows its
  * screen projection, which Cesium recomputes every frame, so the heading
  * reads correctly from any camera angle — no per-frame rotation work).
  * Null-track aircraft use alignedAxis = ZERO (plain screen-aligned);
@@ -152,11 +117,7 @@ export class AircraftLayer {
   private readonly _indexByIcao24 = new Map<string, number>()
   private _selectedIcao24: string | null = null
   private _lastAdvanceMs = 0
-  private _palette: ShadedPalette = buildShadedPalette({
-    civil: '#4da6ff',
-    cargo: '#f87171',
-    military: '#7dd87d',
-  })
+  private _palette: ShadedPalette = buildShadedPalette(DEFAULT_COLORS.aircraft)
 
   // Dead-reckoning state in billboard-index order. Positions are re-derived
   // from the *state vector* each pass (lat0 + vLat * dt), so the reckoning
@@ -265,11 +226,11 @@ export class AircraftLayer {
   /**
    * Dead-reckon every reckonable aircraft to wall-clock `wallNowMs`. No-op
    * unless at least 250 ms elapsed since the last pass; extrapolation is
-   * clamped to 15 minutes past the state vector. Orientation costs nothing
-   * here: alignedAxis is world-space and set once per feed snapshot, and
-   * Cesium re-projects it to the screen every frame on its own. Zero
-   * allocations: one shared scratch Cartesian3 is reused for every
-   * billboard.
+   * clamped to AIRCRAFT_MAX_DEAD_RECKON_MS past the state vector.
+   * Orientation costs nothing here: alignedAxis is world-space and set once
+   * per feed snapshot, and Cesium re-projects it to the screen every frame on
+   * its own. Zero allocations: one shared scratch Cartesian3 is reused for
+   * every billboard.
    */
   advance(wallNowMs: number): void {
     if (this._isUnusable()) return
@@ -290,10 +251,8 @@ export class AircraftLayer {
       const vAlt = this._vAlt[i]
       // Null velocity/track zeroed all three in _storeState: not reckonable.
       if (vLat === 0 && vLon === 0 && vAlt === 0) continue
-      let dtMs = wallNowMs - this._tsMs[i]
-      if (dtMs <= 0) continue
-      if (dtMs > MAX_DEAD_RECKON_MS) dtMs = MAX_DEAD_RECKON_MS
-      const dtSec = dtMs / 1000
+      const dtSec = aircraftDeadReckonSec(this._tsMs[i], wallNowMs)
+      if (dtSec === 0) continue
       let altM = this._alt0[i] + vAlt * dtSec
       if (altM < 0) altM = 0
       Cartesian3.fromDegrees(
@@ -340,7 +299,6 @@ export class AircraftLayer {
     return collection === this._billboards && typeof id === 'string' ? id : null
   }
 
-  /** Show or hide the whole layer (billboards keep updating while hidden). */
   /**
    * Swap the category hues (user palette). Colors are applied at set time,
    * so the caller re-feeds the current working set after switching.
@@ -349,6 +307,7 @@ export class AircraftLayer {
     this._palette = buildShadedPalette(palette)
   }
 
+  /** Show or hide the whole layer (billboards keep updating while hidden). */
   setVisible(visible: boolean): void {
     if (this._isUnusable()) return
     this._billboards.show = visible
@@ -375,27 +334,19 @@ export class AircraftLayer {
   }
 
   /**
-   * Record the state vector and the precomputed surface velocity in
-   * degrees/second (equirectangular: dLat = v·cos(trk)/111320,
-   * dLon = v·sin(trk)/(111320·cos(lat))) so advance() does no trigonometry.
-   * Null velocity or track disables reckoning for this aircraft entirely.
+   * Record the state vector and its precomputed velocity (aircraftVelocity:
+   * degrees/second plus climb) so advance() does no trigonometry. Null
+   * velocity or track zeroes all three: not reckonable at all.
    */
   private _storeState(index: number, aircraft: Aircraft): void {
     this._lat0[index] = aircraft.latDeg
     this._lon0[index] = aircraft.lonDeg
     this._alt0[index] = aircraft.altM ?? 0
     this._tsMs[index] = aircraft.tsMs
-    if (aircraft.velocityMs === null || aircraft.trackDeg === null) {
-      this._vLat[index] = 0
-      this._vLon[index] = 0
-      this._vAlt[index] = 0
-      return
-    }
-    const trackRad = aircraft.trackDeg * RAD_PER_DEG
-    const cosLat = Math.max(Math.cos(aircraft.latDeg * RAD_PER_DEG), MIN_COS_LAT)
-    this._vLat[index] = (aircraft.velocityMs * Math.cos(trackRad)) / METERS_PER_DEG
-    this._vLon[index] = (aircraft.velocityMs * Math.sin(trackRad)) / (METERS_PER_DEG * cosLat)
-    this._vAlt[index] = aircraft.verticalRateMs ?? 0
+    const v = aircraftVelocity(aircraft, scratchVelocity)
+    this._vLat[index] = v.vLatDegS
+    this._vLon[index] = v.vLonDegS
+    this._vAlt[index] = v.vAltMS
   }
 
   private _isUnusable(): boolean {
