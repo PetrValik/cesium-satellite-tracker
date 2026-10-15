@@ -97,7 +97,7 @@ packs:
       client: manual # no OpenAPI codegen; apps/api is hand-typed via packages/shared
       server_state: none # zustand holds client state; there is no server-state library
     forms: none # no forms in this app
-    # Global hand-written CSS (src/index.css) reading custom properties from src/styles/tokens.css; there
+    # Global hand-written CSS (src/styles/index.css + one file per component) reading tokens.css; there
     # are no *.module.css files. css-modules is the closest pack value: its rule (colours via var(--token),
     # no inline hex) is the one this repo follows.
     styling: css-modules

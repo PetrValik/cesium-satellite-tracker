@@ -80,8 +80,9 @@ export function CompactHud() {
 
   // The store mirrors the screen: a sheet that cannot render is closed, not
   // left pending, and leaving the compact layout (rotation / resize across
-  // the breakpoint) closes it — otherwise GlobeView's Escape would spend a
-  // press closing a sheet nobody can see.
+  // the breakpoint) closes it — otherwise the globe keys' Escape
+  // (app/globe/globeKeys.ts) would spend a press closing a sheet nobody can
+  // see.
   useEffect(() => {
     if (sheet !== null && openSheet === null) useSheet.getState().close()
   }, [sheet, openSheet])

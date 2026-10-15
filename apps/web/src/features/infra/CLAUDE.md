@@ -2,7 +2,7 @@
 The two static ground overlays: orbital launch sites (signal-amber rocket) and major ports (cyan anchor), each a billboard collection plus a label collection built once in its constructor. Neither is pickable: a tap on one is an empty tap.
 
 ## Depends on
-`core/engine/icons.rocketIcon` / `icons.anchorIcon`, `core/engine/signalColors` for the tints, and the committed datasets `src/data/launchSites.json` and `src/data/ports.json`, whose row shape is mirrored by the exported `LaunchSite` / `Port` interfaces. `app/GlobeView` owns both layers' lifetimes (its tap resolution claims no infra hit); `app/LayersPanel` toggles them. No other slice may import from here.
+`core/engine/icons.rocketIcon` / `icons.anchorIcon`, `core/engine/signalColors` for the tints, and the committed datasets `src/data/launchSites.json` and `src/data/ports.json`, whose row shape is mirrored by the exported `LaunchSite` / `Port` interfaces. `app/globe/createGlobe` owns both layers' lifetimes and `app/globe/tapRouting` claims no infra hit; `app/LayersPanel` toggles them through `core/ui/modeStore`, which `app/globe/layerSync` applies via `setVisible`. No other slice may import from here.
 
 ## Invariants
 - Every Cesium object created has a destroy path: `dispose()` removes both collections, and `PrimitiveCollection.destroyPrimitives` defaults to true, so `remove()` destroys them.

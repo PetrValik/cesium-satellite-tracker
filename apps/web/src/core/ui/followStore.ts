@@ -2,8 +2,9 @@ import { create } from 'zustand'
 
 /**
  * Follow-lock intent: when true, the camera rides the current mode's
- * selection (GlobeView owns the execution). Flipped by the F key, the
- * FOLLOW buttons, and automatically when a ship/aircraft is selected.
+ * selection (`GlobeFollow` in app/globe/follow.ts executes it). Flipped by
+ * the F key, the FOLLOW buttons, and automatically when a ship/aircraft is
+ * selected.
  */
 export interface FollowState {
   following: boolean

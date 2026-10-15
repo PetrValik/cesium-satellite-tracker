@@ -6,7 +6,7 @@ interface HelpSection {
   rows: [string, string][]
 }
 
-/** Shown first, and only on coarse pointers (index.css `.help-touch`). */
+/** Shown first, and only on coarse pointers (styles/dialogs.css `.help-touch`). */
 const TOUCH_SECTION: HelpSection = {
   title: 'TOUCH',
   rows: [

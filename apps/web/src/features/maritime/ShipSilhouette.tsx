@@ -7,7 +7,7 @@ import type { ShipType } from '@orbital-ops/shared'
  *
  * Conventions: bow faces right, shared 120×44 viewBox, waterline at y=34.
  * All strokes inherit color from CSS (`currentColor` + token classes in
- * index.css) — no hex values here.
+ * styles/cards.css) — no hex values here.
  */
 
 /** Per-class profile artwork (hull + the class's telltale superstructure). */

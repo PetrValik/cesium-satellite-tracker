@@ -3,7 +3,7 @@
  * altitude-band + category rows that double as globe filters. The globe
  * paints category = hue, altitude = shade of that hue (AircraftLayer), so
  * the category swatches wear the user palette and the band swatches show
- * the shade ramp on a neutral hue (index.css .band-*).
+ * the shade ramp on a neutral hue (styles/rail.css .band-*).
  */
 import { hueStyle } from '../../core/ui/hueStyle'
 import { usePrefs } from '../../core/ui/prefsStore'

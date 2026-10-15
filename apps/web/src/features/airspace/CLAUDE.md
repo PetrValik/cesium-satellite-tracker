@@ -2,7 +2,7 @@
 The ADS-B aircraft slice: the polling store with its altitude bands and heuristic categories, the dead-reckoning rule (`aircraftMotion`), the billboard layer, the AIR left-rail picture, the selected-aircraft panel and its photo lookup, and the selection-chip summary (`aircraftSummary`).
 
 ## Depends on
-`GET /api/aircraft` and planespotters.net photos through `lib/api` (`ApiError`, `planePhoto`), polled by `lib/poller`, `Aircraft` from `@orbital-ops/shared`, `core/engine/icons.aircraftIcon` and `travelAxis`, `lib/aircraftCategories` for the category list, `core/ui/prefsStore` for the palette (`DEFAULT_COLORS.aircraft` seeds the layer; GlobeView pushes the user's via `setPalette`). `app/GlobeView` owns the layer's lifetime, calls `advance()`, and poses the selected-aircraft decal and follow target with `aircraftPositionAt`. No other slice may import from here.
+`GET /api/aircraft` and planespotters.net photos through `lib/api` (`ApiError`, `planePhoto`), polled by `lib/poller`, `Aircraft` from `@orbital-ops/shared`, `core/engine/icons.aircraftIcon` and `travelAxis`, `lib/aircraftCategories` for the category list, `core/ui/prefsStore` for the palette (`DEFAULT_COLORS.aircraft` seeds the layer; `app/globe/layerSync` pushes the user's via `setPalette`). `app/globe/createGlobe` owns the layer's lifetime, `app/globe/frameLoop` calls `advance()`, and `app/globe/follow` poses the selected-aircraft decal and follow target with `aircraftPositionAt`. No other slice may import from here.
 
 ## Invariants
 - Every Cesium object created has a destroy path: `AircraftLayer.dispose()` removes the `BillboardCollection` (`destroyPrimitives` defaults to true).
@@ -14,9 +14,9 @@ The ADS-B aircraft slice: the polling store with its altitude bands and heuristi
 - A 503 backs the poll off `UNCONFIGURED_RECHECK_TICKS` ticks; a failed poll never clears the last snapshot.
 
 ## Traps
-- `AircraftLayer.ts:58` — with `scene.globe.depthTestAgainstTerrain` on (`apps/web/src/core/engine/createViewer.ts:165`), taxiing and low-flying aircraft half-sink into terrain and z-fight; the negative-z `eyeOffset` is the fix, and the sign is only right because eye coordinates are left-handed with +z INTO the screen.
+- `AircraftLayer.ts:59` — with `scene.globe.depthTestAgainstTerrain` on (`apps/web/src/core/engine/createViewer.ts:165`), taxiing and low-flying aircraft half-sink into terrain and z-fight; the negative-z `eyeOffset` is the fix, and the sign is only right because eye coordinates are left-handed with +z INTO the screen.
 - `aircraftMotion.ts:22` — `MIN_COS_LAT` floors the longitude step for the data-error case of an aircraft reported at a pole.
-- `aircraftCategory.ts:1` — the ADS-B protocol carries no civil/cargo/military flag, so the category is a heuristic stack (military ICAO-hex blocks + military callsign prefixes + cargo airline prefixes) whose coverage is partial by nature; treat a category as a display hint, never as ground truth.
+- `aircraftCategory.ts:2` — the ADS-B protocol carries no civil/cargo/military flag, so the category is a heuristic stack (military ICAO-hex blocks + military callsign prefixes + cargo airline prefixes) whose coverage is partial by nature; treat a category as a display hint, never as ground truth.
 
 ## How to test
 `npm test -w apps/web -- aircraftStore`, `-- aircraftMotion`, `-- aircraftCategory`, `-- aircraftSummary` and `-- planePhotos` (vitest). No API, no Docker. `AircraftLayer` has no test — per `CLAUDE.md` → *Verification*, a Cesium leak here shows only after minutes of runtime and is verified by running it and watching.

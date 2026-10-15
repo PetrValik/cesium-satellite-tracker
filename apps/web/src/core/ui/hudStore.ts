@@ -43,8 +43,8 @@ export interface HudKeyEvent {
 /**
  * Keyboard map for the HUD toggle: `U` hides / shows; Escape while hidden
  * only shows; typing in a field never toggles. Returns true when the key
- * was consumed — the caller must then stop the event so GlobeView's Escape
- * (follow release / deselect) never sees it.
+ * was consumed — the caller must then stop the event so the globe keys'
+ * Escape (app/globe/globeKeys.ts: follow release / deselect) never sees it.
  */
 export function handleHudKey(e: HudKeyEvent): boolean {
   if (isTypingTarget(e.target)) return false
