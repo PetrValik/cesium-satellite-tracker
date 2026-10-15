@@ -77,11 +77,12 @@ docs:
 second_brain:
   enabled: true
   root: "~/Documents/SecondBrain" # was ~/Obsidian/SecondBrain, a path that never existed (audit 2026-10-15)
-# Agent tiering and kill criteria (agentic-repo playbook, 2026-09-04). Gate agents read and
-# report on sonnet; build and review agents stay on opus. The same gate failing three times
-# for one agent stops the flow and hands the decision over.
+# Agent tiering and kill criteria (agentic-repo playbook, 2026-09-04). Every tier runs on opus:
+# the playbook's sonnet gate tier contradicted CLAUDE.md → Model, and Petr chose opus (audit
+# 2026-10-15, #54). The same gate failing three times for one agent stops the flow and hands
+# the decision over.
 model_tiers:
-  gate: sonnet
+  gate: opus
   build: opus
 agents:
   max_stuck_iterations: 3
