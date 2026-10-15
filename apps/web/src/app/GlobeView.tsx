@@ -345,6 +345,15 @@ export function GlobeView() {
       if (state.basemap !== prev.basemap) setViewerBasemap(viewer, state.basemap)
     })
 
+    /**
+     * The domain whose selection the rig is locked onto. Clearing THAT
+     * selection releases the lock — not the focused mode's: hiding a domain
+     * from LAYERS (or its tab) refocuses `mode` in the same store update that
+     * clears the selection, so a mode-gated release would leave the camera
+     * parked on a target that no longer exists, still reading LOCKED.
+     */
+    let followedMode: OpsMode | null = null
+
     const unsubShips = useShips.subscribe((state, prev) => {
       if (state.ships !== prev.ships || state.activeTypes !== prev.activeTypes) {
         shipsLayer.setShips(filteredShips(state))
@@ -359,7 +368,7 @@ export function GlobeView() {
           else useFollow.getState().setFollowing(true)
         } else {
           shipDecal.hide()
-          if (useMode.getState().mode === 'maritime') useFollow.getState().setFollowing(false)
+          if (followedMode === 'maritime') useFollow.getState().setFollowing(false)
         }
       }
     })
@@ -378,14 +387,17 @@ export function GlobeView() {
           else useFollow.getState().setFollowing(true)
         } else {
           aircraftDecal.hide()
-          if (useMode.getState().mode === 'airspace') useFollow.getState().setFollowing(false)
+          if (followedMode === 'airspace') useFollow.getState().setFollowing(false)
         }
       }
     })
     const unsubFollow = useFollow.subscribe((state, prev) => {
       if (state.following === prev.following) return
       if (state.following) engageFollow()
-      else rig.unfollow()
+      else {
+        followedMode = null
+        rig.unfollow()
+      }
     })
     const unsubMode = useMode.subscribe((state, prev) => {
       if (state.launchSites !== prev.launchSites) launchSitesLayer.setVisible(state.launchSites)
@@ -513,6 +525,7 @@ export function GlobeView() {
         }
         rig.follow(aircraftTarget, 120_000)
       }
+      followedMode = mode
     }
 
     const refreshTrack = (epochMs: number) => {
@@ -539,7 +552,7 @@ export function GlobeView() {
       tracking.clear()
       useTelemetry.getState().clear()
       if (noradId === null) {
-        if (useMode.getState().mode === 'orbital') useFollow.getState().setFollowing(false)
+        if (followedMode === 'orbital') useFollow.getState().setFollowing(false)
         return
       }
       const sat = useCatalog.getState().byId.get(noradId)
