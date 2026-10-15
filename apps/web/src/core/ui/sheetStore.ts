@@ -28,7 +28,11 @@ export const useSheet = create<SheetState>((set) => ({
   closeIf: (sheet) => set((s) => (s.sheet === sheet ? { sheet: null } : s)),
 }))
 
-/** Sheet onKeyDown: Escape closes the sheet only — stopped here, it never reaches GlobeView's window handler (which would deselect). */
+/**
+ * Sheet onKeyDown: Escape closes the sheet only — stopped here, it never
+ * reaches the globe's window keydown handler (app/globe/globeKeys.ts), which
+ * would then release the follow lock or deselect.
+ */
 export function closeSheetOnEscape(e: KeyboardEvent): void {
   if (e.key !== 'Escape') return
   e.stopPropagation()

@@ -23,8 +23,9 @@ function ModeTab({ mode }: { mode: OpsMode }) {
 /**
  * Domain toggles: each tab shows/hides one domain's layer (amber = visible,
  * dim = hidden) and any subset may be on at once. Enabling a domain also
- * focuses its panels; hiding one clears its selection via the GlobeView
- * mode subscription, so no tab-side cleanup is needed here.
+ * focuses its panels; hiding one clears its selection via the mode
+ * subscription in app/globe/layerSync.ts (`deselectInMode`), so no
+ * tab-side cleanup is needed here.
  */
 export function ModeTabs() {
   return (

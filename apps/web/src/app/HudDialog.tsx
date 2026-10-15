@@ -3,7 +3,8 @@ import type { ReactNode } from 'react'
 /**
  * Modal shell shared by HELP and COLORS: a scrim that closes on click, the
  * dialog panel, and a header with the title, optional actions and ✕.
- * Escape is GlobeView's window handler (staged: dialogs close first).
+ * Escape is the globe's window keydown handler (app/globe/globeKeys.ts;
+ * staged: dialogs close first).
  */
 export function HudDialog({
   label,

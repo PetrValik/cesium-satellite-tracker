@@ -20,7 +20,7 @@ interface LayerRow {
   count: number
   on: boolean
   toggle: () => void
-  /** Layer identity hue for the row's indicator (index.css .layer-*). */
+  /** Layer identity hue for the row's indicator (styles/rail.css .layer-*). */
   indicatorClass?: string
   suspended?: boolean
 }
@@ -126,7 +126,7 @@ export function LayersPanel() {
         ))}
       </ul>
       {/* the SUSP reason is a title tooltip on desktop; touch has no hover,
-          so a visible legend line stands in (index.css .touch-legend) */}
+          so a visible legend line stands in (styles/rail.css .touch-legend) */}
       {rows.some((row) => row.suspended) && (
         <p className="touch-legend">SUSP · LIVE FEEDS PAUSED WHILE SIM TIME IS OFF NOW</p>
       )}

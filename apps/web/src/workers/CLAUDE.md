@@ -2,7 +2,7 @@
 Whole-catalog SGP4 off the main thread. `propagationDispatcher.ts` is the logic — the satrec working set and the `init`/`tick` handlers, free of the worker global so it is testable; `propagation.worker.ts` only binds it to `self`. Selected-satellite math (ring, ground track, live state) and pass prediction run on the MAIN thread through `lib/orbital`, not here.
 
 ## Depends on
-`lib/orbital` (`createSatrec`, `classifyOrbit`, `propagateBatchEcefM`), `lib/protocol` for `SatInit`/`WorkerRequest`/`WorkerResponse`/`ORBIT_CLASSES`, and `satellite.js` for `SatRec`. `app/GlobeView` spawns the worker, sends `init`/`tick` and is the only consumer of `ready`/`positions`/`error`. A risk path in `.claude/kit.profile.yaml`.
+`lib/orbital` (`createSatrec`, `classifyOrbit`, `propagateBatchEcefM`), `lib/protocol` for `SatInit`/`WorkerRequest`/`WorkerResponse`/`ORBIT_CLASSES`, and `satellite.js` for `SatRec`. `app/GlobeView` owns the worker's lifetime (spawned once per mount, never per engine epoch, and terminated on unmount); `app/globe/constellationFeed` sends `init`/`tick` and is the only consumer of `ready`/`positions`/`error`. A risk path in `.claude/kit.profile.yaml`.
 
 ## Invariants
 - The `init` array order IS the protocol: the working set, `noradIds`, `classes` and every `positions` Float32Array share that index, and `ready` echoes it back. Re-ordering the catalog without re-initing silently mis-places and mis-colours everything.

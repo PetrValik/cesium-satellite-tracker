@@ -2,7 +2,7 @@
 The AIS vessel slice: the polling store, the dead-reckoning and bearing rules (`shipMotion`), the billboard layer, the MARITIME left-rail picture, the selected-vessel panel and its silhouette, MMSI→flag-state lookup, and the selection-chip summary (`shipSummary`).
 
 ## Depends on
-`GET /api/ships` through `lib/api` (`ApiError`), polled by `lib/poller`, `Ship`/`ShipType` from `@orbital-ops/shared`, `core/engine/icons.shipIcon` and `travelAxis`, `core/ui/prefsStore` for the palette (`DEFAULT_COLORS.ships` seeds the layer; GlobeView pushes the user's via `setPalette`) and `core/sim/simLive`. `app/GlobeView` owns the layer's lifetime, calls `advance()`, and poses the selected-vessel decal and follow target with `shipPositionAt` / `shipBearingDeg`. No other slice may import from here.
+`GET /api/ships` through `lib/api` (`ApiError`), polled by `lib/poller`, `Ship`/`ShipType` from `@orbital-ops/shared`, `core/engine/icons.shipIcon` and `travelAxis`, `core/ui/prefsStore` for the palette (`DEFAULT_COLORS.ships` seeds the layer; `app/globe/layerSync` pushes the user's via `setPalette`) and `core/sim/simLive`. `app/globe/createGlobe` owns the layer's lifetime, `app/globe/frameLoop` calls `advance()`, and `app/globe/follow` poses the selected-vessel decal and follow target with `shipPositionAt` / `shipBearingDeg`. No other slice may import from here.
 
 ## Invariants
 - Every Cesium object created has a destroy path: `ShipsLayer.dispose()` removes the `BillboardCollection`, and `PrimitiveCollection.destroyPrimitives` defaults to true, so `remove()` also destroys it.

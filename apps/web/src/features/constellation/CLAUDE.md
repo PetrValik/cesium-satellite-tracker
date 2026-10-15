@@ -2,7 +2,7 @@
 Whole-catalog rendering: one `BillboardCollection` holding every satellite in the working set, tinted by orbit class, interpolated between worker position snapshots; the per-frame math (horizon cull, slerp/lerp) lives Cesium-free in `snapshotMath`.
 
 ## Depends on
-`core/engine/icons.satelliteIcon`, `lib/protocol` (`ORBIT_CLASSES`, `OrbitClass`), `lib/orbital` (`Vec3Like` type only), and `core/ui/prefsStore` (`DEFAULT_COLORS.satellites` seeds the styles, `ColorPrefs` types them). Imports no slice. `app/GlobeView` owns the layer's lifetime, pushes the user palette through `setPalette()`, and feeds it the worker's `ready` (`setCatalog`) and `positions` (`updatePositions`) messages.
+`core/engine/icons.satelliteIcon`, `lib/protocol` (`ORBIT_CLASSES`, `OrbitClass`), `lib/orbital` (`Vec3Like` type only), and `core/ui/prefsStore` (`DEFAULT_COLORS.satellites` seeds the styles, `ColorPrefs` types them). Imports no slice. `app/globe/createGlobe` owns the layer's lifetime; `app/globe/layerSync` pushes the user palette through `setPalette()` and drives `setVisible` / `setSelected`; `app/globe/constellationFeed` feeds it the worker's `ready` (`setCatalog`) and `positions` (`updatePositions`) messages; `app/globe/frameLoop` calls `advance()` every frame.
 
 ## Invariants
 - Every Cesium object created has a destroy path: `dispose()` removes the collection (`PrimitiveCollection.destroyPrimitives` defaults to true).

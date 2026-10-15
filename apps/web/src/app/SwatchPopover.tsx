@@ -84,8 +84,9 @@ export function SwatchPopover({
   useEffect(() => {
     const pop = popRef.current
     if (!pop) return
-    // ESC closes only the popover: GlobeView's window keydown closes the
-    // whole settings dialog on Escape, so stop it at the popover node.
+    // ESC closes only the popover: the globe's window keydown
+    // (app/globe/globeKeys.ts) closes the whole settings dialog on Escape,
+    // so stop it at the popover node.
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       e.stopPropagation()

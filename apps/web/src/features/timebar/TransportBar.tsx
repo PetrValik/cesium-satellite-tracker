@@ -7,7 +7,7 @@
  * Wide screens show the full segmented warp cluster; the compact (phone)
  * layout swaps it for a − rate + stepper over the same SIM_RATES, and the
  * UTC readout splits into date / time spans so CSS can stack them. Which
- * one shows is pure CSS (index.css), so both stay in the DOM.
+ * one shows is pure CSS (styles/transport.css), so both stay in the DOM.
  */
 import { useState } from 'react'
 import { SIM_RATES, stepRate, useSimClock } from '../../core/sim/simClock'

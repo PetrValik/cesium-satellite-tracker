@@ -1,7 +1,7 @@
 /**
  * Top status strip: brand, tracked-object count, TLE age, sim state. Read-only HUD.
  * The compact layout hides TLE AGE / SIM on narrow phones and the `status-long`
- * spans (index.css); the inline spans render identically on desktop.
+ * spans (styles/status-line.css); the inline spans render identically on desktop.
  */
 import { useSimClock } from '../core/sim/simClock'
 import { transportVisible, useMode } from '../core/ui/modeStore'

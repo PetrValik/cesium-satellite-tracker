@@ -10,7 +10,6 @@
 /* content-based widths: five labels (… COLORS · HIDE) fit a 360px phone,
    where equal shares would clip the longest ones */
 .hud-dock > .hud-button {
-
   flex: 1 1 auto;
   min-width: 0;
   padding: 0 6px;
