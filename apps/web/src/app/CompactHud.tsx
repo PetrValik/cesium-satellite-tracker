@@ -1,34 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
-import { useMode } from '../core/ui/modeStore'
+import { transportVisible, useMode } from '../core/ui/modeStore'
 import { closeSheetOnEscape, useSheet, type HudSheet } from '../core/ui/sheetStore'
-import { useAircraft } from '../features/airspace/aircraftStore'
-import { useCatalog } from '../features/catalog/catalogStore'
-import { useShips } from '../features/maritime/shipsStore'
 import { TransportBar } from '../features/timebar/TransportBar'
+import { bindSheetsToSelection, sheetId, visibleSheet } from './compactSheets'
 import { HelpButton } from './HelpOverlay'
 import { HideControlsButton } from './HudVisibility'
 import { LayersPanel } from './LayersPanel'
 import { RailPicture } from './LeftRail'
+import { useRailPicture } from './railPicture'
 import { SelectionChip } from './SelectionChip'
 import { SelectionPanels } from './SelectionPanels'
-import { hasSelectionInMode, useHasSelectionInMode } from './selectionMode'
+import { useHasSelectionInMode } from './selectionMode'
 import { SettingsButton } from './SettingsPanel'
-
-/**
- * Dock label for the focused domain's picture, or null when that domain's
- * layer is off (the picture only renders while its layer is on).
- */
-function useRailPictureLabel(): string | null {
-  const mode = useMode((s) => s.mode)
-  const satellitesOn = useMode((s) => s.satellitesVisible)
-  const shipsOn = useMode((s) => s.shipsVisible)
-  const aircraftOn = useMode((s) => s.aircraftVisible)
-  if (mode === 'orbital') return satellitesOn ? 'CATALOG' : null
-  if (mode === 'maritime') return shipsOn ? 'VESSELS' : null
-  return aircraftOn ? 'AIRCRAFT' : null
-}
-
-const sheetId = (sheet: HudSheet): string => `hud-sheet-${sheet}`
 
 /**
  * Closing a sheet unmounts it, which drops a keyboard user's focus to
@@ -57,11 +40,11 @@ function useSheetFocusReturn(openSheet: HudSheet | null): void {
   }, [openSheet])
 }
 
-function Sheet({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+function Sheet({ sheet, title, children }: { sheet: HudSheet; title: string; children: ReactNode }) {
   const close = useSheet((s) => s.close)
   return (
     <section
-      id={id}
+      id={sheetId(sheet)}
       className="hud-panel hud-sheet"
       role="region"
       aria-label={title}
@@ -85,46 +68,15 @@ function Sheet({ id, title, children }: { id: string; title: string; children: R
  * nothing needs to know another element's height.
  */
 export function CompactHud() {
-  const satellitesOn = useMode((s) => s.satellitesVisible)
+  const transportOn = useMode(transportVisible)
   const sheet = useSheet((s) => s.sheet)
   const toggle = useSheet((s) => s.toggle)
-  const pictureLabel = useRailPictureLabel()
+  const picture = useRailPicture()
   const hasSelection = useHasSelectionInMode()
 
-  // Selection drives the sheets: a fresh pick closes the picture / layers
-  // sheet so the globe and the chip are visible; losing the focused mode's
-  // selection closes details (it would otherwise reopen on the next pick).
-  useEffect(() => {
-    const sync = (picked: boolean) => {
-      const sheets = useSheet.getState()
-      if (picked) {
-        sheets.closeIf('picture')
-        sheets.closeIf('layers')
-      }
-      if (!hasSelectionInMode()) sheets.closeIf('details')
-    }
-    const unsubscribe = [
-      useCatalog.subscribe((s, p) => {
-        if (s.selectedId !== p.selectedId) sync(s.selectedId !== null)
-      }),
-      useShips.subscribe((s, p) => {
-        if (s.selectedMmsi !== p.selectedMmsi) sync(s.selectedMmsi !== null)
-      }),
-      useAircraft.subscribe((s, p) => {
-        if (s.selectedIcao !== p.selectedIcao) sync(s.selectedIcao !== null)
-      }),
-      useMode.subscribe((s, p) => {
-        if (s.mode !== p.mode) sync(false)
-      }),
-    ]
-    return () => unsubscribe.forEach((off) => off())
-  }, [])
+  useEffect(() => bindSheetsToSelection(), [])
 
-  // a sheet with nothing to show (domain layer off / nothing selected) is closed
-  const openSheet =
-    (sheet === 'picture' && pictureLabel === null) || (sheet === 'details' && !hasSelection)
-      ? null
-      : sheet
+  const openSheet = visibleSheet(sheet, picture !== null, hasSelection)
 
   // The store mirrors the screen: a sheet that cannot render is closed, not
   // left pending, and leaving the compact layout (rotation / resize across
@@ -139,19 +91,19 @@ export function CompactHud() {
 
   return (
     <div className="compact-cluster">
-      {openSheet === 'picture' && pictureLabel !== null && (
-        <Sheet id="hud-sheet-picture" title={pictureLabel}>
+      {openSheet === 'picture' && picture !== null && (
+        <Sheet sheet="picture" title={picture.label}>
           <RailPicture />
         </Sheet>
       )}
       {openSheet === 'layers' && (
-        <Sheet id="hud-sheet-layers" title="LAYERS">
+        <Sheet sheet="layers" title="LAYERS">
           <LayersPanel />
         </Sheet>
       )}
       {openSheet === 'details' && (
         <section
-          id="hud-sheet-details"
+          id={sheetId('details')}
           className="hud-sheet sheet-details"
           role="region"
           aria-label="Selection details"
@@ -166,20 +118,20 @@ export function CompactHud() {
         {/* the chip stays under the details sheet as its handle */}
         {openSheet !== 'picture' && openSheet !== 'layers' && <SelectionChip />}
         <nav className="hud-dock" aria-label="HUD panels">
-          {pictureLabel !== null && (
+          {picture !== null && (
             <button
               className={`hud-button dock-button${openSheet === 'picture' ? ' is-active' : ''}`}
               aria-expanded={openSheet === 'picture'}
-              aria-controls="hud-sheet-picture"
+              aria-controls={sheetId('picture')}
               onClick={() => toggle('picture')}
             >
-              {pictureLabel}
+              {picture.label}
             </button>
           )}
           <button
             className={`hud-button dock-button${openSheet === 'layers' ? ' is-active' : ''}`}
             aria-expanded={openSheet === 'layers'}
-            aria-controls="hud-sheet-layers"
+            aria-controls={sheetId('layers')}
             onClick={() => toggle('layers')}
           >
             LAYERS
@@ -188,7 +140,7 @@ export function CompactHud() {
           <SettingsButton />
           <HideControlsButton />
         </nav>
-        {satellitesOn && <TransportBar />}
+        {transportOn && <TransportBar />}
       </div>
     </div>
   )

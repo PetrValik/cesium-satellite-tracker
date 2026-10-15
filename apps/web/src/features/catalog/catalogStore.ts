@@ -68,6 +68,9 @@ export const useCatalog = create<CatalogState>((set, get) => ({
       sats: merged.sats,
       byId: new Map([...s.byId, ...merged.byId]),
       booting: false,
+      // /groups answered but every group fetch failed: that is offline too,
+      // not an empty sky.
+      offline: active.length > 0 && loaded.length === 0,
     }))
   },
 

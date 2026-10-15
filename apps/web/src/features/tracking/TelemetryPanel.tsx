@@ -1,10 +1,13 @@
 /**
  * Selected-satellite readout: identity from the catalog, live numbers from
- * the telemetry store (pushed by the render loop at ~5 Hz). Inclination is
- * parsed straight from TLE line 2 (cols 9–16).
+ * the telemetry store (pushed by the render loop at ~5 Hz). The CLASS badge
+ * wears the hue the globe paints that orbit class with (user palette).
  */
 import { FollowButton } from '../../core/ui/FollowButton'
+import { hueStyle } from '../../core/ui/hueStyle'
+import { usePrefs } from '../../core/ui/prefsStore'
 import { useCatalog } from '../catalog/catalogStore'
+import { tleInclinationDeg } from './satSummary'
 import { useTelemetry } from './telemetryStore'
 import { formatDeg, formatKm, formatLatLon } from '../../lib/format'
 
@@ -17,12 +20,15 @@ export function TelemetryPanel() {
   const latDeg = useTelemetry((s) => s.latDeg)
   const lonDeg = useTelemetry((s) => s.lonDeg)
   const periodMinutes = useTelemetry((s) => s.periodMinutes)
+  const classColor = usePrefs((s) => (orbitClass === null ? null : s.colors.satellites[orbitClass]))
   const select = useCatalog((s) => s.select)
   const sat = useCatalog((s) => (noradId === null ? undefined : s.byId.get(noradId)))
 
   if (noradId === null) return null
+  const inclinationDeg = sat ? tleInclinationDeg(sat.tle2) : null
 
   return (
+    // telemetry-panel: a rule-less hook shared by the three selection panels
     <section className="hud-panel telemetry-panel">
       <header className="telemetry-header">
         <h2 className="hud-title">TRACKING</h2>
@@ -38,7 +44,7 @@ export function TelemetryPanel() {
         <dt>NORAD</dt>
         <dd>{noradId}</dd>
         <dt>CLASS</dt>
-        <dd className={`orbit-class orbit-${orbitClass?.toLowerCase() ?? 'unknown'}`}>
+        <dd className="orbit-class" style={classColor === null ? undefined : hueStyle(classColor)}>
           {orbitClass ?? '—'}
         </dd>
         <dt>ALT</dt>
@@ -50,7 +56,7 @@ export function TelemetryPanel() {
         <dt>PERIOD</dt>
         <dd>{periodMinutes.toFixed(1)} MIN</dd>
         <dt>INCL</dt>
-        <dd>{sat ? formatDeg(Number(sat.tle2.slice(8, 16).trim()), 1) : '—'}</dd>
+        <dd>{inclinationDeg === null ? '—' : formatDeg(inclinationDeg, 1)}</dd>
         <dt>GROUPS</dt>
         <dd>{sat?.groups.join(' · ').toUpperCase() ?? '—'}</dd>
       </dl>

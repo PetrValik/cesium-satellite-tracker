@@ -17,20 +17,20 @@ import { LeftRail } from './app/LeftRail'
 import { ModeTabs } from './app/ModeTabs'
 import { SelectionPanels } from './app/SelectionPanels'
 import { StatusLine } from './app/StatusLine'
-import { useMode } from './core/ui/modeStore'
+import { transportVisible, useMode } from './core/ui/modeStore'
 import { showHudOnModalOpen, useHud } from './core/ui/hudStore'
 import { closeSheetOnModalOpen } from './core/ui/sheetStore'
 import { useCompactLayout } from './core/ui/useCompactLayout'
 import { useHudShortcuts } from './core/ui/useHudShortcuts'
-import { startAircraftPolling } from './features/airspace/aircraftStore'
+import { startAircraftPolling, stopAircraftPolling } from './features/airspace/aircraftStore'
 import { useCatalog } from './features/catalog/catalogStore'
-import { startShipsPolling } from './features/maritime/shipsStore'
+import { startShipsPolling, stopShipsPolling } from './features/maritime/shipsStore'
 import { TransportBar } from './features/timebar/TransportBar'
 
 export default function App() {
   const booting = useCatalog((s) => s.booting)
   const init = useCatalog((s) => s.init)
-  const satellitesOn = useMode((s) => s.satellitesVisible)
+  const transportOn = useMode(transportVisible)
   const compact = useCompactLayout()
   const hudHidden = useHud((s) => s.hidden)
   useHudShortcuts()
@@ -39,6 +39,10 @@ export default function App() {
     void init()
     startShipsPolling()
     startAircraftPolling()
+    return () => {
+      stopShipsPolling()
+      stopAircraftPolling()
+    }
   }, [init])
 
   // HELP / COLORS are modal: opening one closes any compact sheet
@@ -47,10 +51,10 @@ export default function App() {
   useEffect(() => showHudOnModalOpen(), [])
 
   return (
-    // .has-transport: the transport bar is mounted (same condition as
-    // below), so the 900–1365px CSS lifts the launchers / credits over it
+    // .has-transport: the transport bar is mounted, so the 900–1365px CSS
+    // lifts the launchers / credits over it
     <div
-      className={`app-root${compact ? ' is-compact' : ''}${satellitesOn ? ' has-transport' : ''}${hudHidden ? ' is-hud-hidden' : ''}`}
+      className={`app-root${compact ? ' is-compact' : ''}${transportOn ? ' has-transport' : ''}${hudHidden ? ' is-hud-hidden' : ''}`}
     >
       <GlobeView />
       {/* inert while hidden: out of the tab order and the accessibility
@@ -66,9 +70,7 @@ export default function App() {
             <div className="right-stack">
               <SelectionPanels />
             </div>
-            {/* Time warp only moves satellites (live feeds suspend under warp),
-                so the transport controls travel with the ORBITAL layer. */}
-            {satellitesOn && <TransportBar />}
+            {transportOn && <TransportBar />}
             <div className="hud-launchers">
               <HelpButton />
               <SettingsButton />

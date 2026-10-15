@@ -52,6 +52,8 @@ export function CatalogPanel() {
 function SearchBox() {
   const [q, setQ] = useState('')
   const [results, setResults] = useState<Satellite[]>([])
+  // The last search failed (API unreachable): say so instead of "no matches".
+  const [failed, setFailed] = useState(false)
   const [open, setOpen] = useState(false)
   const debounce = useRef<ReturnType<typeof setTimeout>>(undefined)
   // Monotonic request id: a slow early response must not overwrite a later one.
@@ -67,6 +69,7 @@ function SearchBox() {
     if (value.trim().length < 2) {
       searchSeq.current++
       setResults([])
+      setFailed(false)
       setOpen(false)
       return
     }
@@ -77,10 +80,14 @@ function SearchBox() {
         .then((sats) => {
           if (seq !== searchSeq.current) return // stale response
           setResults(sats)
+          setFailed(false)
           setOpen(true)
         })
         .catch(() => {
-          if (seq === searchSeq.current) setResults([])
+          if (seq !== searchSeq.current) return
+          setResults([])
+          setFailed(true)
+          setOpen(true)
         })
     }, 250)
   }
@@ -101,9 +108,14 @@ function SearchBox() {
         aria-label="Search satellites by name or NORAD ID"
         value={q}
         onChange={(e) => onChange(e.target.value)}
-        onFocus={() => results.length > 0 && setOpen(true)}
+        onFocus={() => (results.length > 0 || failed) && setOpen(true)}
         spellCheck={false}
       />
+      {open && failed && (
+        <div className="search-results search-status" role="status">
+          SEARCH UNAVAILABLE — API UNREACHABLE
+        </div>
+      )}
       {open && results.length > 0 && (
         <ul className="search-results">
           {results.map((sat) => (

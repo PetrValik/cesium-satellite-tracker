@@ -1,9 +1,23 @@
+import type { ShipType } from '@orbital-ops/shared'
 import { FollowButton } from '../../core/ui/FollowButton'
+import { hueStyle } from '../../core/ui/hueStyle'
+import { usePrefs } from '../../core/ui/prefsStore'
 import { formatAge, formatDeg, formatLatLon } from '../../lib/format'
 import { useWallClock } from '../../lib/wallClock'
 import { flagEmojiOf, flagStateOf } from './mmsiFlags'
 import { ShipSilhouette } from './ShipSilhouette'
 import { useShips } from './shipsStore'
+import { formatSog, vesselName } from './shipSummary'
+
+/** TYPE value, in the hue the globe paints that vessel type with (user palette). */
+function TypeValue({ type }: { type: ShipType }) {
+  const color = usePrefs((s) => s.colors.ships[type])
+  return (
+    <dd className="hue-text" style={hueStyle(color)}>
+      {type.toUpperCase()}
+    </dd>
+  )
+}
 
 /** Info panel for the selected vessel (live AIS data, wall-clock based). */
 export function ShipPanel() {
@@ -18,6 +32,7 @@ export function ShipPanel() {
   const flagEmoji = ship === undefined ? null : flagEmojiOf(ship.mmsi)
 
   return (
+    // telemetry-panel: a rule-less hook shared by the three selection panels
     <section className="hud-panel telemetry-panel">
       <header className="telemetry-header">
         <h2 className="hud-title">VESSEL</h2>
@@ -28,7 +43,7 @@ export function ShipPanel() {
           </button>
         </span>
       </header>
-      <div className="telemetry-name">{ship?.name || `MMSI ${selectedMmsi}`}</div>
+      <div className="telemetry-name">{vesselName(ship, selectedMmsi)}</div>
       {ship && (
         <figure className="vessel-card">
           <ShipSilhouette type={ship.shipType} />
@@ -36,9 +51,7 @@ export function ShipPanel() {
             <span>SIDE PROFILE</span>
             {flag !== null && (
               <span>
-                {flagEmoji !== null && (
-                  <span style={{ marginRight: '0.4em', letterSpacing: 0 }}>{flagEmoji}</span>
-                )}
+                {flagEmoji !== null && <span className="vessel-flag">{flagEmoji}</span>}
                 {flag.toUpperCase()}
               </span>
             )}
@@ -50,9 +63,9 @@ export function ShipPanel() {
           <dt>MMSI</dt>
           <dd>{ship.mmsi}</dd>
           <dt>TYPE</dt>
-          <dd className={`ship-type ship-${ship.shipType}`}>{ship.shipType.toUpperCase()}</dd>
+          <TypeValue type={ship.shipType} />
           <dt>SOG</dt>
-          <dd>{ship.sogKn.toFixed(1)} KN</dd>
+          <dd>{formatSog(ship.sogKn)}</dd>
           <dt>COG</dt>
           <dd>{formatDeg(ship.cogDeg, 0)}</dd>
           <dt>TRUE HDG</dt>
@@ -63,7 +76,7 @@ export function ShipPanel() {
           <dd>{formatAge(Math.max(0, nowMs - ship.tsMs))} AGO</dd>
         </dl>
       ) : (
-        <div className="passes-empty">SIGNAL LOST — VESSEL AGED OUT OF THE FEED</div>
+        <div className="panel-empty">SIGNAL LOST — VESSEL AGED OUT OF THE FEED</div>
       )}
     </section>
   )

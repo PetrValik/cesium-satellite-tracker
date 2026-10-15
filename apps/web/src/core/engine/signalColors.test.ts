@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { SIGNAL_AMBER, SIGNAL_CYAN } from './signalColors'
+import { SIGNAL_AMBER, SIGNAL_CYAN, SIGNAL_GROUND } from './signalColors'
 
 // Read from disk: vitest serves CSS (even `?raw`) as an empty module.
 const tokensCss = readFileSync(new URL('../../styles/tokens.css', import.meta.url), 'utf8')
@@ -14,5 +14,6 @@ describe('signalColors', () => {
   it('mirrors the tokens.css hues the HUD uses for the same signals', () => {
     expect(token('amber')).toBe(SIGNAL_AMBER)
     expect(token('cyan')).toBe(SIGNAL_CYAN)
+    expect(token('aircraft-ground')).toBe(SIGNAL_GROUND)
   })
 })

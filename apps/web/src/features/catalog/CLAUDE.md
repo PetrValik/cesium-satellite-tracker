@@ -12,6 +12,7 @@ The satellite entity and selection store — curated groups, which groups are ac
 - `starlink` (10k+ objects) is the one group off by default.
 - `init` uses `Promise.allSettled` and keeps only the groups that actually loaded; a total failure sets `offline` and clears `booting` rather than hanging on the boot overlay.
 - `registerSat` is what makes a search hit selectable while its group is inactive.
+- A failed `api.search` shows SEARCH UNAVAILABLE in the dropdown (`CatalogPanel.tsx` `failed`), never an empty list that reads as "no matches"; only the latest request (`searchSeq`) may set it.
 
 ## Traps
 None recorded yet; add the first incident here.

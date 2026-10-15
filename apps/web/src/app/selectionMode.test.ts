@@ -7,7 +7,12 @@ import { useMode } from '../core/ui/modeStore'
 import { useAircraft } from '../features/airspace/aircraftStore'
 import { useCatalog } from '../features/catalog/catalogStore'
 import { useShips } from '../features/maritime/shipsStore'
-import { deselectInMode, hasSelectionInMode, resolveTap } from './selectionMode'
+import {
+  deselectInMode,
+  hasSelectionInMode,
+  resolveTap,
+  subscribeSelectionChanges,
+} from './selectionMode'
 
 beforeEach(() => {
   useMode.setState({ mode: 'orbital' })
@@ -40,6 +45,35 @@ describe('deselectInMode', () => {
     deselectInMode()
     expect(useShips.getState().selectedMmsi).toBeNull()
     expect(useCatalog.getState().selectedId).toBe(25_544)
+  })
+})
+
+describe('subscribeSelectionChanges', () => {
+  it('reports every domain’s pick and deselect with its mode', () => {
+    const seen: [string, boolean][] = []
+    const off = subscribeSelectionChanges((mode, selected) => seen.push([mode, selected]))
+    useCatalog.setState({ selectedId: 25_544 })
+    useShips.setState({ selectedMmsi: 211_000_000 })
+    useAircraft.setState({ selectedIcao: 'abc123' })
+    useShips.setState({ selectedMmsi: null })
+    expect(seen).toEqual([
+      ['orbital', true],
+      ['maritime', true],
+      ['airspace', true],
+      ['maritime', false],
+    ])
+    off()
+  })
+
+  it('ignores unrelated store updates and stops after unsubscribe', () => {
+    const listener = vi.fn()
+    const off = subscribeSelectionChanges(listener)
+    useShips.setState({ selectedMmsi: null }) // unchanged
+    useAircraft.setState({ available: true })
+    expect(listener).not.toHaveBeenCalled()
+    off()
+    useCatalog.setState({ selectedId: 1 })
+    expect(listener).not.toHaveBeenCalled()
   })
 })
 

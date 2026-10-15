@@ -1,85 +1,29 @@
 import { FollowButton } from '../core/ui/FollowButton'
 import { useMode } from '../core/ui/modeStore'
 import { useSheet } from '../core/ui/sheetStore'
-import { useAircraft } from '../features/airspace/aircraftStore'
-import { useCatalog } from '../features/catalog/catalogStore'
-import { useShips } from '../features/maritime/shipsStore'
-import { useTelemetry } from '../features/tracking/telemetryStore'
-import { formatKm } from '../lib/format'
-
-interface ChipData {
-  kind: string
-  name: string
-  key: string
-  value: string
-  deselect: () => void
-}
-
-/**
- * The focused mode's selection, condensed for the chip — null when nothing
- * is selected in that mode (the desktop right stack follows the same rule).
- */
-function useSelectionSummary(): ChipData | null {
-  const mode = useMode((s) => s.mode)
-  const satId = useCatalog((s) => s.selectedId)
-  const satName = useCatalog((s) => (s.selectedId === null ? undefined : s.byId.get(s.selectedId)?.name))
-  const selectSat = useCatalog((s) => s.select)
-  const telemetryId = useTelemetry((s) => s.noradId)
-  const telemetryName = useTelemetry((s) => s.name)
-  const altKm = useTelemetry((s) => s.altKm)
-  const mmsi = useShips((s) => s.selectedMmsi)
-  const ship = useShips((s) => (s.selectedMmsi === null ? undefined : s.byMmsi.get(s.selectedMmsi)))
-  const selectShip = useShips((s) => s.select)
-  const icao = useAircraft((s) => s.selectedIcao)
-  const aircraft = useAircraft((s) => (s.selectedIcao === null ? undefined : s.byIcao.get(s.selectedIcao)))
-  const selectAircraft = useAircraft((s) => s.select)
-
-  if (mode === 'orbital') {
-    if (satId === null) return null
-    // telemetry trails the selection by one 5 Hz push
-    const live = telemetryId === satId
-    return {
-      kind: 'SAT',
-      name: (live ? telemetryName : satName) || `NORAD ${satId}`,
-      key: 'ALT',
-      value: live ? formatKm(altKm, 0) : '—',
-      deselect: () => selectSat(null),
-    }
-  }
-  if (mode === 'maritime') {
-    if (mmsi === null) return null
-    return {
-      kind: 'VSL',
-      name: ship?.name || `MMSI ${mmsi}`,
-      key: 'SOG',
-      value: ship ? `${ship.sogKn.toFixed(1)} KN` : '—',
-      deselect: () => selectShip(null),
-    }
-  }
-  if (icao === null) return null
-  return {
-    kind: 'ACFT',
-    name: aircraft?.callsign || icao.toUpperCase(),
-    key: 'ALT',
-    value: !aircraft
-      ? '—'
-      : aircraft.onGround
-        ? 'GROUND'
-        : aircraft.altM === null
-          ? '—'
-          : `${Math.round(aircraft.altM)} M`,
-    deselect: () => selectAircraft(null),
-  }
-}
+import { useAircraftChipSummary } from '../features/airspace/aircraftSummary'
+import { useShipChipSummary } from '../features/maritime/shipSummary'
+import { useSatChipSummary } from '../features/tracking/satSummary'
+import { sheetId } from './compactSheets'
+import { deselectInMode } from './selectionMode'
 
 /**
  * Compact-HUD selection chip: name + one key value, FOLLOW, DETAILS and
  * deselect, above the dock. DETAILS opens the full selection panels as a
  * sheet directly above the chip (CompactHud), so the chip doubles as that
- * sheet's handle — the panels' own FOLLOW / ✕ are hidden there.
+ * sheet's handle — the panels' own FOLLOW / ✕ are hidden there. Each slice
+ * formats its own readout; the chip only picks the focused mode's (null
+ * when nothing is selected there — the desktop right stack follows the
+ * same rule).
  */
 export function SelectionChip() {
-  const summary = useSelectionSummary()
+  const mode = useMode((s) => s.mode)
+  const summaries = {
+    orbital: useSatChipSummary(),
+    maritime: useShipChipSummary(),
+    airspace: useAircraftChipSummary(),
+  }
+  const summary = summaries[mode]
   const sheet = useSheet((s) => s.sheet)
   const toggle = useSheet((s) => s.toggle)
   if (summary === null) return null
@@ -99,7 +43,7 @@ export function SelectionChip() {
         <button
           className={`hud-button chip-details${detailsOpen ? ' is-active' : ''}`}
           aria-expanded={detailsOpen}
-          aria-controls="hud-sheet-details"
+          aria-controls={sheetId('details')}
           onClick={() => toggle('details')}
         >
           {/* Only the chevron flips: the label stays DETAILS in both states so
@@ -111,7 +55,7 @@ export function SelectionChip() {
           </span>
           DETAILS
         </button>
-        <button className="hud-button chip-deselect" onClick={summary.deselect} aria-label="Deselect">
+        <button className="hud-button chip-deselect" onClick={() => deselectInMode(mode)} aria-label="Deselect">
           ✕
         </button>
       </div>

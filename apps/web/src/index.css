@@ -65,12 +65,12 @@ body {
   }
 }
 
-.catalog-panel,
+.rail-panel,
 .right-stack,
 .pass-list,
 .search-results,
 .sheet-body,
-.help-panel {
+.dialog-panel {
   scrollbar-width: thin;
   scrollbar-color: var(--scroll-thumb) transparent;
 }
@@ -356,55 +356,48 @@ body {
   border-top: 1px solid var(--hairline);
 }
 
-/* ship-type + infra indicator hues (match the layer colors) */
-.group-indicator.ship-cargo { background: var(--cyan); border-color: var(--cyan); }
-.group-indicator.ship-tanker { background: var(--amber); border-color: var(--amber); }
-.group-indicator.ship-passenger { background: #c084fc; border-color: #c084fc; }
-.group-indicator.ship-fishing { background: #7dd87d; border-color: #7dd87d; }
-.group-indicator.ship-highspeed { background: #f0f4f8; border-color: #f0f4f8; }
-.group-indicator.ship-military { background: #f87171; border-color: #f87171; }
-.group-indicator.ship-other { background: #8a93a3; border-color: #8a93a3; }
+/* LAYERS rows: each live layer's identity hue (fixed, not the palette) */
+.group-indicator.layer-ships { background: var(--cyan); border-color: var(--cyan); }
+.group-indicator.layer-aircraft { background: var(--signal-white); border-color: var(--signal-white); }
 
-/* aircraft categories */
-.group-indicator.cat-civil { background: var(--cyan); border-color: var(--cyan); }
-.group-indicator.cat-cargo { background: var(--amber); border-color: var(--amber); }
-.group-indicator.cat-military { background: #f87171; border-color: #f87171; }
-.ship-type.ship-military { color: #f87171; }
-.cat-label-civil { color: var(--cyan); }
-.cat-label-cargo { color: var(--amber); }
-.cat-label-military { color: #f87171; }
-
-.color-mode-row {
+.basemap-row {
   display: flex;
   gap: 4px;
   margin: 6px 0 8px;
   align-items: center;
 }
 
-.color-mode-label {
+.basemap-label {
   color: var(--text-dim);
   font-size: var(--fs-label);
   letter-spacing: var(--ls-label);
   margin-right: 4px;
 }
-.group-row.is-active .group-indicator.infra-port { background: var(--cyan); border-color: var(--cyan); }
+.group-row.is-active .group-indicator.layer-ports { background: var(--cyan); border-color: var(--cyan); }
 
-/* aircraft altitude bands (match AircraftLayer color coding) */
-.group-row.is-active .group-indicator.band-ground { background: #8a93a3; border-color: #8a93a3; }
-.group-row.is-active .group-indicator.band-low { background: #7dd87d; border-color: #7dd87d; }
-.group-row.is-active .group-indicator.band-mid { background: var(--cyan); border-color: var(--cyan); }
-.group-row.is-active .group-indicator.band-high { background: #f0f4f8; border-color: #f0f4f8; }
+/* Palette legends: swatches and labels take --hue inline from the user
+   palette (core/ui/hueStyle) — the colours the globe paints with, so a
+   recolour reaches them too. */
+.group-row.is-active .group-indicator.has-hue {
+  background: var(--hue);
+  border-color: var(--hue);
+}
 
-.ship-type.ship-cargo { color: var(--cyan); }
-.ship-type.ship-tanker { color: var(--amber); }
-.ship-type.ship-passenger { color: #c084fc; }
-.ship-type.ship-fishing { color: #7dd87d; }
-.ship-type.ship-highspeed { color: #f0f4f8; }
-.ship-type.ship-other { color: #8a93a3; }
+.hue-text {
+  color: var(--hue);
+}
 
-/* ---- catalog rail (left) ------------------------------------ */
+/* Aircraft altitude bands: the globe shades each category hue by altitude
+   (AircraftLayer BAND_SHADE 0.55 / 0.78 / 1) and paints on-ground aircraft
+   flat grey, so the band swatches show that ramp on a neutral hue. */
+.group-indicator.band-ground { --hue: var(--aircraft-ground); }
+.group-indicator.band-low { --hue: color-mix(in srgb, var(--text) 55%, black); }
+.group-indicator.band-mid { --hue: color-mix(in srgb, var(--text) 78%, black); }
+.group-indicator.band-high { --hue: var(--text); }
 
-.catalog-panel {
+/* ---- left rail ------------------------------------------------ */
+
+.rail-panel {
   /* left-anchored panel: mirror the chamfer to the top-left */
   --panel-clip: polygon(
     var(--chamfer) 0,
@@ -431,7 +424,7 @@ body {
 }
 
 /* mirror the corner tick away from the notch */
-.catalog-panel::before {
+.rail-panel::before {
   left: auto;
   right: 0;
   border-left: 0;
@@ -567,6 +560,14 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* a failed search: one status line in the dropdown's place */
+.search-status {
+  padding: 6px 8px;
+  color: var(--alert);
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+}
+
 /* ---- right stack: telemetry + passes ------------------------- */
 
 .right-stack {
@@ -586,6 +587,10 @@ body {
 .right-stack > .hud-panel {
   flex: none;
 }
+
+/* .telemetry-panel, .passes-panel (selection panels) and .help-panel,
+   .settings-panel (dialogs) carry no rule of their own: they are stable
+   hooks for tests and tooling. */
 
 .telemetry-header {
   display: flex;
@@ -650,34 +655,16 @@ body {
   letter-spacing: var(--ls-data);
 }
 
-/* orbit-class badge — hue matches the constellation points */
+/* orbit-class badge — --hue is the class's palette colour (the hue the
+   constellation points wear); dim while the class is unknown */
 .orbit-class {
   display: inline-block;
   padding: 0 6px 1px;
   border: 1px solid currentColor;
   border-radius: var(--radius);
+  color: var(--hue, var(--text-dim));
   font-size: var(--fs-label);
   letter-spacing: var(--ls-label);
-}
-
-.orbit-leo {
-  color: var(--orbit-leo);
-}
-
-.orbit-meo {
-  color: var(--orbit-meo);
-}
-
-.orbit-geo {
-  color: var(--orbit-geo);
-}
-
-.orbit-heo {
-  color: var(--orbit-heo);
-}
-
-.orbit-unknown {
-  color: var(--text-dim);
 }
 
 /* ---- transport bar (tape deck, bottom center) ----------------- */
@@ -799,14 +786,16 @@ body {
   white-space: nowrap;
 }
 
-/* ---- passes + sky plot ---------------------------------------- */
+/* ---- panel status lines (empty / offline / computing) ---------- */
 
-.passes-empty {
+.panel-empty {
   color: var(--text-dim);
   font-size: var(--fs-label);
   letter-spacing: var(--ls-label);
   padding: 10px 0;
 }
+
+/* ---- passes + sky plot ---------------------------------------- */
 
 .observer-editor {
   display: flex;
@@ -825,6 +814,13 @@ body {
   width: 64px;
   padding: 4px 6px;
   font-variant-numeric: tabular-nums;
+}
+
+.observer-error {
+  margin: -2px 0 var(--sp-2);
+  color: var(--alert);
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
 }
 
 .sky-plot {
@@ -1015,6 +1011,12 @@ body {
   color: var(--text-dim);
 }
 
+/* emoji flags render at their own width — no label tracking between them */
+.vessel-flag {
+  margin-right: 0.4em;
+  letter-spacing: 0;
+}
+
 /* ---- follow + panel actions ------------------------------------ */
 
 .panel-actions {
@@ -1166,7 +1168,7 @@ body {
   text-transform: uppercase;
 }
 
-.help-backdrop {
+.dialog-backdrop {
   position: absolute;
   inset: 0;
   z-index: 50;
@@ -1176,7 +1178,7 @@ body {
   pointer-events: auto;
 }
 
-.help-panel {
+.dialog-panel {
   width: min(520px, calc(100% - 40px));
   max-height: calc(100vh - 80px);
   max-height: calc(100dvh - 80px);
@@ -1521,7 +1523,7 @@ body {
 
   /* desktop layout on a touch tablet: keep the rail / stack clear of the
      taller bottom band (transport bar + lifted launchers) */
-  .catalog-panel {
+  .rail-panel {
     max-height: calc(100vh - 220px);
     max-height: calc(100dvh - 220px);
   }
@@ -1896,7 +1898,7 @@ body {
 
 /* ---- dialogs ---- */
 
-.is-compact .help-panel {
+.is-compact .dialog-panel {
   width: calc(100% - 2 * var(--gutter-compact) - var(--safe-left) - var(--safe-right));
   max-height: calc(100vh - 2 * var(--gutter-compact));
   max-height: calc(100dvh - 2 * var(--gutter-compact) - var(--safe-top) - var(--safe-bottom));
@@ -1904,7 +1906,7 @@ body {
 }
 
 /* the dialog header (✕ / RESET) stays reachable while the panel scrolls */
-.is-compact .help-panel > .telemetry-header {
+.is-compact .dialog-panel > .telemetry-header {
   position: sticky;
   top: -10px; /* the panel's top padding */
   z-index: 1;

@@ -1,4 +1,5 @@
 import { useMode } from '../core/ui/modeStore'
+import { HudDialog } from './HudDialog'
 
 interface HelpSection {
   title: string
@@ -65,42 +66,35 @@ export function HelpOverlay() {
   if (!open) return null
 
   return (
-    <div className="help-backdrop" onClick={close} role="presentation">
-      <section
-        className="hud-panel help-panel"
-        role="dialog"
-        aria-label="Controls help"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="telemetry-header">
-          <h2 className="hud-title">CONTROLS</h2>
-          <button className="hud-button" onClick={close} title="Close" aria-label="Close help">
-            ✕
-          </button>
-        </header>
-        {[TOUCH_SECTION, ...SECTIONS].map((section) => (
-          <div
-            key={section.title}
-            className={`help-section${section === TOUCH_SECTION ? ' help-touch' : ''}`}
-          >
-            <h3 className="help-section-title">{section.title}</h3>
-            <dl className="help-grid">
-              {section.rows.map(([key, what]) => (
-                <div className="help-row" key={key}>
-                  <dt>
-                    <kbd>{key}</kbd>
-                  </dt>
-                  <dd>{what}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        ))}
-        <p className="help-footnote">
-          Ships & aircraft are live (wall clock); satellites follow simulation time.
-        </p>
-      </section>
-    </div>
+    <HudDialog
+      label="Controls help"
+      title="CONTROLS"
+      hook="help-panel"
+      onClose={close}
+      closeLabel="Close help"
+    >
+      {[TOUCH_SECTION, ...SECTIONS].map((section) => (
+        <div
+          key={section.title}
+          className={`help-section${section === TOUCH_SECTION ? ' help-touch' : ''}`}
+        >
+          <h3 className="help-section-title">{section.title}</h3>
+          <dl className="help-grid">
+            {section.rows.map(([key, what]) => (
+              <div className="help-row" key={key}>
+                <dt>
+                  <kbd>{key}</kbd>
+                </dt>
+                <dd>{what}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      ))}
+      <p className="help-footnote">
+        Ships & aircraft are live (wall clock); satellites follow simulation time.
+      </p>
+    </HudDialog>
   )
 }
 

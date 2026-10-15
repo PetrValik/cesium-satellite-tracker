@@ -76,6 +76,34 @@ describe('catalogStore init', () => {
   })
 })
 
+describe('catalogStore init partial failures', () => {
+  it('flags offline when /groups answers but every group fetch fails', async () => {
+    h.groups.mockResolvedValue([group('stations'), group('science'), group('starlink')])
+    h.satellites.mockRejectedValue(new Error('API unreachable'))
+    await useCatalog.getState().init()
+
+    const s = useCatalog.getState()
+    expect(s.offline).toBe(true)
+    expect(s.booting).toBe(false)
+    expect(s.groups).toHaveLength(3) // the group list itself did load
+    expect(s.activeSlugs).toEqual([])
+  })
+
+  it('stays online when only some groups fail, keeping the ones that loaded', async () => {
+    h.groups.mockResolvedValue([group('stations'), group('science')])
+    h.satellites.mockImplementation(async (slug: string) => {
+      if (slug === 'science') throw new Error('502')
+      return [sat(1, 'ISS')]
+    })
+    await useCatalog.getState().init()
+
+    const s = useCatalog.getState()
+    expect(s.offline).toBe(false)
+    expect(s.activeSlugs).toEqual(['stations'])
+    expect(s.sats.map((x) => x.noradId)).toEqual([1])
+  })
+})
+
 describe('catalogStore toggleGroup', () => {
   it('serves a re-enabled group from cache instead of refetching', async () => {
     wireHappyApi()

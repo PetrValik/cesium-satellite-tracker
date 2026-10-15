@@ -48,11 +48,10 @@
   --alert-wash: rgba(248, 113, 113, 0.1);
   --glow-alert-text: 0 0 12px rgba(248, 113, 113, 0.35);
 
-  /* ---- orbit-class hues (mirror ConstellationLayer.ts) ----- */
-  --orbit-leo: #ffb454;
-  --orbit-meo: #6ee7ff;
-  --orbit-geo: #c084fc;
-  --orbit-heo: #f87171;
+  /* ---- fixed legend hues (data colours are the user palette,
+          core/ui/prefsStore, applied through --hue) ------------- */
+  --signal-white: #f0f4f8; /* AIRCRAFT row in LAYERS */
+  --aircraft-ground: #8a93a3; /* on-ground aircraft: core/engine/signalColors SIGNAL_GROUND */
 
   /* ---- type ------------------------------------------------ */
   --mono: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', ui-monospace, Menlo, monospace;

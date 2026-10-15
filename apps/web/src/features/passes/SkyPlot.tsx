@@ -1,13 +1,6 @@
+import { useMemo } from 'react'
 import type { PassPrediction } from '../../lib/protocol'
-
-const R = 90 // plot radius for el = 0 (horizon)
-
-/** Polar az/el projection: N up, E right, zenith at center. */
-function project(azDeg: number, elDeg: number): { x: number; y: number } {
-  const r = ((90 - Math.max(elDeg, 0)) / 90) * R
-  const az = (azDeg * Math.PI) / 180
-  return { x: r * Math.sin(az), y: -r * Math.cos(az) }
-}
+import { project, SKY_R as R } from './skyProjection'
 
 export interface SkyPlotProps {
   pass: PassPrediction
@@ -15,14 +8,16 @@ export interface SkyPlotProps {
   epochMs?: number
 }
 
-export function SkyPlot({ pass, epochMs }: SkyPlotProps) {
-  const points = pass.samples
-    .filter((s) => s.elDeg >= 0)
-    .map((s) => project(s.azDeg, s.elDeg))
+/** The pass track as an SVG path plus its AOS / LOS ends; only samples above the horizon. */
+function trackGeometry(pass: PassPrediction) {
+  const points = pass.samples.filter((s) => s.elDeg >= 0).map((s) => project(s.azDeg, s.elDeg))
   const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+  return { path, first: points[0], last: points[points.length - 1] }
+}
 
-  const first = points[0]
-  const last = points[points.length - 1]
+export function SkyPlot({ pass, epochMs }: SkyPlotProps) {
+  // Under warp the panel re-renders every frame; the track only changes with the pass.
+  const { path, first, last } = useMemo(() => trackGeometry(pass), [pass])
 
   let live: { x: number; y: number } | null = null
   if (epochMs !== undefined && epochMs >= pass.aosMs && epochMs <= pass.losMs) {

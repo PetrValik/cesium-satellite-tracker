@@ -2,6 +2,7 @@ import { BillboardCollection, BlendOption, Cartesian3, Color, NearFarScalar } fr
 import type { Billboard, Scene } from 'cesium'
 import type { Aircraft } from '@orbital-ops/shared'
 import { aircraftIcon } from '../../core/engine/icons'
+import { SIGNAL_GROUND } from '../../core/engine/signalColors'
 import { travelAxis } from '../../core/engine/travelAxis'
 import { DEFAULT_COLORS, type ColorPrefs } from '../../core/ui/prefsStore'
 import { AIRCRAFT_CATEGORIES } from '../../lib/aircraftCategories'
@@ -10,7 +11,7 @@ import { aircraftDeadReckonSec, aircraftVelocity, type AircraftVelocity } from '
 import { bandOf, type AltBand } from './aircraftStore'
 
 /** The 'ground' band (on ground, or no altitude) renders flat grey regardless of the category hue. */
-const COLOR_GROUND = Color.fromCssColorString('#8a93a3').withAlpha(0.95)
+const COLOR_GROUND = Color.fromCssColorString(SIGNAL_GROUND).withAlpha(0.95)
 
 type AirborneBand = Exclude<AltBand, 'ground'>
 

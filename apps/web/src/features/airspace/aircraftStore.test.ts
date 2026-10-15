@@ -96,3 +96,90 @@ describe('aircraftStore polling', () => {
     expect(h.aircraft).toHaveBeenCalledTimes(3)
   })
 })
+
+describe('aircraftStore poll failures', () => {
+  it('logs a contract break (non-ApiError) and keeps the last snapshot', async () => {
+    const drift = new Error('zod: expected number, received string')
+    h.aircraft.mockResolvedValueOnce([plane('4b1814')])
+    h.aircraft.mockRejectedValueOnce(drift)
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    mod.startAircraftPolling()
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(POLL_MS)
+
+    expect(log).toHaveBeenCalledWith(expect.any(String), drift)
+    expect(mod.useAircraft.getState().available).toBe(false)
+    expect(mod.useAircraft.getState().aircraft).toHaveLength(1)
+    log.mockRestore()
+  })
+
+  it('stopAircraftPolling clears the interval', async () => {
+    h.aircraft.mockResolvedValue([])
+    mod.startAircraftPolling()
+    await vi.advanceTimersByTimeAsync(0)
+    mod.stopAircraftPolling()
+    await vi.advanceTimersByTimeAsync(5 * POLL_MS)
+    expect(h.aircraft).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('bandOf', () => {
+  const at = (altM: number | null, onGround = false): Aircraft => ({ ...plane('4b1814'), altM, onGround })
+
+  it('puts on-ground and unknown-altitude aircraft on the ground band', () => {
+    expect(mod.bandOf(at(11_000, true))).toBe('ground')
+    expect(mod.bandOf(at(null))).toBe('ground')
+  })
+
+  it('switches bands exactly at 3000 m and 9000 m', () => {
+    expect(mod.bandOf(at(0))).toBe('low')
+    expect(mod.bandOf(at(2_999.9))).toBe('low')
+    expect(mod.bandOf(at(3_000))).toBe('mid')
+    expect(mod.bandOf(at(8_999.9))).toBe('mid')
+    expect(mod.bandOf(at(9_000))).toBe('high')
+  })
+})
+
+describe('visibleAircraft', () => {
+  // 4b1814: Swiss civil hex, callsign TST14 → civil. ae1234: USA military hex.
+  const civilHigh = plane('4b1814')
+  const civilGround: Aircraft = { ...plane('4b1815'), onGround: true }
+  const militaryHigh: Aircraft = { ...plane('ae1234'), callsign: 'RCH123' }
+  const aircraft = [civilHigh, civilGround, militaryHigh]
+  const allBands = () => new Set(mod.ALT_BANDS)
+  const allCategories = () => new Set(['civil', 'cargo', 'military'] as const)
+
+  it('returns the store array itself while every filter is on', () => {
+    expect(
+      mod.visibleAircraft({ aircraft, activeBands: allBands(), activeCategories: allCategories() }),
+    ).toBe(aircraft)
+  })
+
+  it('filters by altitude band', () => {
+    const visible = mod.visibleAircraft({
+      aircraft,
+      activeBands: new Set(['ground'] as const),
+      activeCategories: allCategories(),
+    })
+    expect(visible).toEqual([civilGround])
+  })
+
+  it('filters by category', () => {
+    const visible = mod.visibleAircraft({
+      aircraft,
+      activeBands: allBands(),
+      activeCategories: new Set(['military'] as const),
+    })
+    expect(visible).toEqual([militaryHigh])
+  })
+
+  it('ANDs band and category filters', () => {
+    const visible = mod.visibleAircraft({
+      aircraft,
+      activeBands: new Set(['high'] as const),
+      activeCategories: new Set(['civil'] as const),
+    })
+    expect(visible).toEqual([civilHigh])
+  })
+})

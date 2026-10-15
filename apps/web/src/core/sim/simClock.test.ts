@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { isSimLive, LIVE_EPSILON_MS, useSimClock } from './simClock'
+import { isSimLive, LIVE_EPSILON_MS, SIM_RATES, stepRate, useSimClock } from './simClock'
 
 describe('simClock store', () => {
   beforeEach(() => {
@@ -79,5 +79,24 @@ describe('isSimLive', () => {
     expect(isSimLive(useSimClock.getState())).toBe(false)
     useSimClock.getState().resetToNow()
     expect(isSimLive(useSimClock.getState())).toBe(true)
+  })
+})
+
+describe('stepRate', () => {
+  it('walks one step through SIM_RATES in either direction', () => {
+    expect(stepRate(1, 1)).toBe(10)
+    expect(stepRate(1, -1)).toBe(-60)
+    expect(stepRate(600, 1)).toBe(3600)
+    expect(stepRate(600, -1)).toBe(60)
+  })
+
+  it('stops at both ends of the list', () => {
+    expect(stepRate(SIM_RATES[0], -1)).toBeUndefined()
+    expect(stepRate(SIM_RATES[SIM_RATES.length - 1], 1)).toBeUndefined()
+  })
+
+  it('does not step from a rate outside SIM_RATES', () => {
+    expect(stepRate(2, 1)).toBeUndefined()
+    expect(stepRate(2, -1)).toBeUndefined()
   })
 })

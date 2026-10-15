@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { isTypingTarget } from './keyboard'
 import { useMode } from './modeStore'
 import { useSheet } from './sheetStore'
 
@@ -39,23 +40,11 @@ export interface HudKeyEvent {
   target: EventTarget | null
 }
 
-/** Typing in a field (catalog search, observer coordinates) never toggles. */
-function isTypingTarget(t: EventTarget | null): boolean {
-  if (t === null || typeof t !== 'object') return false
-  const el = t as Partial<HTMLElement>
-  return (
-    el.tagName === 'INPUT' ||
-    el.tagName === 'TEXTAREA' ||
-    el.tagName === 'SELECT' ||
-    el.isContentEditable === true
-  )
-}
-
 /**
  * Keyboard map for the HUD toggle: `U` hides / shows; Escape while hidden
- * only shows. Returns true when the key was consumed — the caller must then
- * stop the event so GlobeView's Escape (follow release / deselect) never
- * sees it.
+ * only shows; typing in a field never toggles. Returns true when the key
+ * was consumed — the caller must then stop the event so GlobeView's Escape
+ * (follow release / deselect) never sees it.
  */
 export function handleHudKey(e: HudKeyEvent): boolean {
   if (isTypingTarget(e.target)) return false
