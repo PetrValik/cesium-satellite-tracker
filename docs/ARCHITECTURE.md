@@ -8,8 +8,8 @@ enforce.
 
 ```
 src/
-├── app/          # composition root: GlobeView, LeftRail, ModeTabs, StatusLine,
-│   │             #   LayersPanel (cross-domain layer toggles), HelpOverlay
+├── App.tsx       # top-level composition root: mounts app/, starts slice polling
+├── app/          # composition: GlobeView, LeftRail, HUD chrome, panels, selection UI
 ├── core/
 │   ├── engine/   # non-React Cesium machinery (viewer, CameraRig)
 │   ├── sim/      # simulation clock
@@ -35,8 +35,8 @@ src/
    *Exception:* satellite-domain slices (`tracking`, `passes`,
    `constellation`) may read `catalog/catalogStore` — it is the satellite
    domain's entity/selection store.
-2. Only `app/` composes slices (LeftRail, GlobeView, App). If two slices need
-   to meet, they meet there or through a `core/ui` store.
+2. Only `app/` and `src/App.tsx` compose slices. If two slices need to meet,
+   they meet there or through a `core/ui` store.
 3. `core/` never imports from `features/`.
 4. Per-mode UI lives in the owning slice (`MaritimePicture`, `AirPicture`),
    not in a shared panel.
@@ -45,8 +45,11 @@ src/
 
 ```
 src/
-├── app.ts        # composition: CORS, mounts slice routers, /api/live/status
-├── index.ts      # bootstrap: env, feeds, server
+├── app.ts        # composition: secure headers, rate limit, CORS, mounts slice
+│                 #   routers, /api/live/status, /api 404, static web + SPA fallback
+├── index.ts      # bootstrap: env, SQLite, feeds, server, SIGTERM/SIGINT shutdown
+├── shared/       # cross-slice HTTP helpers (rateLimit, guards) — not the
+│                 #   @orbital-ops/shared contract package
 ├── satellites/   # TLE cache slice: celestrak, db, refresh, seed, routes
 ├── ships/        # AIS slice: ais feed, routes
 └── aircraft/     # ADS-B slice: adsb feed, routes
@@ -55,7 +58,8 @@ src/
 **Rules**
 
 1. Slices are independent — they never import each other. Only `app.ts` and
-   `index.ts` see more than one slice.
+   `index.ts` see more than one slice; slices may import `shared/`, and
+   `shared/` imports no slice.
 2. Response contracts live in `packages/shared` (zod) and are consumed by
    both the API and the web client.
 3. Every slice's routes are a factory taking injected deps (`db`, `fetcher`,

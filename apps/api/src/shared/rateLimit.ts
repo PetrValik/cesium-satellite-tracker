@@ -1,5 +1,6 @@
 import type { Context, Next } from 'hono'
 import { getConnInfo } from '@hono/node-server/conninfo'
+import type { ApiErrorBody } from '@orbital-ops/shared'
 
 export interface RateLimitOptions {
   /** Requests allowed per window per client. */
@@ -58,7 +59,7 @@ export function rateLimit(options: RateLimitOptions = {}) {
     bucket.count++
     if (bucket.count > limit) {
       c.header('Retry-After', String(Math.ceil((bucket.resetAt - t) / 1000)))
-      return c.json({ error: 'rate limit exceeded' }, 429)
+      return c.json({ error: 'rate limit exceeded' } satisfies ApiErrorBody, 429)
     }
     await next()
   }

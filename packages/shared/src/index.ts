@@ -18,7 +18,7 @@ export const GroupInfoSchema = z.object({
   count: z.number().int().nonnegative(),
   /** ISO timestamp of the last successful refresh (seed timestamp before first fetch). */
   updatedAt: z.string().nullable(),
-  /** True when the data is older than the TTL and the last refresh attempt failed. */
+  /** True when the data is past its TTL (a background refresh may be in flight). */
   stale: z.boolean(),
 })
 
@@ -30,6 +30,7 @@ export const HealthSchema = z.object({
   groups: z.number().int().nonnegative(),
 })
 
+/** Body of every API error response (any non-2xx status). */
 export const ApiErrorSchema = z.object({
   error: z.string(),
 })
@@ -95,6 +96,8 @@ export const LiveStatusSchema = z.object({
     configured: z.boolean(),
     connected: z.boolean(),
     ships: z.number().int().nonnegative(),
+    /** Epoch ms of the last parsed data frame; null before the first (an open socket proves nothing). */
+    lastMessageMs: z.number().nullable(),
   }),
   adsb: z.object({
     configured: z.boolean(),
@@ -107,7 +110,7 @@ export const LiveStatusSchema = z.object({
 export type Satellite = z.infer<typeof SatelliteSchema>
 export type GroupInfo = z.infer<typeof GroupInfoSchema>
 export type Health = z.infer<typeof HealthSchema>
-export type ApiError = z.infer<typeof ApiErrorSchema>
+export type ApiErrorBody = z.infer<typeof ApiErrorSchema>
 export type ShipType = z.infer<typeof ShipTypeSchema>
 export type Ship = z.infer<typeof ShipSchema>
 export type Aircraft = z.infer<typeof AircraftSchema>

@@ -116,7 +116,7 @@ describe('AisFeed connection', () => {
       ],
       FilterMessageTypes: ['PositionReport', 'ShipStaticData'],
     })
-    expect(feed.status()).toEqual({ configured: true, connected: true, ships: 0 })
+    expect(feed.status()).toEqual({ configured: true, connected: true, ships: 0, lastMessageMs: null })
     feed.stop()
   })
 
@@ -124,7 +124,7 @@ describe('AisFeed connection', () => {
     const { feed, sockets } = feedEnv(null)
     feed.start()
     expect(sockets).toHaveLength(0)
-    expect(feed.status()).toEqual({ configured: false, connected: false, ships: 0 })
+    expect(feed.status()).toEqual({ configured: false, connected: false, ships: 0, lastMessageMs: null })
     expect(feed.snapshot()).toEqual([])
     feed.stop()
   })
@@ -245,13 +245,37 @@ describe('AisFeed binary frames', () => {
     feed.stop()
   })
 
+  it('logs a frame that decodes but is not JSON once per connection, with its prefix', () => {
+    vi.useFakeTimers()
+    const logs: string[] = []
+    const { feed, sockets } = feedEnv('test-key', (msg) => logs.push(msg))
+    feed.start()
+    sockets[0]!.open()
+    const garbage = `\u0000gz${'x'.repeat(500)}`
+    sockets[0]!.messageRaw(new TextEncoder().encode(garbage))
+    sockets[0]!.messageRaw(new TextEncoder().encode(garbage))
+    const dropped = logs.filter((l) => l.includes('unparsable frame'))
+    expect(dropped).toHaveLength(1)
+    expect(dropped[0]).toContain(garbage.slice(0, 200))
+    expect(dropped[0]).not.toContain(garbage.slice(0, 201))
+    expect(feed.snapshot()).toEqual([])
+
+    // A fresh connection re-arms the canary.
+    sockets[0]!.emit('close')
+    vi.advanceTimersByTime(5_000)
+    sockets[1]!.open()
+    sockets[1]!.message('{still not json')
+    expect(logs.filter((l) => l.includes('unparsable frame'))).toHaveLength(2)
+    feed.stop()
+  })
+
   it('reports lastMessageMs only after a successfully parsed data frame', () => {
     const { feed, sockets } = feedEnv()
     feed.start()
     sockets[0]!.open()
-    expect(feed.status().lastMessageMs).toBeUndefined()
+    expect(feed.status().lastMessageMs).toBeNull()
     sockets[0]!.message({ error: 'Api Key Is Not Valid' }) // non-data frame does not count
-    expect(feed.status().lastMessageMs).toBeUndefined()
+    expect(feed.status().lastMessageMs).toBeNull()
     sockets[0]!.message(positionReport(244_123_456, 51.9, 4.1))
     expect(feed.status().lastMessageMs).toBe(T0)
     feed.stop()

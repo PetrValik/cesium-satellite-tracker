@@ -22,7 +22,9 @@ Base path: `/api` · default port `8787` (see [Environment reference](#environme
 | GET | `/api/aircraft` | — | `AircraftListSchema` — array of `AircraftSchema` | `public, max-age=10` |
 | GET | `/api/live/status` | — | `LiveStatusSchema` | `no-store` |
 
-Error responses are always `ApiErrorSchema` — `{ error: string }`.
+Error responses are always `ApiErrorSchema` — `{ error: string }`. That
+includes any other path under `/api`, which answers `404 { error: "not found" }`
+— never the web app's `index.html`, even when the API serves it.
 
 ### GET /api/health
 Liveness plus catalog size. `satCount` is the total TLE rows in cache;
@@ -31,15 +33,17 @@ Liveness plus catalog size. `satCount` is the total TLE rows in cache;
 ### GET /api/groups
 The 12 curated CelesTrak groups with per-group `count`, `updatedAt` (ISO string
 of the last successful refresh, or `null` before the first fetch), and `stale`
-(true when the group is past its TTL and the last refresh attempt failed).
-Triggers a background refresh of expired groups but never blocks on it.
+(true when the group is past its TTL — a background refresh may already be in
+flight; seeded groups start stale). Triggers a background refresh of expired
+groups but never blocks on it.
 
 ### GET /api/satellites?group=&lt;slug&gt;
 Full TLE list for one group. The `group` slug must be one of the curated groups
 (`stations`, `last-30-days`, `starlink`, `oneweb`, `iridium-next`, `gps-ops`,
-`galileo`, `glo-ops`, `beidou`, `weather`, `geo`, `science`). Ensures the group
-is fresh (blocking refresh from CelesTrak if past TTL) before responding; falls
-back to cached/seed data when CelesTrak is unreachable.
+`galileo`, `glo-ops`, `beidou`, `weather`, `geo`, `science`). Serves cached data
+immediately; past its TTL the group refreshes from CelesTrak in the background.
+The request waits on CelesTrak only when the group has no cached rows at all,
+so an unreachable CelesTrak still serves cached/seed data.
 
 | Status | Meaning |
 |---|---|
@@ -84,8 +88,15 @@ Aircraft polling works anonymously out of the box; OpenSky credentials only
 change the poll cadence (see below), not availability.
 
 ### GET /api/live/status
-Health of the two live (non-satellite) feeds: whether each is `configured`,
-`connected`, and how many objects it currently holds. Always `no-store`.
+Health of the two live (non-satellite) feeds. Always `no-store`.
+
+| Feed | Fields |
+|---|---|
+| `ais` | `configured` (key set), `connected` (socket open), `ships` held, `lastMessageMs` (epoch ms of the last parsed data frame; `null` before the first) |
+| `adsb` | `configured` (always `true` when wired), `aircraft` held, `lastPollMs` (epoch ms of the last successful poll; `null` before the first) |
+
+aisstream.io accepts the socket before it checks the key, so an AIS feed that
+stays `connected: true` with `lastMessageMs: null` is most likely a rejected key.
 
 ## Rate limiting
 
@@ -114,7 +125,7 @@ Copy `apps/api/.env.example` to `.env` for the live-feed keys.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `PORT` | `8787` | HTTP listen port |
+| `PORT` | `8787` | HTTP listen port (in dev, point the web proxy at it with `API_PORT` — see DEVELOPMENT.md) |
 | `DATA_DIR` | `<api>/data` (repo) / `/data` (container) | SQLite cache directory (`tle-cache.db`) |
 | `WEB_DIST` | unset | absolute path of the built web app to serve; unset = API only |
 | `ALLOWED_ORIGINS` | unset | comma-separated CORS allowlist; unset = same-origin only |

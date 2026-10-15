@@ -13,8 +13,7 @@
   "dependencies": {
     "@hono/node-server": "^1.13.0",
     "@orbital-ops/shared": "*",
-    "hono": "^4.6.0",
-    "zod": "^4.0.0"
+    "hono": "^4.6.0"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

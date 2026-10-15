@@ -1,14 +1,15 @@
-import type { Ship, ShipType } from '@orbital-ops/shared'
+import type { LiveStatus, Ship, ShipType } from '@orbital-ops/shared'
+import { num, validLatLon } from '../shared/guards.ts'
 
 export const AIS_STREAM_URL = 'wss://stream.aisstream.io/v0/stream'
 
 /** Vessels not heard from for this long are dropped by the sweep. */
-export const AIS_EVICT_AFTER_MS = 15 * 60 * 1000
-export const AIS_SWEEP_INTERVAL_MS = 60 * 1000
+const AIS_EVICT_AFTER_MS = 15 * 60 * 1000
+const AIS_SWEEP_INTERVAL_MS = 60 * 1000
 /** Hard ceiling on tracked vessels; the oldest reports are evicted when over. */
 export const AIS_MAX_VESSELS = 20_000
-export const AIS_RECONNECT_MIN_MS = 5 * 1000
-export const AIS_RECONNECT_MAX_MS = 60 * 1000
+const AIS_RECONNECT_MIN_MS = 5 * 1000
+const AIS_RECONNECT_MAX_MS = 60 * 1000
 
 /** The slice of the WebSocket API the feed uses (satisfied by the Node >=22 global). */
 export interface AisSocket {
@@ -42,10 +43,6 @@ export function mapShipType(code: number | undefined): ShipType {
   if (code === 35 || code === 55) return 'military'
   if (code >= 40 && code <= 49) return 'highspeed'
   return 'other'
-}
-
-function num(v: unknown): number | undefined {
-  return typeof v === 'number' && Number.isFinite(v) ? v : undefined
 }
 
 /** Shared decoder for binary frames (UTF-8). */
@@ -95,8 +92,9 @@ interface AisEnvelope {
  * reconnect loop. aisstream.io delivers its frames as BINARY WebSocket
  * messages — the socket is switched to 'arraybuffer' and frames are decoded
  * from ArrayBuffer / typed-array / Blob payloads before JSON parsing; a frame
- * of any other type is logged once per connection instead of being dropped
- * silently. Handlers never throw — a dead feed degrades to an empty snapshot.
+ * of any other type, or one that does not parse, is logged once per
+ * connection instead of being dropped silently. Handlers never throw — a dead
+ * feed degrades to an empty snapshot.
  */
 export class AisFeed {
   readonly configured: boolean
@@ -113,8 +111,10 @@ export class AisFeed {
   private loggedUnknownFrame = false
   /** One undecodable-frame-type log per connection — a silent-drop canary. */
   private loggedUndecodableFrame = false
-  /** Epoch ms of the last successfully parsed data frame; undefined until one arrives. */
-  private lastMessageMs: number | undefined
+  /** One log per connection for a decoded frame that still could not be processed. */
+  private loggedUnparsableFrame = false
+  /** Epoch ms of the last successfully parsed data frame; null until one arrives. */
+  private lastMessageMs: number | null = null
   private sweepTimer: ReturnType<typeof setInterval> | undefined
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -163,12 +163,7 @@ export class AisFeed {
     return [...this.ships.values()].sort((a, b) => b.tsMs - a.tsMs).slice(0, limit)
   }
 
-  status(): {
-    configured: boolean
-    connected: boolean
-    ships: number
-    lastMessageMs: number | undefined
-  } {
+  status(): LiveStatus['ais'] {
     return {
       configured: this.configured,
       connected: this.connected,
@@ -213,6 +208,7 @@ export class AisFeed {
 
     this.loggedUnknownFrame = false
     this.loggedUndecodableFrame = false
+    this.loggedUnparsableFrame = false
 
     socket.addEventListener('open', () => {
       if (settled || this.socket !== socket) return
@@ -241,8 +237,9 @@ export class AisFeed {
     socket.addEventListener('message', (event) => {
       try {
         this.handleMessage(event.data)
-      } catch {
-        // malformed frame — drop it, never throw out of a handler
+      } catch (err) {
+        // never throw out of a handler — drop the frame, but not silently
+        this.logUnparsableFrame(`frame handler failed (dropped): ${String(err)}`)
       }
     })
 
@@ -283,12 +280,13 @@ export class AisFeed {
         (text) => {
           try {
             this.handleText(text)
-          } catch {
+          } catch (err) {
             // handlers never throw, even asynchronously
+            this.logUnparsableFrame(`frame handler failed (dropped): ${String(err)}`)
           }
         },
-        () => {
-          // unreadable Blob — drop the frame
+        (err: unknown) => {
+          this.logUnparsableFrame(`unreadable Blob frame (dropped): ${String(err)}`)
         },
       )
       return
@@ -305,6 +303,8 @@ export class AisFeed {
     try {
       msg = JSON.parse(text) as AisEnvelope | null
     } catch {
+      // Not JSON — e.g. a changed upstream encoding. A silent drop here once emptied production ships.
+      this.logUnparsableFrame(`unparsable frame (dropped): ${text.slice(0, 200)}`)
       return
     }
     if (msg?.MessageType === 'PositionReport' || msg?.MessageType === 'ShipStaticData') {
@@ -321,13 +321,21 @@ export class AisFeed {
     }
   }
 
+  private logUnparsableFrame(message: string): void {
+    if (this.loggedUnparsableFrame) return
+    this.loggedUnparsableFrame = true
+    this.log(`[ais] ${message}`)
+  }
+
   private handlePositionReport(msg: AisEnvelope): void {
     const mmsi = num(msg.MetaData?.MMSI)
     if (mmsi === undefined || mmsi < 0) return
     const report = msg.Message?.PositionReport
-    const lat = num(report?.Latitude) ?? num(msg.MetaData?.latitude)
-    const lon = num(report?.Longitude) ?? num(msg.MetaData?.longitude)
-    if (lat === undefined || lon === undefined || Math.abs(lat) > 90 || Math.abs(lon) > 180) return
+    const pos = validLatLon(
+      num(report?.Latitude) ?? num(msg.MetaData?.latitude),
+      num(report?.Longitude) ?? num(msg.MetaData?.longitude),
+    )
+    if (pos === undefined) return
     const prev = this.ships.get(mmsi)
     // AIS sentinels for "not available": COG 360, true heading 511.
     const cog = num(report?.Cog)
@@ -335,8 +343,8 @@ export class AisFeed {
     this.ships.set(mmsi, {
       mmsi,
       name: prev?.name || cleanName(msg.MetaData?.ShipName),
-      latDeg: lat,
-      lonDeg: lon,
+      latDeg: pos.lat,
+      lonDeg: pos.lon,
       sogKn: num(report?.Sog) ?? prev?.sogKn ?? 0,
       cogDeg: (cog !== undefined && cog >= 0 && cog < 360 ? cog : undefined) ?? prev?.cogDeg ?? 0,
       hdgDeg: (hdg !== undefined && hdg >= 0 && hdg < 360 ? hdg : undefined) ?? prev?.hdgDeg ?? null,
@@ -363,14 +371,13 @@ export class AisFeed {
       return
     }
     // First sighting via static data: MetaData still carries the position.
-    const lat = num(msg.MetaData?.latitude)
-    const lon = num(msg.MetaData?.longitude)
-    if (lat === undefined || lon === undefined || Math.abs(lat) > 90 || Math.abs(lon) > 180) return
+    const pos = validLatLon(num(msg.MetaData?.latitude), num(msg.MetaData?.longitude))
+    if (pos === undefined) return
     this.ships.set(mmsi, {
       mmsi,
       name,
-      latDeg: lat,
-      lonDeg: lon,
+      latDeg: pos.lat,
+      lonDeg: pos.lon,
       sogKn: 0,
       cogDeg: 0,
       hdgDeg: null,

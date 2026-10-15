@@ -5,8 +5,10 @@ app, Hono API, shared zod contracts).
 
 ## Prerequisites
 
-- **Node.js ≥ 22.12** — `node:sqlite` and `--env-file-if-exists` are built
-  in, so there are no native dependencies. CI runs on Node 24.
+- **Node.js ≥ 22.18** — the API runs its TypeScript directly (type stripping
+  is on by default from 22.18), and `node:sqlite` (unflagged from 22.13) and
+  `--env-file-if-exists` are built in, so there are no native dependencies.
+  CI and the Docker image run Node 24.
 - No Cesium Ion token required. The globe falls back to OpenStreetMap imagery +
   ellipsoid terrain; set `VITE_CESIUM_TOKEN` for Cesium World Terrain.
 
@@ -22,6 +24,14 @@ npm run dev          # api on :8787 + web on :5173
 `npm run dev` runs both workspaces concurrently. Open the web app at
 **http://localhost:5173**; Vite proxies `/api` to the API on **:8787**. The
 satellite catalog works offline immediately from the committed TLE seed.
+
+To move the API off :8787 (say something else holds the port), set both sides —
+nothing links them: `PORT` is where the API listens, `API_PORT` is where the
+Vite dev proxy sends `/api`.
+
+```bash
+PORT=8788 API_PORT=8788 npm run dev
+```
 
 Run one side alone with `npm run dev:api` or `npm run dev:web`.
 
@@ -40,7 +50,7 @@ Root scripts fan out across workspaces:
 | Command | What it does |
 |---|---|
 | `npm run dev` | api + web together (concurrently) |
-| `npm run build` | build `packages/shared`, typecheck `apps/api`, bundle `apps/web` |
+| `npm run build` | typecheck `packages/shared` and `apps/api` (`tsc --noEmit`, no output), bundle `apps/web` |
 | `npm test` | run every workspace's tests (`--if-present`) |
 | `npm run lint` | eslint across the monorepo |
 | `npm run preview` | preview the built web app |
@@ -72,7 +82,8 @@ copy `apps/api/.env.example`). All are optional; the feeds degrade without them:
   of anonymous 600 s.
 
 See [API.md](API.md#environment-reference) for the full env reference (`PORT`,
-`DATA_DIR`, `WEB_DIST`, `ALLOWED_ORIGINS`, `TRUST_PROXY`).
+`DATA_DIR`, `WEB_DIST`, `ALLOWED_ORIGINS`, `TRUST_PROXY`). The web dev server
+reads one more, `API_PORT` (see *Quickstart*).
 
 ## Regenerating the TLE seed
 

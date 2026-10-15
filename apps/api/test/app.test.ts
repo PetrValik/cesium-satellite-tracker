@@ -1,5 +1,9 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  ApiErrorSchema,
   GroupListSchema,
   HealthSchema,
   SatelliteListSchema,
@@ -234,7 +238,7 @@ describe('live feeds: /api/ships, /api/aircraft, /api/live/status', () => {
     expect(res.status).toBe(200)
     const status = LiveStatusSchema.parse(await res.json())
     expect(status).toEqual({
-      ais: { configured: false, connected: false, ships: 0 },
+      ais: { configured: false, connected: false, ships: 0, lastMessageMs: null },
       adsb: { configured: false, aircraft: 0, lastPollMs: null },
     })
   })
@@ -246,7 +250,7 @@ describe('live feeds: /api/ships, /api/aircraft, /api/live/status', () => {
     expect((await app.request('/api/ships')).status).toBe(503)
 
     const status = LiveStatusSchema.parse(await (await app.request('/api/live/status')).json())
-    expect(status.ais).toEqual({ configured: false, connected: false, ships: 0 })
+    expect(status.ais).toEqual({ configured: false, connected: false, ships: 0, lastMessageMs: null })
   })
 
   it('serves schema-valid ships, aircraft, and live status from wired feeds', async () => {
@@ -287,7 +291,7 @@ describe('live feeds: /api/ships, /api/aircraft, /api/live/status', () => {
 
     const status = LiveStatusSchema.parse(await (await app.request('/api/live/status')).json())
     expect(status).toEqual({
-      ais: { configured: true, connected: true, ships: 1 },
+      ais: { configured: true, connected: true, ships: 1, lastMessageMs: T0 },
       adsb: { configured: true, aircraft: 1, lastPollMs: T0 },
     })
     ais.stop()
@@ -342,5 +346,36 @@ describe('hardening', () => {
     const { app } = testEnv(failingFetcher())
     const res = await app.request('/api/health', { headers: { origin: 'https://evil.example' } })
     expect(res.headers.get('access-control-allow-origin')).toBeNull()
+  })
+})
+
+describe('unknown /api paths', () => {
+  it('answer a JSON 404 error body', async () => {
+    const { app } = testEnv(failingFetcher())
+    const res = await app.request('/api/unknown')
+    expect(res.status).toBe(404)
+    expect(ApiErrorSchema.parse(await res.json())).toEqual({ error: 'not found' })
+  })
+
+  it('answer a JSON 404 — not the SPA index.html — when the web app is served', async () => {
+    const webDist = mkdtempSync(join(tmpdir(), 'orbital-ops-web-'))
+    try {
+      writeFileSync(join(webDist, 'index.html'), '<!doctype html><title>spa</title>')
+      const { db, refresher } = testEnv(failingFetcher())
+      const app = createApp({ db, refresher, webDist })
+
+      const api = await app.request('/api/unknown')
+      expect(api.status).toBe(404)
+      expect(api.headers.get('content-type')).toContain('application/json')
+      expect(ApiErrorSchema.parse(await api.json())).toEqual({ error: 'not found' })
+
+      // Client-side routes still fall back to the SPA, and real API routes still answer.
+      const spa = await app.request('/some/client/route')
+      expect(spa.status).toBe(200)
+      expect(await spa.text()).toContain('<title>spa</title>')
+      expect((await app.request('/api/health')).status).toBe(200)
+    } finally {
+      rmSync(webDist, { recursive: true, force: true })
+    }
   })
 })

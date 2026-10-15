@@ -1,16 +1,17 @@
 /**
  * App factory — the API's composition root. Wires middleware (secure
- * headers, optional rate limit, allowlist-only CORS) and mounts the slice
- * routers; everything is injected so tests run against fakes. Route
- * mounting order matters only within a slice; middleware here must be
- * registered before the mounts to cover them.
+ * headers, optional rate limit, allowlist-only CORS), mounts the slice
+ * routers and optionally serves the built web app; everything is injected so
+ * tests run against fakes. Order matters: middleware is registered before the
+ * mounts to cover them, and the /api 404 catch-all after every API route but
+ * before the static/SPA handlers.
  */
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { relative } from 'node:path'
-import type { LiveStatus } from '@orbital-ops/shared'
+import type { ApiErrorBody, LiveStatus } from '@orbital-ops/shared'
 import type { AdsbFeed } from './aircraft/adsb.ts'
 import { aircraftRoutes } from './aircraft/routes.ts'
 import type { Db } from './satellites/db.ts'
@@ -54,12 +55,16 @@ export function createApp(deps: AppDeps) {
   // Composes both live feeds, so it lives at the composition root.
   app.get('/api/live/status', (c) => {
     const status: LiveStatus = {
-      ais: ais ? ais.status() : { configured: false, connected: false, ships: 0 },
+      ais: ais ? ais.status() : { configured: false, connected: false, ships: 0, lastMessageMs: null },
       adsb: adsb ? adsb.status() : { configured: false, aircraft: 0, lastPollMs: null },
     }
     c.header('Cache-Control', 'no-store')
     return c.json(status)
   })
+
+  // Any other /api path is a JSON 404 — never the SPA's index.html below,
+  // which the client would fail to parse as an error body.
+  app.all('/api/*', (c) => c.json({ error: 'not found' } satisfies ApiErrorBody, 404))
 
   if (deps.webDist !== undefined) {
     // serveStatic resolves against CWD; SPA fallback for client-side routes.

@@ -1,13 +1,14 @@
 import type { Aircraft } from '@orbital-ops/shared'
+import { num, validLatLon } from '../shared/guards.ts'
 
 export const OPENSKY_STATES_URL = 'https://opensky-network.org/api/states/all'
 export const OPENSKY_TOKEN_URL =
   'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token'
 
 /** Authenticated clients get far higher OpenSky rate limits, so poll faster. */
-export const ADSB_POLL_AUTH_MS = 60 * 1000
+const ADSB_POLL_AUTH_MS = 60 * 1000
 export const ADSB_POLL_ANON_MS = 600 * 1000
-export const ADSB_BACKOFF_MAX_MS = 30 * 60 * 1000
+const ADSB_BACKOFF_MAX_MS = 30 * 60 * 1000
 
 export interface AdsbFeedOptions {
   clientId?: string
@@ -15,10 +16,6 @@ export interface AdsbFeedOptions {
   fetcher?: typeof fetch
   now?: () => number
   log?: (msg: string) => void
-}
-
-function num(v: unknown): number | undefined {
-  return typeof v === 'number' && Number.isFinite(v) ? v : undefined
 }
 
 /**
@@ -39,9 +36,8 @@ export function parseStates(body: unknown, fallbackTsMs: number): Aircraft[] {
     if (!Array.isArray(row)) continue
     const icao24 = typeof row[0] === 'string' ? row[0].trim() : ''
     if (icao24 === '') continue
-    const lon = num(row[5])
-    const lat = num(row[6])
-    if (lat === undefined || lon === undefined || Math.abs(lat) > 90 || Math.abs(lon) > 180) continue
+    const pos = validLatLon(num(row[6]), num(row[5])) // latitude is column 6, longitude 5
+    if (pos === undefined) continue
     const timePosition = num(row[3])
     const lastContact = num(row[4])
     const tsMs =
@@ -53,8 +49,8 @@ export function parseStates(body: unknown, fallbackTsMs: number): Aircraft[] {
     out.push({
       icao24,
       callsign: typeof row[1] === 'string' ? row[1].trim() : '',
-      latDeg: lat,
-      lonDeg: lon,
+      latDeg: pos.lat,
+      lonDeg: pos.lon,
       altM: num(row[7]) ?? null,
       velocityMs: num(row[9]) ?? null,
       trackDeg: num(row[10]) ?? null,
