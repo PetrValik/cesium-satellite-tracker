@@ -9,7 +9,7 @@ import {
 } from 'cesium'
 import type { Scene } from 'cesium'
 import { rocketIcon } from '../../core/engine/icons'
-import { SIGNAL_AMBER } from '../../core/engine/signalColors'
+import { SIGNAL_AMBER, SIGNAL_LABEL } from '../../core/engine/signalColors'
 
 /** Static launch-site descriptor (matches launchSites.json rows). */
 export interface LaunchSite {
@@ -36,7 +36,7 @@ const SCALE_BY_DISTANCE = new NearFarScalar(8e6, 20 / SPRITE_PX, 4e7, 6 / SPRITE
 const ROCKET_IMAGE_ID = 'icon:rocket'
 
 const LABEL_FONT = '10px monospace'
-const LABEL_FILL = Color.fromCssColorString('#d7dde6')
+const LABEL_FILL = Color.fromCssColorString(SIGNAL_LABEL)
 /** Up-right of the icon (screen space: +x right, -y up). */
 const LABEL_OFFSET = new Cartesian2(8, -8)
 /**

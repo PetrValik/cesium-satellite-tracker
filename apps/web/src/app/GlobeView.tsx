@@ -22,11 +22,15 @@ import {
   visibleDelay,
 } from '../core/engine/rendererHealth'
 import { useFollow } from '../core/ui/followStore'
+import { classifyBuildFailure } from './globe/buildFailure'
 import { createGlobe, type Globe, type GlobeCarry } from './globe/createGlobe'
 
-/** `init`: the first viewer never came up. `lost`: a running renderer died and rebuilds ran out. */
+/**
+ * `init`: the first viewer never came up. `lost`: a running renderer died
+ * and rebuilds ran out. `app`: a build failed outside the renderer (a bug).
+ */
 interface EngineError {
-  kind: 'init' | 'lost'
+  kind: 'init' | 'lost' | 'app'
   message: string
 }
 
@@ -84,12 +88,19 @@ export function GlobeView() {
 
     /**
      * A build that threw — nothing of it is left alive (createGlobe
-     * disposed it): a first build shows the error panel; a rebuild after
-     * context loss retries on a fresh epoch, within the recovery budget.
-     * Returns the effect cleanup for a pending retry.
+     * disposed it). A renderer failure on a first build shows the error
+     * panel; on a rebuild after context loss it retries on a fresh epoch,
+     * within the recovery budget. Anything else is an app bug: its own
+     * panel, no retry, no budget spent. Returns the cleanup for a pending retry.
      */
     const failBuild = (err: unknown): (() => void) | undefined => {
-      const message = err instanceof Error ? err.message : String(err)
+      const { kind, message, error } = classifyBuildFailure(err)
+      if (kind === 'app') {
+        console.error('[GlobeView] the globe build failed outside the renderer:', error)
+        setEngineError({ kind: 'app', message })
+        return undefined
+      }
+      console.error('[GlobeView] the renderer failed to build:', error)
       if (engineEpoch === 0 || !recoveryBudget.take(performance.now())) {
         // Init failure is only observable from inside this effect.
         setEngineError({ kind: engineEpoch === 0 ? 'init' : 'lost', message })
@@ -131,7 +142,13 @@ export function GlobeView() {
     return (
       <div className="engine-error">
         <div className="engine-error-panel">
-          {engineError.kind === 'lost' ? (
+          {engineError.kind === 'app' ? (
+            <>
+              <h1>GLOBE FAULT</h1>
+              <p>The globe could not be built: {engineError.message}</p>
+              <p>An application error, not a WebGL problem. Reload the page; the console has details.</p>
+            </>
+          ) : engineError.kind === 'lost' ? (
             <>
               <h1>RENDERER LOST</h1>
               <p>The WebGL renderer was lost and could not be restored: {engineError.message}</p>
