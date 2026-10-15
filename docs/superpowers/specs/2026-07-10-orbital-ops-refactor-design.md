@@ -2,6 +2,9 @@
 
 **Date:** 2026-07-10 · **Status:** approved for implementation (autonomous session, design authority delegated)
 
+> **History.** The rationale below still holds, but the file layout it sketches is superseded —
+> both apps are now vertical slices. The current layout and rules are in [`docs/ARCHITECTURE.md`](../../ARCHITECTURE.md).
+
 ## Problem
 
 The repo is a "hello 3D globe" foundation: React 19 + Vite + CesiumJS with terrain and OSM buildings, zero satellite functionality, no tests, no UI, and a hard dependency on a Cesium Ion token (the app renders nothing without one). The README promises a satellite tracker; the code doesn't contain one.

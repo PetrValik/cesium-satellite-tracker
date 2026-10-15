@@ -143,4 +143,8 @@ self.addEventListener('activate', (event) => {
   6 h TTL, per-group failure cooldown) — no cron needed.
 - Rate limiting is per-IP in-memory; a container restart resets it.
 - Nothing needs outbound access except celestrak.org, opensky-network.org,
-  and stream.aisstream.io (443).
+  auth.opensky-network.org (OAuth2 token, only with OpenSky credentials) and
+  stream.aisstream.io (443).
+- `docker stop` / a redeploy sends SIGTERM: the API stops both feeds, drains
+  open requests (cut after 5 s), closes SQLite and exits 0 — well inside
+  Docker's 10 s grace period.

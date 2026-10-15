@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ApiErrorSchema,
   GroupInfoSchema,
   HealthSchema,
+  LiveStatusSchema,
   SatelliteSchema,
 } from '../src/index.ts'
 
@@ -72,5 +74,24 @@ describe('HealthSchema', () => {
   it('round-trips', () => {
     const health = { ok: true, satCount: 9500, groups: 8 }
     expect(HealthSchema.parse(health)).toEqual(health)
+  })
+})
+
+describe('ApiErrorSchema', () => {
+  it('requires a string error message', () => {
+    expect(ApiErrorSchema.parse({ error: 'not found' })).toEqual({ error: 'not found' })
+    expect(ApiErrorSchema.safeParse({ message: 'not found' }).success).toBe(false)
+  })
+})
+
+describe('LiveStatusSchema', () => {
+  it('carries the AIS feed age, null before the first data frame', () => {
+    const silent = {
+      ais: { configured: true, connected: true, ships: 0, lastMessageMs: null },
+      adsb: { configured: true, aircraft: 0, lastPollMs: null },
+    }
+    expect(LiveStatusSchema.parse(silent)).toEqual(silent)
+    const withoutAge = { ...silent, ais: { configured: true, connected: true, ships: 0 } }
+    expect(LiveStatusSchema.safeParse(withoutAge).success).toBe(false)
   })
 })

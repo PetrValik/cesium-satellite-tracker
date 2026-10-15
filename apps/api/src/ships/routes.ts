@@ -1,5 +1,6 @@
 /** Ships slice routes: snapshot of the live AIS vessel table (503 without a key). */
 import { Hono } from 'hono'
+import type { ApiErrorBody } from '@orbital-ops/shared'
 import type { AisFeed } from './ais.ts'
 
 export interface ShipRoutesDeps {
@@ -11,7 +12,7 @@ export function shipRoutes({ ais }: ShipRoutesDeps): Hono {
 
   app.get('/api/ships', (c) => {
     if (!ais || !ais.status().configured) {
-      return c.json({ error: 'AIS feed not configured (set AISSTREAM_API_KEY)' }, 503)
+      return c.json({ error: 'AIS feed not configured (set AISSTREAM_API_KEY)' } satisfies ApiErrorBody, 503)
     }
     c.header('Cache-Control', 'public, max-age=5')
     return c.json(ais.snapshot())

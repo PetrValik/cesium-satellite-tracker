@@ -68,3 +68,23 @@ describe('Refresher.isExpired', () => {
     expect(refresher.isExpired('stations')).toBe(true)
   })
 })
+
+describe('Refresher.ensureFresh', () => {
+  it('logs a failed refresh of an empty group once and rethrows, silent while cooling down', async () => {
+    const db = new Db(':memory:')
+    db.ensureGroups(GROUPS)
+    const logs: string[] = []
+    const refresher = new Refresher({
+      db,
+      fetcher: failingFetcher(),
+      now: () => T0,
+      log: (message) => logs.push(message),
+    })
+
+    await expect(refresher.ensureFresh('stations')).rejects.toThrow('CelesTrak unreachable')
+    await expect(refresher.ensureFresh('stations')).rejects.toThrow(/cooling down/)
+    expect(logs).toHaveLength(1)
+    expect(logs[0]).toContain('stations')
+    expect(logs[0]).toContain('CelesTrak unreachable')
+  })
+})

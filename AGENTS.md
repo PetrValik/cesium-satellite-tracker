@@ -29,13 +29,14 @@ apps/web/src/
 apps/web/pwa/     service-worker template + stamp helper + sw.test.ts (stamped into dist/sw.js by vite.config.ts);
                   manifest, icon.svg and committed PNG icons in apps/web/public/ (re-render: scripts/make-icons.sh)
 apps/api/src/
-  app.ts          composition root: CORS, rate limit, mounts the slice routers
-  index.ts        bootstrap: env, SQLite, seed, feeds, listen — the only file reading process.env
+  app.ts          composition root: CORS, rate limit, mounts the slice routers, /api 404, static web
+  index.ts        bootstrap: env, SQLite, seed, feeds, listen, SIGTERM shutdown — the only file reading process.env
+  shared/         cross-slice HTTP helpers (rate limiter, untrusted-payload guards); not packages/shared
   satellites/ ships/ aircraft/   one slice each: feed + routes (factories taking injected deps)
 apps/api/seed/    committed TLE snapshot that boots the API offline — regenerate, never hand-edit
 apps/api/test/    Vitest endpoint tests against in-memory SQLite with a fake fetcher and clock
 packages/shared/  @orbital-ops/shared — zod schemas, the API contract
-docs/             ARCHITECTURE, API, CONTROLS, DEPLOY, DEVELOPMENT; superpowers/specs/ = design
+docs/             ARCHITECTURE, API, CONTROLS, DEPLOY, DEVELOPMENT; superpowers/specs/ = the original design (history — its layout is superseded)
 .claude/
   agents/         cesium-engine, orbital-mechanics, hud-designer — the specialists CLAUDE.md routes to
   workflows/      deep-review.js, parallel-features.js — Workflow-tool scripts
@@ -44,15 +45,14 @@ docs/             ARCHITECTURE, API, CONTROLS, DEPLOY, DEVELOPMENT; superpowers/
 
 **Open first:**
 
-1. `docs/superpowers/specs/2026-07-10-orbital-ops-refactor-design.md` — the design and why this shape
-2. `docs/ARCHITECTURE.md` — the slice rules reviews enforce
-3. `apps/web/src/app/GlobeView.tsx` — the one mount effect that owns everything on the globe
-4. `apps/web/src/features/maritime/` — a complete web slice to copy (layer + store + panel + tests)
-5. `apps/api/src/ships/` with `apps/api/test/ais.test.ts` — a complete API slice and its test
+1. `docs/ARCHITECTURE.md` — the current layout and the slice rules reviews enforce
+2. `apps/web/src/app/GlobeView.tsx` — the one mount effect that owns everything on the globe
+3. `apps/web/src/features/maritime/` — a complete web slice to copy (layer + store + panel + tests)
+4. `apps/api/src/ships/` with `apps/api/test/ais.test.ts` — a complete API slice and its test
 
 ## Build / test / run
 
-From `.claude/kit.profile.yaml` `commands:` and `docs/DEVELOPMENT.md`. Node ≥ 22.12 (CI runs 24).
+From `.claude/kit.profile.yaml` `commands:` and `docs/DEVELOPMENT.md`. Node ≥ 22.18 (CI runs 24).
 
 ```sh
 npm install                     # postinstall copies Cesium assets into apps/web/public/cesium/

@@ -1,8 +1,8 @@
 /**
  * Bootstrap: resolve env config, open the SQLite cache (seeding it from the
- * committed snapshot on first boot), start the live feeds, and serve. This
- * is the only file that reads process.env — everything below it takes
- * injected options.
+ * committed snapshot on first boot), start the live feeds, serve, and tear it
+ * all down again on SIGTERM/SIGINT. This is the only file that reads
+ * process.env — everything below it takes injected options.
  */
 import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -69,9 +69,46 @@ const app = createApp({
 })
 
 const port = Number(process.env.PORT ?? 8787)
-serve({ fetch: app.fetch, port }, (info) => {
+const server = serve({ fetch: app.fetch, port }, (info) => {
   const { satCount, groups } = db.counts()
   console.log(
     `[orbital-ops api] listening on http://localhost:${info.port} (${satCount} sats, ${groups} groups)`,
   )
 })
+
+/** How long in-flight requests get to finish before their sockets are cut. */
+const SHUTDOWN_DRAIN_MS = 5_000
+let shuttingDown = false
+
+/**
+ * `docker stop` sends SIGTERM, and Node running as PID 1 has no default
+ * handler for it — without this the container ignores the signal until
+ * Docker SIGKILLs it, leaving the SQLite WAL uncheckpointed. Stops the feeds,
+ * stops accepting and drains HTTP, then closes SQLite and exits.
+ */
+function shutdown(signal: NodeJS.Signals): void {
+  if (shuttingDown) return
+  shuttingDown = true
+  console.log(`[orbital-ops api] ${signal} received, shutting down`)
+  ais.stop()
+  adsb.stop()
+  const drain = setTimeout(() => {
+    console.log(`[orbital-ops api] requests still open after ${SHUTDOWN_DRAIN_MS} ms; closing them`)
+    if ('closeAllConnections' in server) server.closeAllConnections()
+  }, SHUTDOWN_DRAIN_MS)
+  drain.unref()
+  server.close((err) => {
+    clearTimeout(drain)
+    db.close()
+    if (err) {
+      console.error(`[orbital-ops api] HTTP server close failed: ${String(err)}`)
+      process.exit(1)
+    }
+    console.log('[orbital-ops api] shut down cleanly')
+    process.exit(0)
+  })
+}
+
+// once: a second Ctrl-C falls through to Node's default and kills immediately.
+process.once('SIGTERM', shutdown)
+process.once('SIGINT', shutdown)

@@ -1,5 +1,5 @@
 /**
- * SQLite TLE cache (node:sqlite — built into Node ≥22.5, zero native deps).
+ * SQLite TLE cache (node:sqlite — unflagged since Node 22.13, zero native deps).
  * Satellites are unique by NORAD id with the newest TLE winning; group
  * membership is a separate table so one satellite can sit in many groups.
  * All statements are parameterized; LIKE inputs are escaped here, never in
@@ -63,6 +63,22 @@ const SAT_SELECT = `
   (SELECT GROUP_CONCAT(m2.group_slug) FROM memberships m2 WHERE m2.norad_id = s.norad_id) AS groups_csv
 `
 
+interface GroupRow {
+  slug: string
+  name: string
+  updated_at: number | null
+  count: number
+}
+
+function toGroupMeta(row: GroupRow): GroupMeta {
+  return { slug: row.slug, name: row.name, count: row.count, updatedAt: row.updated_at }
+}
+
+const GROUP_SELECT = `
+  g.slug, g.name, g.updated_at,
+  (SELECT COUNT(*) FROM memberships m WHERE m.group_slug = g.slug) AS count
+`
+
 export class Db {
   private readonly db: DatabaseSync
 
@@ -111,25 +127,16 @@ export class Db {
 
   getGroupMeta(slug: string): GroupMeta | undefined {
     const row = this.db
-      .prepare(
-        `SELECT g.slug, g.name, g.updated_at,
-           (SELECT COUNT(*) FROM memberships m WHERE m.group_slug = g.slug) AS count
-         FROM groups g WHERE g.slug = ?`,
-      )
-      .get(slug) as { slug: string; name: string; updated_at: number | null; count: number } | undefined
-    if (!row) return undefined
-    return { slug: row.slug, name: row.name, count: row.count, updatedAt: row.updated_at }
+      .prepare(`SELECT ${GROUP_SELECT} FROM groups g WHERE g.slug = ?`)
+      .get(slug) as GroupRow | undefined
+    return row ? toGroupMeta(row) : undefined
   }
 
   listGroups(): GroupMeta[] {
     const rows = this.db
-      .prepare(
-        `SELECT g.slug, g.name, g.updated_at,
-           (SELECT COUNT(*) FROM memberships m WHERE m.group_slug = g.slug) AS count
-         FROM groups g ORDER BY g.rowid`,
-      )
-      .all() as unknown as { slug: string; name: string; updated_at: number | null; count: number }[]
-    return rows.map((r) => ({ slug: r.slug, name: r.name, count: r.count, updatedAt: r.updated_at }))
+      .prepare(`SELECT ${GROUP_SELECT} FROM groups g ORDER BY g.rowid`)
+      .all() as unknown as GroupRow[]
+    return rows.map(toGroupMeta)
   }
 
   getGroupSatellites(slug: string): Satellite[] {
@@ -145,14 +152,17 @@ export class Db {
     return rows.map(toSatellite)
   }
 
-  /** Case-insensitive name substring or NORAD-id prefix match. */
+  /**
+   * Name substring or NORAD-id prefix match. Case-insensitive because SQLite's
+   * LIKE folds ASCII case by default (no COLLATE involved, non-ASCII is exact).
+   */
   search(q: string, limit: number): Satellite[] {
     const escaped = q.replace(/[\\%_]/g, (ch) => `\\${ch}`)
     const rows = this.db
       .prepare(
         `SELECT ${SAT_SELECT}
          FROM satellites s
-         WHERE s.name LIKE ? ESCAPE '\\' COLLATE NOCASE
+         WHERE s.name LIKE ? ESCAPE '\\'
             OR CAST(s.norad_id AS TEXT) LIKE ? ESCAPE '\\'
          ORDER BY s.name LIMIT ?`,
       )

@@ -5,7 +5,7 @@
  * only waits on CelesTrak when the cache has nothing to serve.
  */
 import { Hono } from 'hono'
-import type { GroupInfo } from '@orbital-ops/shared'
+import type { ApiErrorBody, GroupInfo, Health } from '@orbital-ops/shared'
 import type { Db } from './db.ts'
 import { GROUP_BY_SLUG } from './groups.ts'
 import type { Refresher } from './refresh.ts'
@@ -20,7 +20,8 @@ export function satelliteRoutes({ db, refresher }: SatelliteRoutesDeps): Hono {
 
   app.get('/api/health', (c) => {
     const { satCount, groups } = db.counts()
-    return c.json({ ok: true, satCount, groups })
+    const health: Health = { ok: true, satCount, groups }
+    return c.json(health)
   })
 
   app.get('/api/groups', (c) => {
@@ -38,12 +39,17 @@ export function satelliteRoutes({ db, refresher }: SatelliteRoutesDeps): Hono {
 
   app.get('/api/satellites', async (c) => {
     const slug = c.req.query('group')
-    if (!slug) return c.json({ error: 'missing ?group= parameter' }, 400)
-    if (!GROUP_BY_SLUG.has(slug)) return c.json({ error: `unknown group: ${slug}` }, 404)
+    if (!slug) return c.json({ error: 'missing ?group= parameter' } satisfies ApiErrorBody, 400)
+    if (!GROUP_BY_SLUG.has(slug)) {
+      return c.json({ error: `unknown group: ${slug}` } satisfies ApiErrorBody, 404)
+    }
     try {
       await refresher.ensureFresh(slug)
     } catch {
-      return c.json({ error: 'catalog unavailable: CelesTrak unreachable and no cached data' }, 503)
+      const body: ApiErrorBody = {
+        error: 'catalog unavailable: CelesTrak unreachable and no cached data',
+      }
+      return c.json(body, 503)
     }
     // Large payload (Starlink ≈ 2.4 MB) that only moves on TLE refresh.
     c.header('Cache-Control', 'public, max-age=300')
@@ -52,18 +58,24 @@ export function satelliteRoutes({ db, refresher }: SatelliteRoutesDeps): Hono {
 
   app.get('/api/satellites/search', (c) => {
     const q = (c.req.query('q') ?? '').trim()
-    if (q.length < 2) return c.json({ error: 'q must be at least 2 characters' }, 400)
+    if (q.length < 2) {
+      return c.json({ error: 'q must be at least 2 characters' } satisfies ApiErrorBody, 400)
+    }
     // Bound the LIKE pattern: an unbounded query string is a cheap CPU DoS.
-    if (q.length > 64) return c.json({ error: 'q must be at most 64 characters' }, 400)
+    if (q.length > 64) {
+      return c.json({ error: 'q must be at most 64 characters' } satisfies ApiErrorBody, 400)
+    }
     c.header('Cache-Control', 'public, max-age=30')
     return c.json(db.search(q, 50))
   })
 
   app.get('/api/satellites/:noradId', (c) => {
     const idStr = c.req.param('noradId')
-    if (!/^\d+$/.test(idStr)) return c.json({ error: 'invalid NORAD id' }, 400)
+    if (!/^\d+$/.test(idStr)) {
+      return c.json({ error: 'invalid NORAD id' } satisfies ApiErrorBody, 400)
+    }
     const sat = db.getSatellite(Number(idStr))
-    return sat ? c.json(sat) : c.json({ error: 'not found' }, 404)
+    return sat ? c.json(sat) : c.json({ error: 'not found' } satisfies ApiErrorBody, 404)
   })
 
   return app

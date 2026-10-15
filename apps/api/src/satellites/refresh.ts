@@ -51,7 +51,11 @@ export class Refresher {
     return failed !== undefined && this.now() - failed < this.failureCooldownMs
   }
 
-  /** Refresh one group from CelesTrak; concurrent calls share one fetch. */
+  /**
+   * Refresh one group from CelesTrak; concurrent calls share one fetch. Each
+   * failed fetch is logged once here; a cooldown rejection fetches nothing and
+   * logs nothing, so a dead upstream can't turn every request into a log line.
+   */
   refresh(slug: string): Promise<void> {
     const existing = this.inflight.get(slug)
     if (existing) return existing
@@ -64,6 +68,7 @@ export class Refresher {
       })
       .catch((err: unknown) => {
         this.failedAt.set(slug, this.now())
+        this.log(`[refresh] ${slug} failed: ${String(err)}`)
         throw err
       })
       .finally(() => this.inflight.delete(slug))
@@ -83,15 +88,14 @@ export class Refresher {
   /**
    * Make a group servable. Waits for CelesTrak only when the group is empty;
    * with stale data present it returns immediately and refreshes in the
-   * background, swallowing failures (the cache keeps serving stale).
+   * background (a failure keeps serving stale). A failed foreground refresh
+   * rethrows for the route's 503; `refresh` has already logged it.
    */
   async ensureFresh(slug: string): Promise<void> {
     if (!this.isExpired(slug)) return
     const meta = this.db.getGroupMeta(slug)
     if (meta && meta.count > 0) {
-      this.refresh(slug).catch((err: unknown) => {
-        this.log(`[refresh] background refresh of ${slug} failed: ${String(err)}`)
-      })
+      this.refreshInBackground(slug)
       return
     }
     await this.refresh(slug)
@@ -100,11 +104,12 @@ export class Refresher {
   /** Fire-and-forget refresh of every expired group (cooldowns skipped quietly). */
   refreshExpiredInBackground(): void {
     for (const g of GROUPS) {
-      if (this.isExpired(g.slug) && !this.inCooldown(g.slug)) {
-        this.refresh(g.slug).catch((err: unknown) => {
-          this.log(`[refresh] background refresh of ${g.slug} failed: ${String(err)}`)
-        })
-      }
+      if (this.isExpired(g.slug) && !this.inCooldown(g.slug)) this.refreshInBackground(g.slug)
     }
+  }
+
+  /** Fire-and-forget: `refresh` already logged a failure, the cache serves stale. */
+  private refreshInBackground(slug: string): void {
+    this.refresh(slug).catch(() => {})
   }
 }
