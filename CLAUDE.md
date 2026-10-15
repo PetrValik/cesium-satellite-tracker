@@ -150,6 +150,6 @@ The kit's Stop hook runs the profile's `commands.check` after any source change 
 ## Second brain
 
 After completing a unit of work, write a note to
-`~/Obsidian/SecondBrain/Agents/cesium-satellite-tracker/` in the format from the kit's
+`~/Documents/SecondBrain/Agents/cesium-satellite-tracker/` in the format from the kit's
 `second-brain` skill, and add a link line to that folder's `_index.md`. One note per completed
 unit — not per turn.

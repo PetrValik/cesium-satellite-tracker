@@ -76,7 +76,7 @@ docs:
 
 second_brain:
   enabled: true
-  root: "~/Obsidian/SecondBrain"
+  root: "~/Documents/SecondBrain" # was ~/Obsidian/SecondBrain, a path that never existed (audit 2026-10-15)
 # Agent tiering and kill criteria (agentic-repo playbook, 2026-09-04). Gate agents read and
 # report on sonnet; build and review agents stay on opus. The same gate failing three times
 # for one agent stops the flow and hands the decision over.
@@ -96,12 +96,17 @@ packs:
       client: manual # no OpenAPI codegen; apps/api is hand-typed via packages/shared
       server_state: none # zustand holds client state; there is no server-state library
     forms: none # no forms in this app
-    styling: css-modules # HUD styling is hand-written CSS, not a token framework
+    # Global hand-written CSS (src/index.css) reading custom properties from src/styles/tokens.css; there
+    # are no *.module.css files. css-modules is the closest pack value: its rule (colours via var(--token),
+    # no inline hex) is the one this repo follows.
+    styling: css-modules
     features:
       multi_tenant: false
       i18n: false
     naming:
-      slice_parts: [components, state, domain]
+      # Slices are flat (no sub-folders): roles are file names — <X>Panel.tsx UI, <x>Store.ts state,
+      # <X>Layer.ts Cesium adapter, plain .ts domain modules. Was [components, state, domain] (audit 2026-10-15).
+      slice_parts: [Panel, Store, Layer, domain]
     test:
       unit: vitest
       component: none
