@@ -2,7 +2,7 @@
 The transport bar: play/pause, the warp-rate buttons, a ±12 h scrub against wall-now, the NOW reset and the UTC readout. UI only — it holds no time state of its own.
 
 ## Depends on
-`core/sim/simClock` (the single source of truth for `epochMs`, `rate`, `playing`, plus `stepRate`), `lib/wallClock` for "now", and `lib/format` (`formatRate`, `formatUtc`). Rendered by `app/`; no slice imports from here, and this slice imports no sibling.
+`core/sim/simClock` (the single source of truth for `epochMs`, `rate`, `playing`, plus `stepRate`), `core/sim/wallClock` for "now", and `lib/format` (`formatRate`, `formatUtc`). Rendered by `app/`; no slice imports from here, and this slice imports no sibling.
 
 ## Invariants
 - `core/sim/simClock` owns sim time; this bar only calls its actions. Nothing here may set `epochMs` directly, and the sync to Cesium is one-way (`core/engine/createViewer.syncViewerClock`).

@@ -9,15 +9,15 @@ enforce.
 ```
 src/
 ├── App.tsx       # top-level composition root: mounts app/, starts slice polling
-├── app/          # composition: GlobeView, LeftRail, HUD chrome, panels, selection UI
+├── app/          # composition: GlobeView + globe/ (the non-React globe build), HUD, panels, selection
 ├── core/
-│   ├── engine/   # non-React Cesium machinery (viewer, CameraRig)
-│   ├── sim/      # simulation clock
-│   └── ui/       # cross-domain UI state (mode, follow) + shared atoms
+│   ├── engine/   # non-React Cesium machinery (viewer, CameraRig, tap picking, renderer health)
+│   ├── sim/      # simulation clock + coarse wall clock
+│   └── ui/       # cross-domain UI state (mode, follow, prefs, hud, sheet) + shared atoms
 ├── features/     # one folder per slice
 │   ├── catalog/        # satellite groups, search, satellite selection
 │   ├── constellation/  # whole-catalog rendering
-│   ├── tracking/       # selected-satellite visuals + telemetry
+│   ├── tracking/       # selected satellite: propagation, visuals, telemetry
 │   ├── passes/         # pass prediction + sky plot
 │   ├── timebar/        # transport bar
 │   ├── maritime/       # AIS ships: layer, store, panels

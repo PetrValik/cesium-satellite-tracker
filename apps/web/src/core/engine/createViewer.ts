@@ -51,7 +51,7 @@ export function setViewerBasemap(viewer: Viewer, basemap: Basemap): void {
 
 /**
  * Engine-layer viewer factory for Orbital Ops. No React in here —
- * app/GlobeView composes it directly.
+ * app/globe/createGlobe composes it directly.
  *
  * Imagery always comes from the chosen keyless basemap. Two terrain modes:
  * - With `VITE_CESIUM_TOKEN`: Cesium Ion world terrain — the token's only
@@ -148,7 +148,7 @@ export function createOrbitalViewer(container: HTMLElement, basemap: Basemap = '
   // Viewer registers pickAndSelectObject (LEFT_CLICK) and pickAndTrackObject
   // (LEFT_DOUBLE_CLICK) on cesiumWidget.screenSpaceEventHandler — the same
   // instance viewer.screenSpaceEventHandler returns (Viewer.js 1.138). The
-  // app picks on its own handler (GlobeView) and never uses selectedEntity /
+  // app picks on its own handler (TapPicker) and never uses selectedEntity /
   // trackedEntity, so the defaults only cost a redundant pick pass per tap,
   // throw an uncaught DeveloperError on a tap while the WebGL context is
   // lost, and let a double-click set trackedEntity behind CameraRig's back.
