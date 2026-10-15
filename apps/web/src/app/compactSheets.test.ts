@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../lib/api', () => ({ api: {}, ApiError: class extends Error {} }))
 
 import { useMode } from '../core/ui/modeStore'
+import { useSatellites } from '../core/ui/satelliteStore'
 import { useSheet } from '../core/ui/sheetStore'
-import { useCatalog } from '../features/catalog/catalogStore'
 import { useShips } from '../features/maritime/shipsStore'
 import { bindSheetsToSelection, sheetId, visibleSheet } from './compactSheets'
 
@@ -39,7 +39,7 @@ describe('bindSheetsToSelection', () => {
 
   beforeEach(() => {
     useMode.setState({ mode: 'orbital' })
-    useCatalog.setState({ selectedId: null })
+    useSatellites.setState({ selectedId: null })
     useShips.setState({ selectedMmsi: null })
     useSheet.setState({ sheet: null })
     unbind = bindSheetsToSelection()
@@ -49,30 +49,30 @@ describe('bindSheetsToSelection', () => {
 
   it('a pick closes the picture and layers sheets', () => {
     useSheet.setState({ sheet: 'picture' })
-    useCatalog.setState({ selectedId: 25_544 })
+    useSatellites.setState({ selectedId: 25_544 })
     expect(useSheet.getState().sheet).toBeNull()
 
     useSheet.setState({ sheet: 'layers' })
-    useCatalog.setState({ selectedId: 43_013 })
+    useSatellites.setState({ selectedId: 43_013 })
     expect(useSheet.getState().sheet).toBeNull()
   })
 
   it('a pick leaves the details sheet open', () => {
-    useCatalog.setState({ selectedId: 25_544 })
+    useSatellites.setState({ selectedId: 25_544 })
     useSheet.setState({ sheet: 'details' })
-    useCatalog.setState({ selectedId: 43_013 })
+    useSatellites.setState({ selectedId: 43_013 })
     expect(useSheet.getState().sheet).toBe('details')
   })
 
   it('losing the focused mode’s selection closes details', () => {
-    useCatalog.setState({ selectedId: 25_544 })
+    useSatellites.setState({ selectedId: 25_544 })
     useSheet.setState({ sheet: 'details' })
-    useCatalog.setState({ selectedId: null })
+    useSatellites.setState({ selectedId: null })
     expect(useSheet.getState().sheet).toBeNull()
   })
 
   it('a background domain’s deselect keeps details open', () => {
-    useCatalog.setState({ selectedId: 25_544 })
+    useSatellites.setState({ selectedId: 25_544 })
     useShips.setState({ selectedMmsi: 211_000_000 })
     useSheet.setState({ sheet: 'details' })
     useShips.setState({ selectedMmsi: null })
@@ -80,7 +80,7 @@ describe('bindSheetsToSelection', () => {
   })
 
   it('switching to a mode with nothing selected closes details', () => {
-    useCatalog.setState({ selectedId: 25_544 })
+    useSatellites.setState({ selectedId: 25_544 })
     useSheet.setState({ sheet: 'details' })
     useMode.setState({ mode: 'maritime' })
     expect(useSheet.getState().sheet).toBeNull()
@@ -89,7 +89,7 @@ describe('bindSheetsToSelection', () => {
   it('stops reacting once unbound', () => {
     unbind()
     useSheet.setState({ sheet: 'picture' })
-    useCatalog.setState({ selectedId: 25_544 })
+    useSatellites.setState({ selectedId: 25_544 })
     expect(useSheet.getState().sheet).toBe('picture')
     unbind = () => {}
   })

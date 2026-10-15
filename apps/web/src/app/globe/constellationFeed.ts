@@ -1,4 +1,5 @@
 import { simClock } from '../../core/sim/simClock'
+import { useSatellites } from '../../core/ui/satelliteStore'
 import { useCatalog } from '../../features/catalog/catalogStore'
 import type { ConstellationLayer } from '../../features/constellation/ConstellationLayer'
 import type { SatInit, WorkerRequest, WorkerResponse } from '../../lib/protocol'
@@ -112,7 +113,7 @@ export class ConstellationFeed {
     const msg = e.data
     if (msg.type === 'ready') {
       this._constellation.setCatalog(msg.noradIds, msg.classes)
-      this._constellation.setSelected(useCatalog.getState().selectedId)
+      this._constellation.setSelected(useSatellites.getState().selectedId)
       this._workerReady = true
       this._requestTick()
     } else if (msg.type === 'positions') {

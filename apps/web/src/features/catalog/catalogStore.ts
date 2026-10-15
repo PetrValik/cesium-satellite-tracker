@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { GroupInfo, Satellite } from '@orbital-ops/shared'
+import { useSatellites } from '../../core/ui/satelliteStore'
 import { api } from '../../lib/api'
 
 /** Per-group satellite cache; survives group toggling without refetches. */
@@ -8,40 +9,40 @@ const groupCache = new Map<string, Satellite[]>()
 /** Starlink (10k+ objects) is opt-in; everything else loads at boot. */
 const DEFAULT_OFF = new Set(['starlink'])
 
-function mergeActive(activeSlugs: string[]): { sats: Satellite[]; byId: Map<number, Satellite> } {
+function mergeActive(activeSlugs: string[]): Satellite[] {
   const byId = new Map<number, Satellite>()
   for (const slug of activeSlugs) {
     for (const sat of groupCache.get(slug) ?? []) {
       if (!byId.has(sat.noradId)) byId.set(sat.noradId, sat)
     }
   }
-  return { sats: [...byId.values()], byId }
+  return [...byId.values()]
 }
 
+/**
+ * Group loading: which groups exist and are active, and the merged working
+ * set the propagation worker runs. Satellite entities and the selection
+ * live in `core/ui/satelliteStore`. Every new working set is upserted into
+ * its `byId` FIRST and only then set as `sats` here, so each id the worker
+ * is about to be fed already resolves in `byId` whenever a subscriber of
+ * either store looks.
+ */
 export interface CatalogState {
   groups: GroupInfo[]
   activeSlugs: string[]
   /** Working set sent to the propagation worker (stable order). */
   sats: Satellite[]
-  /** Every satellite seen this session (working set + search hits). */
-  byId: Map<number, Satellite>
-  selectedId: number | null
   booting: boolean
   loadingGroups: Set<string>
   offline: boolean
   init: () => Promise<void>
   toggleGroup: (slug: string) => Promise<void>
-  select: (noradId: number | null) => void
-  /** Make a satellite selectable even when its group isn't active (search). */
-  registerSat: (sat: Satellite) => void
 }
 
 export const useCatalog = create<CatalogState>((set, get) => ({
   groups: [],
   activeSlugs: [],
   sats: [],
-  byId: new Map(),
-  selectedId: null,
   booting: true,
   loadingGroups: new Set(),
   offline: false,
@@ -62,24 +63,25 @@ export const useCatalog = create<CatalogState>((set, get) => ({
       }),
     )
     const loaded = active.filter((slug) => groupCache.has(slug))
-    const merged = mergeActive(loaded)
-    set((s) => ({
+    const sats = mergeActive(loaded)
+    useSatellites.getState().upsertSats(sats) // byId before sats
+    set({
       activeSlugs: loaded,
-      sats: merged.sats,
-      byId: new Map([...s.byId, ...merged.byId]),
+      sats,
       booting: false,
       // /groups answered but every group fetch failed: that is offline too,
       // not an empty sky.
       offline: active.length > 0 && loaded.length === 0,
-    }))
+    })
   },
 
   toggleGroup: async (slug) => {
     const { activeSlugs } = get()
     if (activeSlugs.includes(slug)) {
       const next = activeSlugs.filter((x) => x !== slug)
-      const merged = mergeActive(next)
-      set((s) => ({ activeSlugs: next, sats: merged.sats, byId: new Map([...s.byId, ...merged.byId]) }))
+      const sats = mergeActive(next)
+      useSatellites.getState().upsertSats(sats) // byId before sats
+      set({ activeSlugs: next, sats })
       return
     }
     if (!groupCache.has(slug)) {
@@ -96,27 +98,17 @@ export const useCatalog = create<CatalogState>((set, get) => ({
       }
     }
     const next = [...get().activeSlugs, slug]
-    const merged = mergeActive(next)
+    const sats = mergeActive(next)
+    useSatellites.getState().upsertSats(sats) // byId before sats
     set((s) => {
       const loading = new Set(s.loadingGroups)
       loading.delete(slug)
       return {
         activeSlugs: next,
-        sats: merged.sats,
-        byId: new Map([...s.byId, ...merged.byId]),
+        sats,
         loadingGroups: loading,
         offline: false,
       }
     })
   },
-
-  select: (noradId) => set({ selectedId: noradId }),
-
-  registerSat: (sat) =>
-    set((s) => {
-      if (s.byId.has(sat.noradId)) return s
-      const byId = new Map(s.byId)
-      byId.set(sat.noradId, sat)
-      return { byId }
-    }),
 }))

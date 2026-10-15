@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../lib/api', () => ({ api: {}, ApiError: class extends Error {} }))
 
 import { useMode } from '../core/ui/modeStore'
+import { useSatellites } from '../core/ui/satelliteStore'
 import { useAircraft } from '../features/airspace/aircraftStore'
-import { useCatalog } from '../features/catalog/catalogStore'
 import { useShips } from '../features/maritime/shipsStore'
 import {
   deselectInMode,
@@ -16,7 +16,7 @@ import {
 
 beforeEach(() => {
   useMode.setState({ mode: 'orbital' })
-  useCatalog.setState({ selectedId: null })
+  useSatellites.setState({ selectedId: null })
   useShips.setState({ selectedMmsi: null })
   useAircraft.setState({ selectedIcao: null })
 })
@@ -39,12 +39,12 @@ describe('hasSelectionInMode', () => {
 
 describe('deselectInMode', () => {
   it('drops the focused mode’s selection and keeps the other domains’', () => {
-    useCatalog.setState({ selectedId: 25_544 })
+    useSatellites.setState({ selectedId: 25_544 })
     useShips.setState({ selectedMmsi: 211_000_000 })
     useMode.setState({ mode: 'maritime' })
     deselectInMode()
     expect(useShips.getState().selectedMmsi).toBeNull()
-    expect(useCatalog.getState().selectedId).toBe(25_544)
+    expect(useSatellites.getState().selectedId).toBe(25_544)
   })
 })
 
@@ -52,7 +52,7 @@ describe('subscribeSelectionChanges', () => {
   it('reports every domain’s pick and deselect with its mode', () => {
     const seen: [string, boolean][] = []
     const off = subscribeSelectionChanges((mode, selected) => seen.push([mode, selected]))
-    useCatalog.setState({ selectedId: 25_544 })
+    useSatellites.setState({ selectedId: 25_544 })
     useShips.setState({ selectedMmsi: 211_000_000 })
     useAircraft.setState({ selectedIcao: 'abc123' })
     useShips.setState({ selectedMmsi: null })
@@ -72,7 +72,7 @@ describe('subscribeSelectionChanges', () => {
     useAircraft.setState({ available: true })
     expect(listener).not.toHaveBeenCalled()
     off()
-    useCatalog.setState({ selectedId: 1 })
+    useSatellites.setState({ selectedId: 1 })
     expect(listener).not.toHaveBeenCalled()
   })
 })

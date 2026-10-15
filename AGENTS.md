@@ -19,7 +19,7 @@ apps/web/src/
   app/            composition root — GlobeView mounts the globe; app/globe/ builds it (viewer, layers, wiring, render loop)
   core/engine/    non-React Cesium machinery (createViewer, CameraRig, WorldDecal, TapPicker, rendererHealth) — risk path
   core/sim/       the warpable simulation clock + the coarse wall clock
-  core/ui/        cross-slice zustand stores (mode, follow, prefs, hud, sheet) + shared atoms
+  core/ui/        cross-slice zustand stores (mode, follow, prefs, hud, sheet, satellites) + shared atoms
   features/       one folder per slice: catalog, constellation, tracking, passes, timebar,
                   maritime, airspace, infra — UI, store and Cesium layer together
   lib/            pure helpers: api client, orbital math, formatters

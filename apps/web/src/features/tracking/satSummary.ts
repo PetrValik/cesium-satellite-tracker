@@ -2,9 +2,9 @@
  * Selected-satellite readout helpers shared by TelemetryPanel and the
  * compact-HUD chip.
  */
+import { useSatellites } from '../../core/ui/satelliteStore'
 import type { SelectionSummary } from '../../core/ui/selectionSummary'
 import { formatKm } from '../../lib/format'
-import { useCatalog } from '../catalog/catalogStore'
 import { useTelemetry } from './telemetryStore'
 
 /**
@@ -38,8 +38,8 @@ export function satChipSummary(
 
 /** The chip readout for the selected satellite, null when none is selected. */
 export function useSatChipSummary(): SelectionSummary | null {
-  const satId = useCatalog((s) => s.selectedId)
-  const satName = useCatalog((s) => (s.selectedId === null ? undefined : s.byId.get(s.selectedId)?.name))
+  const satId = useSatellites((s) => s.selectedId)
+  const satName = useSatellites((s) => (s.selectedId === null ? undefined : s.byId.get(s.selectedId)?.name))
   const telemetryId = useTelemetry((s) => s.noradId)
   const telemetryName = useTelemetry((s) => s.name)
   const altKm = useTelemetry((s) => s.altKm)

@@ -8,8 +8,8 @@
 import { useSyncExternalStore } from 'react'
 import type { StoreApi } from 'zustand'
 import { OPS_MODES, useMode, type OpsMode } from '../core/ui/modeStore'
+import { useSatellites } from '../core/ui/satelliteStore'
 import { useAircraft } from '../features/airspace/aircraftStore'
-import { useCatalog } from '../features/catalog/catalogStore'
 import { useShips } from '../features/maritime/shipsStore'
 
 interface DomainSelection {
@@ -39,7 +39,7 @@ function domainSelection<S>(
 
 /** Mode → that domain's selection. */
 const SELECTION: Record<OpsMode, DomainSelection> = {
-  orbital: domainSelection(useCatalog, (s) => s.selectedId, () => useCatalog.getState().select(null)),
+  orbital: domainSelection(useSatellites, (s) => s.selectedId, () => useSatellites.getState().select(null)),
   maritime: domainSelection(useShips, (s) => s.selectedMmsi, () => useShips.getState().select(null)),
   airspace: domainSelection(useAircraft, (s) => s.selectedIcao, () => useAircraft.getState().select(null)),
 }
