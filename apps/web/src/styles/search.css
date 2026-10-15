@@ -1,0 +1,73 @@
+/* ============================================================
+   search — catalog search box and its results dropdown
+   ============================================================ */
+
+.search-box {
+  position: relative;
+}
+
+.search-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  background: var(--panel-bg-solid);
+  border: 1px solid var(--hairline-strong);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.search-result {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  width: 100%;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--fs-label-lg);
+  letter-spacing: var(--ls-data);
+  padding: 6px 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color var(--t-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .search-result:hover {
+    background: var(--amber-wash);
+  }
+}
+
+.search-norad {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* a failed search: one status line in the dropdown's place */
+.search-status {
+  padding: 6px 8px;
+  color: var(--alert);
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+}
+
+/* search hits flow in the sheet's own scroll instead of a clipped dropdown */
+.hud-sheet .search-results {
+  position: static;
+  max-height: none;
+}
+
+/* ---- touch pointers ------------------------------------------------ */
+
+@media (pointer: coarse) {
+  .search-result {
+    align-items: center;
+    min-height: var(--tap);
+  }
+}

@@ -1,0 +1,147 @@
+/* ============================================================
+   passes — observer editor, sky plot, pass list
+   ============================================================ */
+
+.observer-editor {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: var(--sp-2);
+}
+
+.observer-label {
+  color: var(--text-dim);
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+}
+
+.observer-input {
+  width: 64px;
+  padding: 4px 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.observer-error {
+  margin: -2px 0 var(--sp-2);
+  color: var(--alert);
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+}
+
+.sky-plot {
+  display: block;
+  width: 100%;
+  max-width: 230px;
+  margin: 4px auto 8px;
+  background: radial-gradient(circle at center, var(--cyan-wash), transparent 72%);
+}
+
+.sky-ring {
+  fill: none;
+  stroke: var(--hairline);
+  stroke-width: 1;
+}
+
+/* horizon ring reads slightly stronger than the elevation rings */
+.sky-plot circle.sky-ring:first-of-type {
+  stroke: var(--hairline-strong);
+}
+
+.sky-label {
+  fill: var(--text-dim);
+  font-size: var(--fs-micro);
+  font-family: var(--mono);
+  letter-spacing: var(--ls-label);
+}
+
+.sky-track {
+  fill: none;
+  stroke: var(--cyan);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 0 3px var(--cyan-glow));
+}
+
+.sky-aos {
+  fill: var(--amber);
+  filter: drop-shadow(0 0 2px var(--amber-glow));
+}
+
+.sky-los {
+  fill: none;
+  stroke: var(--amber);
+  stroke-width: 1;
+}
+
+.sky-live {
+  fill: var(--amber-bright);
+  stroke: var(--amber);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 3px var(--amber-glow));
+  animation: sky-live-pulse 1.2s var(--ease-out) infinite;
+}
+
+@keyframes sky-live-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.pass-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.pass-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pass-list li.is-active .pass-row {
+  color: var(--amber);
+  text-shadow: var(--glow-amber-text);
+}
+
+.pass-row {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--fs-label-lg);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--ls-data);
+  padding: var(--sp-1);
+  cursor: pointer;
+  transition: background-color var(--t-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .pass-row:hover {
+    background-color: var(--amber-wash);
+  }
+}
+
+.pass-goto {
+  padding: 1px 6px;
+}
+
+/* ---- touch pointers ------------------------------------------------ */
+
+@media (pointer: coarse) {
+  .pass-row {
+    min-height: var(--tap-min);
+  }
+
+  /* OBS lat / lon / GPS must still fit the 272px right stack */
+  .observer-input {
+    width: 72px;
+  }
+}

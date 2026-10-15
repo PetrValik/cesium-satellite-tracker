@@ -1,0 +1,28 @@
+/* ============================================================
+   controls, late — .hud-button rules that must follow the components
+   Components restyle .hud-button at the same specificity (panel
+   header buttons, rate buttons, PLAY, pass GO TO), so
+   these two rules load after them:
+   - the toggled-on state wins over the resting restyles;
+   - touch pointers get finger-sized buttons whatever the resting
+     size (min-width / padding) a component gave them.
+   ============================================================ */
+
+.hud-button.is-active {
+  border-color: var(--amber);
+  color: var(--amber);
+  box-shadow: var(--glow-amber-box);
+}
+
+/* ---- touch pointers: finger-sized targets -------------------------- */
+
+@media (pointer: coarse) {
+  .hud-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--tap);
+    min-height: var(--tap);
+    padding: 0 var(--sp-3);
+  }
+}

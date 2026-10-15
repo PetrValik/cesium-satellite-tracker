@@ -1,0 +1,70 @@
+/* ============================================================
+   compact (phone) HUD — the bottom cluster
+   .is-compact on .app-root (core/ui/useCompactLayout). The side panels are
+   gone; App renders CompactHud: one bottom cluster stacking
+   [sheet] [selection chip] [dock] [transport bar] above the attribution.
+   Its parts: sheet.css, chip.css, dock.css, transport.css.
+   ============================================================ */
+
+/* the bottom cluster: everything stacks from the bottom up, so no element
+   needs another's height; empty space passes touches to the globe */
+.hud-layer > .compact-cluster {
+  position: absolute;
+  top: var(--compact-top);
+  bottom: calc(var(--safe-bottom) + var(--credits-row));
+  left: calc(var(--safe-left) + var(--gutter-compact));
+  right: calc(var(--safe-right) + var(--gutter-compact));
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.compact-cluster > *,
+.cluster-stack > * {
+  pointer-events: auto;
+}
+
+.compact-cluster > .cluster-stack {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  pointer-events: none;
+}
+
+/* portrait tablets: keep the cluster instrument-sized, centred */
+@media (orientation: portrait) {
+  .compact-cluster > *,
+  .cluster-stack > * {
+    width: 100%;
+    max-width: 600px;
+    align-self: center;
+  }
+}
+
+/* landscape phones: side sheet left, cluster stack on the right */
+@media (orientation: landscape) {
+  .hud-layer > .compact-cluster {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: flex-start;
+  }
+
+  .compact-cluster > .hud-sheet {
+    flex: none;
+    width: min(320px, 40%);
+    max-height: 100%;
+  }
+
+  .compact-cluster > .cluster-stack {
+    flex: 1 1 auto;
+    align-items: center;
+  }
+
+  .cluster-stack > * {
+    width: min(100%, 640px);
+  }
+}

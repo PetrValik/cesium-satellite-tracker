@@ -1,0 +1,42 @@
+/* ============================================================
+   dock — the compact HUD's button row
+   ============================================================ */
+
+.hud-dock {
+  display: flex;
+  gap: 6px;
+}
+
+/* content-based widths: five labels (… COLORS · HIDE) fit a 360px phone,
+   where equal shares would clip the longest ones */
+.hud-dock > .hud-button {
+
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 6px;
+  color: var(--text-dim);
+  background: var(--panel-bg);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
+  letter-spacing: var(--ls-label);
+  white-space: nowrap;
+}
+
+.hud-dock > .hud-button.is-active {
+  color: var(--amber);
+  border-color: var(--amber-outline);
+  box-shadow: 0 0 8px var(--amber-glow), inset 0 -2px 0 var(--amber);
+}
+
+/* HIDE has the shortest label; it must not shrink under a fingertip */
+.hud-dock > .hide-button {
+  min-width: var(--tap);
+}
+
+/* the narrowest phones: five dock labels fit only without letter-spacing */
+@media (max-width: 359px) {
+  .hud-dock > .hud-button {
+    padding: 0 var(--sp-1);
+    letter-spacing: 0;
+  }
+}

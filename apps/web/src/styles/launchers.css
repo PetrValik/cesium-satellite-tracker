@@ -1,0 +1,23 @@
+/* ============================================================
+   launchers — desktop HELP · COLORS · HIDE row, bottom-left
+   Lifted above the desktop transport bar on narrower screens:
+   see "what the bar lifts" in transport.css.
+   ============================================================ */
+
+/* desktop launcher row, bottom-left: HELP · COLORS · HIDE (the compact
+   layout puts the same buttons in its dock instead) */
+.hud-launchers {
+  position: absolute;
+  bottom: calc(14px + var(--safe-bottom));
+  left: calc(14px + var(--safe-left));
+  z-index: 15;
+  display: flex;
+  gap: var(--launcher-gap);
+}
+
+.help-button,
+.settings-button,
+.hide-button {
+  color: var(--text-dim);
+  background: var(--panel-bg);
+}

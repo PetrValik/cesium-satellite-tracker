@@ -1,0 +1,87 @@
+/* ============================================================
+   restore — the one control left while the HUD is hidden
+   ============================================================ */
+
+/* restore: the one control left, quiet until hover / focus. The chamfered
+   bezel is an inner span so the clip-path never cuts the button's own
+   :focus-visible outline. */
+.hud-restore {
+  position: absolute;
+  left: calc(14px + var(--safe-left));
+  bottom: calc(14px + var(--safe-bottom));
+  z-index: 15;
+  display: grid;
+  width: var(--restore-size);
+  height: var(--restore-size);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  opacity: var(--quiet);
+  animation: hud-restore-in var(--t-hud) var(--ease-out);
+  transition:
+    opacity var(--t-fast) var(--ease-out),
+    color var(--t-fast) var(--ease-out);
+}
+
+/* phones: the bottom-left corner of the retracted cluster, clear of the
+   attribution row below it */
+.is-compact .hud-restore {
+  left: calc(var(--safe-left) + var(--gutter-compact));
+  bottom: calc(var(--safe-bottom) + var(--credits-row));
+}
+
+.hud-panel.hud-restore-bezel {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-color: var(--hairline-strong);
+}
+
+.hud-restore svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.hud-restore:focus-visible,
+.hud-restore:active {
+  opacity: 1;
+  color: var(--amber);
+}
+
+.hud-restore:focus-visible .hud-restore-bezel {
+  border-color: var(--amber-outline);
+  box-shadow: inset 0 2px 0 var(--amber-glow);
+}
+
+.hud-restore:focus-visible svg {
+  filter: drop-shadow(var(--glow-amber-box));
+}
+
+@media (hover: hover) {
+  .hud-restore:hover {
+    opacity: 1;
+    color: var(--amber);
+  }
+
+  .hud-restore:hover .hud-restore-bezel {
+    border-color: var(--amber-outline);
+  }
+}
+
+@keyframes hud-restore-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* no fade-in: it is simply there */
+  .hud-restore {
+    transition: none !important;
+    animation: none !important;
+  }
+}

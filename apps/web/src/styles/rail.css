@@ -1,0 +1,238 @@
+/* ============================================================
+   left rail — catalog, layers and domain pictures
+   The rail panel, its group rows (catalog groups, layers, legends),
+   legend hues, live domain readouts and touch legends. The same
+   panels render inside the compact sheets.
+   ============================================================ */
+
+.rail-panel {
+  /* left-anchored panel: mirror the chamfer to the top-left */
+  --panel-clip: polygon(
+    var(--chamfer) 0,
+    100% 0,
+    100% 100%,
+    0 100%,
+    0 var(--chamfer)
+  );
+  --panel-notch-edge: linear-gradient(
+      135deg,
+      transparent 7px,
+      var(--hairline-strong) 7px,
+      var(--hairline-strong) 8.4px,
+      transparent 8.4px
+    )
+    top left / 15px 15px no-repeat;
+  position: absolute;
+  top: var(--hud-top);
+  left: calc(var(--sp-3) + var(--safe-left));
+  width: var(--w-catalog);
+  /* 160px: the 44px top offset + 116px kept clear of the bottom band
+     (transport bar, lifted launchers) */
+  max-height: calc(100vh - 160px);
+  max-height: calc(100dvh - 160px);
+  overflow-y: auto;
+}
+
+/* mirror the corner tick away from the notch */
+.rail-panel::before {
+  left: auto;
+  right: 0;
+  border-left: 0;
+  border-right: 2px solid var(--amber);
+}
+
+/* ---- group rows ---------------------------------------------------- */
+
+.group-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.group-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: var(--fs-label-lg);
+  letter-spacing: var(--ls-label-tight);
+  padding: 5px 4px;
+  cursor: pointer;
+  transition:
+    color var(--t-fast) var(--ease-out),
+    background-color var(--t-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .group-row:hover:not(:disabled) {
+    color: var(--text);
+    background-color: var(--amber-wash);
+  }
+}
+
+.group-row:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.group-row.is-active {
+  color: var(--text);
+}
+
+.group-indicator {
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--hairline-strong);
+  flex: none;
+  transition:
+    background-color var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out),
+    box-shadow var(--t-fast) var(--ease-out);
+}
+
+.group-row.is-active .group-indicator {
+  background: var(--amber);
+  border-color: var(--amber);
+  box-shadow: var(--glow-amber-box);
+}
+
+.group-name {
+  flex: 1;
+  text-align: left;
+}
+
+.group-count {
+  margin-left: auto;
+  text-align: right;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.stale-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--alert);
+  margin-left: 5px;
+  vertical-align: middle;
+}
+
+/* ---- legend hues --------------------------------------------------- */
+
+/* LAYERS rows: each live layer's identity hue (fixed, not the palette) */
+.group-indicator.layer-ships { background: var(--cyan); border-color: var(--cyan); }
+.group-indicator.layer-aircraft { background: var(--signal-white); border-color: var(--signal-white); }
+
+.group-row.is-active .group-indicator.layer-ports { background: var(--cyan); border-color: var(--cyan); }
+
+/* Palette legends: swatches and labels take --hue inline from the user
+   palette (core/ui/hueStyle) — the colours the globe paints with, so a
+   recolour reaches them too. */
+.group-row.is-active .group-indicator.has-hue {
+  background: var(--hue);
+  border-color: var(--hue);
+}
+
+.hue-text {
+  color: var(--hue);
+}
+
+/* Aircraft altitude bands: the globe shades each category hue by altitude
+   (AircraftLayer BAND_SHADE 0.55 / 0.78 / 1) and paints on-ground aircraft
+   flat grey, so the band swatches show that ramp on a neutral hue. */
+.group-indicator.band-ground { --hue: var(--aircraft-ground); }
+.group-indicator.band-low { --hue: color-mix(in srgb, var(--text) 55%, black); }
+.group-indicator.band-mid { --hue: color-mix(in srgb, var(--text) 78%, black); }
+.group-indicator.band-high { --hue: var(--text); }
+
+/* ---- live domain readouts ------------------------------------------ */
+
+.live-count {
+  color: var(--text);
+  font-size: var(--fs-data-lg);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--ls-label-tight);
+  margin: 2px 0 8px;
+}
+
+.live-meta {
+  color: var(--text-dim);
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+  margin-bottom: 6px;
+}
+
+/* Live feeds (vessels/aircraft) suspend while sim time is off NOW:
+   the count line dims and layer rows fade without losing their toggle. */
+.live-count.live-suspended {
+  color: var(--text-dim);
+}
+
+.group-row.is-suspended .group-name,
+.group-row.is-suspended .group-indicator {
+  opacity: 0.45;
+}
+
+/* ---- layers panel -------------------------------------------------- */
+
+.infra-title {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+}
+
+.basemap-row {
+  display: flex;
+  gap: var(--sp-1);
+  margin: 6px 0 8px;
+  align-items: center;
+}
+
+.basemap-label {
+  color: var(--text-dim);
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+  margin-right: var(--sp-1);
+}
+
+/* ---- touch-only legends -------------------------------------------- */
+
+/* touch-only legends for meanings desktop gets from title tooltips */
+.touch-legend {
+  display: none;
+  margin: var(--sp-2) 0 0;
+  color: var(--text-dim);
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+}
+
+.touch-legend .stale-dot {
+  margin: 0 var(--sp-1) 0 0;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .touch-legend {
+    display: block;
+  }
+}
+
+/* ---- touch pointers ------------------------------------------------ */
+
+@media (pointer: coarse) {
+  .group-row {
+    min-height: var(--tap-min);
+  }
+
+  /* desktop layout on a touch tablet: keep the rail clear of the taller
+     bottom band (transport bar + lifted launchers) */
+  .rail-panel {
+    max-height: calc(100vh - 220px);
+    max-height: calc(100dvh - 220px);
+  }
+}

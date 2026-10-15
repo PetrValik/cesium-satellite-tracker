@@ -1,0 +1,44 @@
+/* ============================================================
+   ops mode tabs — top center
+   Each tab is a .hud-button; the active tab wears the shared
+   .hud-button.is-active state. Loads after controls-late.css, whose
+   touch padding the tabs override.
+   ============================================================ */
+
+.mode-tabs {
+  position: absolute;
+  top: calc(38px + var(--safe-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  pointer-events: auto;
+}
+
+.mode-tab {
+  padding: 5px 16px;
+  letter-spacing: var(--ls-wide);
+  color: var(--text-dim);
+  background: var(--panel-bg);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
+}
+
+/* ---- touch pointers ------------------------------------------------ */
+
+@media (pointer: coarse) {
+  .mode-tab {
+    padding: 0 14px;
+  }
+}
+
+/* ---- compact (phone) ----------------------------------------------- */
+
+.is-compact .mode-tabs {
+  top: calc(34px + var(--safe-top));
+}
+
+.is-compact .mode-tab {
+  padding: 0 var(--sp-3);
+  letter-spacing: var(--ls-label);
+}

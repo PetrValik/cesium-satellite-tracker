@@ -1,0 +1,76 @@
+/* ============================================================
+   controls — .hud-button and .hud-input
+   Base skins. The toggled .hud-button.is-active state and the
+   finger-sized touch button live in controls-late.css (see there).
+   ============================================================ */
+
+.hud-button {
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--fs-label-lg);
+  font-weight: 600;
+  letter-spacing: var(--ls-label-tight);
+  padding: 4px 9px;
+  cursor: pointer;
+  transition:
+    color var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out),
+    background-color var(--t-fast) var(--ease-out),
+    box-shadow var(--t-fast) var(--ease-out);
+}
+
+/* hover styles only where hover exists — on touch a tapped button would
+   otherwise keep its hover look ("sticky hover") */
+@media (hover: hover) {
+  .hud-button:hover {
+    border-color: var(--amber-outline);
+    color: var(--amber);
+  }
+}
+
+.hud-button:active {
+  background-color: var(--amber-wash);
+}
+
+.hud-input {
+  width: 100%;
+  background: var(--input-bg);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--fs-label-lg);
+  letter-spacing: var(--ls-data);
+  padding: 6px 8px;
+  transition: border-color var(--t-fast) var(--ease-out);
+}
+
+.hud-input::placeholder {
+  color: var(--text-dim);
+  letter-spacing: var(--ls-label);
+}
+
+.hud-input:focus {
+  border-color: var(--amber-outline);
+}
+
+/* ---- touch pointers ------------------------------------------------ */
+
+@media (pointer: coarse) {
+  /* iOS zooms the page into any focused input under 16px */
+  .hud-input {
+    min-height: var(--tap);
+    font-size: 16px;
+  }
+
+  /* ...but at 16px with label tracking "SEARCH NAME / NORAD ID" outgrows
+     the 256px rail (254px of text in 212px); the zoom guard keys off the
+     input's font-size, so only the typed value needs the 16px */
+  .hud-input::placeholder {
+    font-size: var(--fs-data);
+    letter-spacing: var(--ls-label-tight);
+  }
+}

@@ -1,0 +1,140 @@
+/* ============================================================
+   selection panels — right stack, panel header, readout grid
+   The right stack and the parts every selection panel shares
+   (tracking, maritime, airspace): .telemetry-header (also the HELP /
+   COLORS dialog header), name, readout grid, orbit badge, panel
+   actions and the empty / offline / computing line.
+   ============================================================ */
+
+.right-stack {
+  position: absolute;
+  top: var(--hud-top);
+  right: calc(var(--sp-3) + var(--safe-right));
+  width: var(--w-right);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* 140px: the 44px top offset + 96px kept clear of the bottom band
+     (transport bar, lifted attribution) */
+  max-height: calc(100vh - 140px);
+  max-height: calc(100dvh - 140px);
+  overflow-y: auto;
+  pointer-events: auto;
+}
+
+.right-stack > .hud-panel {
+  flex: none;
+}
+
+/* .telemetry-panel, .passes-panel (selection panels) and .help-panel,
+   .settings-panel (dialogs) carry no rule of their own: they are stable
+   hooks for tests and tooling. */
+
+.telemetry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.telemetry-header .hud-title {
+  margin: 0;
+}
+
+/* header action buttons (✕ / RESET / FOLLOW) must read as controls at
+   rest — a dim glyph on a transparent border was invisible until hovered.
+   Amber stays reserved for the hover/active emphasis states. */
+.telemetry-header .hud-button {
+  padding: 1px 7px;
+  color: var(--text);
+  border-color: var(--hairline-strong);
+  background: var(--input-bg);
+}
+
+@media (hover: hover) {
+  .telemetry-header .hud-button:hover {
+    color: var(--amber);
+    border-color: var(--amber-outline);
+  }
+}
+
+/* keep the pressed wash from .hud-button:active (controls.css, same
+   specificity — the resting background above would win otherwise) */
+.telemetry-header .hud-button:active {
+  background-color: var(--amber-wash);
+}
+
+.telemetry-name {
+  color: var(--amber);
+  font-size: var(--fs-callout);
+  font-weight: 600;
+  margin: 6px 0 10px;
+  letter-spacing: var(--ls-data);
+  text-shadow: var(--glow-amber-text);
+}
+
+.telemetry-grid {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 5px 10px;
+  margin: 0;
+  font-size: var(--fs-label-lg);
+}
+
+.telemetry-grid dt {
+  color: var(--text-dim);
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+  padding-top: 1px;
+}
+
+.telemetry-grid dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--ls-data);
+}
+
+/* orbit-class badge — --hue is the class's palette colour (the hue the
+   constellation points wear); dim while the class is unknown */
+.orbit-class {
+  display: inline-block;
+  padding: 0 6px 1px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius);
+  color: var(--hue, var(--text-dim));
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+}
+
+/* ---- panel status lines (empty / offline / computing) ---------- */
+
+.panel-empty {
+  color: var(--text-dim);
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+  padding: 10px 0;
+}
+
+/* ---- panel actions (FOLLOW / close) -------------------------------- */
+
+.panel-actions {
+  display: flex;
+  gap: var(--sp-1);
+  align-items: center;
+}
+
+/* ---- touch pointers ------------------------------------------------ */
+
+@media (pointer: coarse) {
+  /* finger-sized like every .hud-button (controls-late.css); this rule
+     only restores the padding the resting header style above overrides */
+  .telemetry-header .hud-button {
+    padding: 0 var(--sp-3);
+  }
+
+  /* desktop layout on a touch tablet: keep the stack clear of the taller
+     bottom band (transport bar + lifted launchers) */
+  .right-stack {
+    max-height: calc(100vh - 200px);
+    max-height: calc(100dvh - 200px);
+  }
+}

@@ -25,7 +25,7 @@ apps/web/src/
   lib/            pure helpers: api client, orbital math, formatters
   workers/        propagation.worker.ts — batch SGP4 (nothing in the repo is named "sgp4")
   data/           committed static datasets (launch sites, ports)
-  styles/         tokens.css — the HUD palette every panel reads
+  styles/         index.css (entry) → tokens.css + one CSS file per HUD component, imported in cascade order
 apps/web/pwa/     service-worker template + stamp helper + sw.test.ts (stamped into dist/sw.js by vite.config.ts);
                   manifest, icon.svg and committed PNG icons in apps/web/public/ (re-render: scripts/make-icons.sh)
 apps/api/src/
@@ -83,7 +83,7 @@ a Vite env file for Ion terrain (`docs/DEVELOPMENT.md` → *Environment files*).
 | Add or change a web feature slice | copy `apps/web/src/features/maritime/`; the profile gates the first write on `frontend-slice-architecture` |
 | Touch the viewer, camera or primitives | dispatch `@cesium-engine` (`.claude/agents/cesium-engine.md`); everything created gets a destroy path |
 | Positions, TLEs, frames, passes | dispatch `@orbital-mechanics`; `apps/web/src/lib/orbital.ts` and `apps/web/src/workers/propagation.worker.ts` |
-| Anything visual in the HUD | dispatch `@hud-designer`; tokens in `apps/web/src/styles/tokens.css` |
+| Anything visual in the HUD | dispatch `@hud-designer`; tokens in `apps/web/src/styles/tokens.css`, one CSS file per component beside it (`docs/ARCHITECTURE.md` → *apps/web styles*) |
 | Add an API endpoint or feed | copy `apps/api/src/ships/`, mount in `apps/api/src/app.ts`, schema in `packages/shared/src/index.ts`, document in `docs/API.md` |
 | Review a branch before merging | `.claude/workflows/deep-review.js` via the Workflow tool, or `/review` |
 

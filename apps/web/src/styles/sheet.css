@@ -1,0 +1,65 @@
+/* ============================================================
+   sheets — the compact HUD's pull-up panels
+   ============================================================ */
+
+.hud-sheet {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  max-height: var(--sheet-max);
+}
+
+.hud-panel.hud-sheet {
+  padding: 0;
+}
+
+.sheet-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: 4px 6px 4px 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.sheet-header .hud-title {
+  margin: 0;
+  color: var(--amber);
+  text-shadow: var(--glow-amber-text);
+}
+
+.sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 12px 12px;
+}
+
+/* the sheet header carries the title */
+.sheet-body > .hud-title:first-child {
+  display: none;
+}
+
+/* details: the selection panels stacked; the chip below is their header */
+.sheet-details > .sheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+}
+
+.sheet-details .hud-panel {
+  flex: none;
+}
+
+.sheet-details .panel-actions {
+  display: none;
+}
+
+/* ✕ glyph reads at a glance on the finger-sized button */
+.sheet-close {
+  font-size: var(--fs-data-lg);
+}
