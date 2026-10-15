@@ -5,9 +5,9 @@
  */
 import { useSimClock } from '../core/sim/simClock'
 import { transportVisible, useMode } from '../core/ui/modeStore'
+import { useWallClock } from '../core/sim/wallClock'
 import { useCatalog } from '../features/catalog/catalogStore'
 import { formatAge, formatCount, formatRate } from '../lib/format'
-import { useWallClock } from '../lib/wallClock'
 
 export function StatusLine() {
   const satCount = useCatalog((s) => s.sats.length)

@@ -16,10 +16,10 @@ to the `cloud` box; a merge to `main` is a deploy (`docs/DEPLOY.md`).
 
 ```
 apps/web/src/
-  app/            composition root — GlobeView owns the viewer, layers, worker and render loop
-  core/engine/    non-React Cesium machinery (createViewer, CameraRig, WorldDecal) — risk path
-  core/sim/       the warpable simulation clock
-  core/ui/        cross-slice zustand stores (mode, follow, prefs)
+  app/            composition root — GlobeView mounts the globe; app/globe/ builds it (viewer, layers, wiring, render loop)
+  core/engine/    non-React Cesium machinery (createViewer, CameraRig, WorldDecal, TapPicker, rendererHealth) — risk path
+  core/sim/       the warpable simulation clock + the coarse wall clock
+  core/ui/        cross-slice zustand stores (mode, follow, prefs, hud, sheet) + shared atoms
   features/       one folder per slice: catalog, constellation, tracking, passes, timebar,
                   maritime, airspace, infra — UI, store and Cesium layer together
   lib/            pure helpers: api client, orbital math, formatters
@@ -46,7 +46,7 @@ docs/             ARCHITECTURE, API, CONTROLS, DEPLOY, DEVELOPMENT; superpowers/
 **Open first:**
 
 1. `docs/ARCHITECTURE.md` — the current layout and the slice rules reviews enforce
-2. `apps/web/src/app/GlobeView.tsx` — the one mount effect that owns everything on the globe
+2. `apps/web/src/app/globe/createGlobe.ts` — builds everything on the globe, one dispose (GlobeView mounts it)
 3. `apps/web/src/features/maritime/` — a complete web slice to copy (layer + store + panel + tests)
 4. `apps/api/src/ships/` with `apps/api/test/ais.test.ts` — a complete API slice and its test
 

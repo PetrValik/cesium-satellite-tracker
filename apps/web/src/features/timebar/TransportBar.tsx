@@ -11,8 +11,8 @@
  */
 import { useState } from 'react'
 import { SIM_RATES, stepRate, useSimClock } from '../../core/sim/simClock'
+import { useWallClock } from '../../core/sim/wallClock'
 import { formatRate, formatUtc } from '../../lib/format'
-import { useWallClock } from '../../lib/wallClock'
 import { SCRUB_RANGE_MIN, scrubOffsetMin, scrubSliderValue } from './scrub'
 
 export function TransportBar() {

@@ -1,4 +1,4 @@
-import { useWallClock } from '../../lib/wallClock'
+import { useWallClock } from './wallClock'
 import { isSimLive, useSimClock } from './simClock'
 
 /**

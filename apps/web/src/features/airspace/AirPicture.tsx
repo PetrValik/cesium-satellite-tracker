@@ -8,9 +8,9 @@
 import { hueStyle } from '../../core/ui/hueStyle'
 import { usePrefs } from '../../core/ui/prefsStore'
 import { useSimLive } from '../../core/sim/simLive'
+import { useWallClock } from '../../core/sim/wallClock'
 import { AIRCRAFT_CATEGORIES, type AircraftCategory } from '../../lib/aircraftCategories'
 import { formatAge, formatCount } from '../../lib/format'
-import { useWallClock } from '../../lib/wallClock'
 import { categoryOf } from './aircraftCategory'
 import { ALT_BANDS, bandOf, useAircraft, type AltBand } from './aircraftStore'
 

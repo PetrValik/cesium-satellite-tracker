@@ -14,7 +14,7 @@ export function RailPicture() {
 /**
  * Left instrument rail: composes the active mode's slice content plus the
  * always-present layer toggles. Slices stay ignorant of each other — this
- * app-layer component is the only place they meet.
+ * is one of the app-layer places they meet.
  */
 export function LeftRail() {
   return (
