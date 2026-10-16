@@ -2,6 +2,8 @@ name: Deploy
 
 # Builds the production image, pushes it to GHCR, then flips the container
 # on the server over SSH. Deploys only after CI-equivalent checks pass here.
+# No secret is stored in GitHub: both the Cesium token and the deploy key come
+# from Infisical by OIDC, and the SSH path is the tailnet (.github/actions/cloud-ssh).
 on:
   push:
     branches: [main]
@@ -28,11 +30,28 @@ jobs:
   build-and-push:
     needs: verify
     runs-on: ubuntu-latest
+    environment: production   # Infisical's OIDC identity trusts this environment only
     permissions:
       contents: read
       packages: write
+      id-token: write   # Infisical OIDC login for VITE_CESIUM_TOKEN
     steps:
       - uses: actions/checkout@v7
+
+      # This repo's Infisical folder (the one .github/actions/cloud-ssh reads). It also
+      # holds DEPLOY_KEY, which the build has no use for, so drop it straight away.
+      - name: Build inputs from Infisical
+        uses: Infisical/secrets-action@d2e351f16c6ca20d17c85e6c992e04bdeb64e87d # v1.0.18
+        with:
+          method: oidc
+          identity-id: REPLACE_WITH_INFISICAL_IDENTITY_ID   # placeholder, same id as in .github/actions/cloud-ssh
+          domain: https://secrets.irminsul.uk
+          project-slug: ci-v-nv-f
+          env-slug: prod
+          secret-path: /cesium-satellite-tracker
+          export-type: env
+      - name: Drop the deploy key from this job
+        run: echo "DEPLOY_KEY=" >> "$GITHUB_ENV"
 
       # GHCR requires a lowercase image path, but the repo owner (PetrValik) is
       # mixed case — lowercase the whole owner/repo before tagging.
@@ -56,59 +75,51 @@ jobs:
             ${{ steps.image.outputs.name }}:latest
             ${{ steps.image.outputs.name }}:${{ github.sha }}
           # Optional public Cesium Ion client token (domain-restricted in the Ion
-          # dashboard); unset secret = token-free OSM/ellipsoid build.
+          # dashboard); absent from Infisical = token-free OSM/ellipsoid build.
           build-args: |
-            VITE_CESIUM_TOKEN=${{ secrets.VITE_CESIUM_TOKEN }}
+            VITE_CESIUM_TOKEN=${{ env.VITE_CESIUM_TOKEN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Only attempt a server deploy when DEPLOY_HOST is configured. This skips the
-  # deploy job cleanly (neutral, not a red failure) on a repo with no server,
-  # and — because a skipped job resolves no actions — sidesteps flaky
-  # marketplace resolution of the SSH action when there is nothing to deploy to.
-  gate:
+  # The deploy target is fixed now (cloud over the tailnet), so the old gate on a
+  # DEPLOY_HOST secret is gone: every green build deploys.
+  deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
-    outputs:
-      configured: ${{ steps.check.outputs.configured }}
+    environment: production   # Infisical's OIDC identity trusts this environment only
+    permissions:
+      contents: read
+      id-token: write   # Infisical OIDC login (.github/actions/cloud-ssh)
+    env:
+      DEPLOY_USER: root               # was the DEPLOY_USER secret; the script runs docker
+      DEPLOY_PATH: /opt/orbital-ops   # was the DEPLOY_PATH secret
     steps:
-      - id: check
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-        run: |
-          if [ -n "$DEPLOY_HOST" ]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::DEPLOY_HOST secret not set — skipping deploy."
-          fi
+      - uses: actions/checkout@v7
 
-  deploy:
-    needs: gate
-    if: needs.gate.outputs.configured == 'true'
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
+      # Infisical (OIDC) for the key, Tailscale for the path; sets CLOUD_SSH_HOST (tailnet address).
+      - name: Deploy path to cloud
+        uses: ./.github/actions/cloud-ssh
+
       - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            cd ${{ secrets.DEPLOY_PATH }}
-            docker compose pull
-            docker compose up -d
-            docker image prune -f
-            # The server exposes no host port (Caddy proxies over the shared
-            # `web` docker network), so probe from inside the container — and
-            # retry, the API takes ~20-30 s to boot its satellite DB.
-            for i in $(seq 1 12); do
-              if docker exec orbital-ops wget -qO- http://localhost:8787/api/health 2>/dev/null; then
-                exit 0
-              fi
-              sleep 5
-            done
-            echo "health check failed after 60s"
-            docker logs orbital-ops --since 2m | tail -20
-            exit 1
+        env:
+          CLOUD_SSH_HOST: ${{ env.CLOUD_SSH_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_deploy "${DEPLOY_USER}@${CLOUD_SSH_HOST}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' bash -s" <<'REMOTE'
+          cd "$DEPLOY_PATH"
+          docker compose pull
+          docker compose up -d
+          docker image prune -f
+          # The server exposes no host port (Caddy proxies over the shared
+          # `web` docker network), so probe from inside the container — and
+          # retry, the API takes ~20-30 s to boot its satellite DB.
+          for i in $(seq 1 12); do
+            if docker exec orbital-ops wget -qO- http://localhost:8787/api/health 2>/dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "health check failed after 60s"
+          docker logs orbital-ops --since 2m | tail -20
+          exit 1
+          REMOTE

@@ -55,23 +55,35 @@ control.
 ## 4. Automatic deploys (GitHub Actions)
 
 Every push to `main` runs `.github/workflows/deploy.yml`: lint + build +
-tests → Docker image → GHCR → SSH to the server → `docker compose pull &&
-up -d` → health check. Manual runs via *workflow_dispatch*.
+tests → Docker image → GHCR → SSH to the server over the tailnet →
+`docker compose pull && up -d` → health check. Manual runs via
+*workflow_dispatch*.
+
+GitHub stores no secret. The build and deploy jobs run in the `production`
+environment and log into Infisical (`secrets.irminsul.uk`, project `ci`, env
+`prod`) by GitHub OIDC; `.github/actions/cloud-ssh` then joins the tailnet as an
+ephemeral `tag:ci` node and pins the box's host keys. The workflow logs in as
+`root` into `/opt/orbital-ops` (`DEPLOY_USER` / `DEPLOY_PATH` in `deploy.yml`).
 
 One-time setup:
 
 1. **Server**: clone the repo (or just copy `docker-compose.yml` + `.env`)
    into a directory, e.g. `/opt/orbital-ops`. If the GHCR package is private,
    `docker login ghcr.io -u <user> -p <PAT with read:packages>` once.
-2. **GitHub repo → Settings → Environments**: create `production`.
-3. **Secrets** (repo or environment scope):
+2. **Deploy key**: a dedicated ed25519 keypair; the public half goes into
+   `/root/.ssh/authorized_keys` on the box.
+3. **Infisical**, folder `/cesium-satellite-tracker`:
 
    | Secret | Value |
    |---|---|
-   | `DEPLOY_HOST` | server IP / hostname |
-   | `DEPLOY_USER` | SSH user (needs docker group) |
-   | `DEPLOY_SSH_KEY` | private key for that user (dedicated deploy key) |
-   | `DEPLOY_PATH` | e.g. `/opt/orbital-ops` (where docker-compose.yml lives) |
+   | `DEPLOY_KEY` | private half of the deploy key |
+   | `VITE_CESIUM_TOKEN` | optional public Cesium Ion client token |
+
+   The shared `TS_OAUTH_CLIENT_ID` / `TS_OAUTH_SECRET` sit at `/`. A machine
+   identity with OIDC auth, subject
+   `repo:PetrValik/cesium-satellite-tracker:environment:production`, reads both
+   folders; its id replaces `REPLACE_WITH_INFISICAL_IDENTITY_ID` in
+   `.github/actions/cloud-ssh/action.yml` and `deploy.yml`.
 
 The live-feed keys stay in the server-side `.env` next to
 `docker-compose.yml` — they never enter GitHub.
