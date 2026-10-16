@@ -1,0 +1,65 @@
+# Opens the deploy path to cloud for one job, with no secret stored in GitHub. Copied from
+# PetrValik/homelab .github/actions/cloud-ssh (in production there since 2026-10-16).
+#
+# 1. Infisical (secrets.irminsul.uk) by GitHub OIDC: this repo's machine identity trusts only
+#    repo:PetrValik/cesium-satellite-tracker:environment:production, so the calling job needs
+#    `environment: production` and `permissions: id-token: write`. Project `ci`, env `prod`:
+#    TS_OAUTH_CLIENT_ID / TS_OAUTH_SECRET at `/` (shared by every repo), DEPLOY_KEY at
+#    `/cesium-satellite-tracker`. That folder also holds VITE_CESIUM_TOKEN, which the build job
+#    reads on its own (deploy.yml).
+# 2. Tailscale: joins the runner to the tailnet as an ephemeral `tag:ci` node; the tailnet policy
+#    lets tag:ci reach tcp/22 on cloud and platform only.
+# 3. SSH: the deploy key and cloud's PINNED host keys (no ssh-keyscan trust-on-first-use), and
+#    CLOUD_SSH_HOST set to cloud's tailnet address for the rest of the job.
+# identity-id: REPLACE_WITH_INFISICAL_IDENTITY_ID is a placeholder for that identity's id (not a
+# secret; the OIDC subject is what authenticates). Setup and rotation: PetrValik/homelab.
+name: cloud-ssh
+description: Infisical (OIDC) + Tailscale + SSH key for deploying to cloud
+runs:
+  using: composite
+  steps:
+    - name: Shared CI secrets from Infisical
+      uses: Infisical/secrets-action@d2e351f16c6ca20d17c85e6c992e04bdeb64e87d # v1.0.18
+      with:
+        method: oidc
+        identity-id: REPLACE_WITH_INFISICAL_IDENTITY_ID   # placeholder, see header
+        domain: https://secrets.irminsul.uk
+        project-slug: ci-v-nv-f
+        env-slug: prod
+        secret-path: /
+        export-type: env
+
+    - name: Repo secrets from Infisical
+      uses: Infisical/secrets-action@d2e351f16c6ca20d17c85e6c992e04bdeb64e87d # v1.0.18
+      with:
+        method: oidc
+        identity-id: REPLACE_WITH_INFISICAL_IDENTITY_ID   # placeholder, see header
+        domain: https://secrets.irminsul.uk
+        project-slug: ci-v-nv-f
+        env-slug: prod
+        secret-path: /cesium-satellite-tracker
+        export-type: env
+
+    - name: Join the tailnet (ephemeral, tag:ci)
+      uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4.2.0
+      with:
+        oauth-client-id: ${{ env.TS_OAUTH_CLIENT_ID }}
+        oauth-secret: ${{ env.TS_OAUTH_SECRET }}
+        tags: tag:ci
+        ping: 100.110.111.55
+
+    - name: SSH key and pinned host keys
+      shell: bash
+      run: |
+        install -d -m 700 ~/.ssh
+        printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_deploy
+        chmod 600 ~/.ssh/id_deploy
+        # cloud's host keys, the same over its public and tailnet address (checked 2026-10-15).
+        cat >> ~/.ssh/known_hosts <<'KEYS'
+        100.110.111.55 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIO4bNKb+n4nL+uB4QX6Sq0yU6KLLysOqBroFt0WnVH+7
+        100.110.111.55 ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBL90qbAuTYVNE3/33adDOlIc8LxQZPooHGiRUqVZox95BXNPQYHdD3RYUoq16YVT2S7NptmRGhsodb03m0eSd+A=
+        KEYS
+        echo "CLOUD_SSH_HOST=100.110.111.55" >> "$GITHUB_ENV"
+        # Nothing later in the job needs these in its environment.
+        echo "TS_OAUTH_SECRET=" >> "$GITHUB_ENV"
+        echo "DEPLOY_KEY=" >> "$GITHUB_ENV"
