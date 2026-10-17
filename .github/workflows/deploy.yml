@@ -38,20 +38,23 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # This repo's Infisical folder (the one .github/actions/cloud-ssh reads). It also
-      # holds DEPLOY_KEY, which the build has no use for, so drop it straight away.
+      # This repo's Infisical project (the one .github/actions/cloud-ssh reads). It also
+      # holds DEPLOY_KEY and the Tailscale secret, which the build has no use for, so drop
+      # them straight away.
       - name: Build inputs from Infisical
         uses: Infisical/secrets-action@d2e351f16c6ca20d17c85e6c992e04bdeb64e87d # v1.0.18
         with:
           method: oidc
-          identity-id: REPLACE_WITH_INFISICAL_IDENTITY_ID   # placeholder, same id as in .github/actions/cloud-ssh
+          identity-id: d472fb02-78dc-4a29-8238-9e8f0a9678e5   # github-cesium-satellite-tracker, as in .github/actions/cloud-ssh
           domain: https://secrets.irminsul.uk
-          project-slug: ci-v-nv-f
+          project-slug: ci-cesium-un-eu
           env-slug: prod
-          secret-path: /cesium-satellite-tracker
+          secret-path: /
           export-type: env
-      - name: Drop the deploy key from this job
-        run: echo "DEPLOY_KEY=" >> "$GITHUB_ENV"
+      - name: Drop the deploy key and Tailscale secret from this job
+        run: |
+          echo "DEPLOY_KEY=" >> "$GITHUB_ENV"
+          echo "TS_OAUTH_SECRET=" >> "$GITHUB_ENV"
 
       # GHCR requires a lowercase image path, but the repo owner (PetrValik) is
       # mixed case — lowercase the whole owner/repo before tagging.
