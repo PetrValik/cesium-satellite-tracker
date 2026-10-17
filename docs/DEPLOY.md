@@ -60,9 +60,10 @@ tests → Docker image → GHCR → SSH to the server over the tailnet →
 *workflow_dispatch*.
 
 GitHub stores no secret. The build and deploy jobs run in the `production`
-environment and log into Infisical (`secrets.irminsul.uk`, project `ci`, env
-`prod`) by GitHub OIDC; `.github/actions/cloud-ssh` then joins the tailnet as an
-ephemeral `tag:ci` node and pins the box's host keys. The workflow logs in as
+environment and log into Infisical (`secrets.irminsul.uk`, project `ci-cesium`,
+env `prod`) by GitHub OIDC; `.github/actions/cloud-ssh` then joins the tailnet as
+an ephemeral `tag:ci-cesium` node (allowed only to tcp/22 on the box) and pins the
+box's host keys. The workflow logs in as
 `root` into `/opt/orbital-ops` (`DEPLOY_USER` / `DEPLOY_PATH` in `deploy.yml`).
 
 One-time setup:
@@ -71,19 +72,20 @@ One-time setup:
    into a directory, e.g. `/opt/orbital-ops`. If the GHCR package is private,
    `docker login ghcr.io -u <user> -p <PAT with read:packages>` once.
 2. **Deploy key**: a dedicated ed25519 keypair; the public half goes into
-   `/root/.ssh/authorized_keys` on the box.
-3. **Infisical**, folder `/cesium-satellite-tracker`:
+   `/root/.ssh/authorized_keys` on the box, prefixed
+   `from="100.64.0.0/10",no-port-forwarding,no-agent-forwarding,no-X11-forwarding`.
+3. **Infisical**, project `ci-cesium` (slug `ci-cesium-un-eu`), env `prod`, path `/`:
 
    | Secret | Value |
    |---|---|
    | `DEPLOY_KEY` | private half of the deploy key |
+   | `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET` | this repo's Tailscale trust credential (tag `tag:ci-cesium`) |
    | `VITE_CESIUM_TOKEN` | optional public Cesium Ion client token |
 
-   The shared `TS_OAUTH_CLIENT_ID` / `TS_OAUTH_SECRET` sit at `/`. A machine
-   identity with OIDC auth, subject
-   `repo:PetrValik/cesium-satellite-tracker:environment:production`, reads both
-   folders; its id replaces `REPLACE_WITH_INFISICAL_IDENTITY_ID` in
-   `.github/actions/cloud-ssh/action.yml` and `deploy.yml`.
+   The machine identity `github-cesium-satellite-tracker` (OIDC auth, subject
+   `repo:PetrValik/cesium-satellite-tracker:environment:production`) is Viewer in
+   that project only; its id is in `.github/actions/cloud-ssh/action.yml` and
+   `deploy.yml`. Rotation: `infra/deploy/CI-CREDENTIALS.md` in PetrValik/homelab.
 
 The live-feed keys stay in the server-side `.env` next to
 `docker-compose.yml` — they never enter GitHub.
