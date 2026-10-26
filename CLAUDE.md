@@ -30,10 +30,12 @@ positions. Don't hand-roll either — dispatch the specialist.
 
 ## Project
 
-**ORBITAL OPS** — a real-time satellite and vessel tracker rendering a full 3D globe in the
-browser. npm-workspaces monorepo: `apps/web` (React 19 + Vite + CesiumJS + zustand),
+**ORBITAL OPS** — a real-time satellite, ship and aircraft tracker rendering a full 3D globe
+in the browser. npm-workspaces monorepo: `apps/web` (React 19 + Vite + CesiumJS + zustand),
 `apps/api` (Node service), `packages/shared` (types shared by both). Satellite positions come
-from SGP4 via `satellite.js`; AIS vessel data is optional and degrades cleanly without a key.
+from SGP4 via `satellite.js`; the two live feeds are optional and degrade cleanly without
+credentials — AIS ships via aisstream.io (`/api/ships` returns 503 without a key) and ADS-B
+aircraft via OpenSky (anonymous polling every 600 s, 60 s with credentials).
 
 Deployed at **orbit.irminsul.uk** from a GHCR image onto the `cloud` box (`/opt/orbital-ops`,
 docker network `web`) — see [`docs/DEPLOY.md`](docs/DEPLOY.md). The homelab monorepo carries
@@ -130,7 +132,8 @@ what goes stale.
 ## Git workflow
 
 - Branch from **`main`**; never commit directly to it.
-- Branch names: `feat/<kebab>`, `fix/<kebab>`, `chore/<kebab>`, `docs/<kebab>`.
+- Branch names: `feat/<kebab>`, `fix/<kebab>`, `chore/<kebab>`, `docs/<kebab>`,
+  `refactor/<kebab>` — the set is `git.branch_prefixes` in `.claude/kit.profile.yaml`.
 - Push the branch and open a PR into `main`. `ci.yml` gates it; `deploy.yml` rolls to the
   `cloud` box, so a merge is a deploy.
 - Commit subject: `<type>(<scope>): <summary>` — ≤ 70 chars, imperative, lowercase after the
