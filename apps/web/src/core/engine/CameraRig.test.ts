@@ -233,4 +233,19 @@ describe('CameraRig navigation flights', () => {
     level()
     rig.dispose()
   })
+  it('levelNorth right after a follow engages, before its first frame, uses the initial range', () => {
+    // follow() on a target that resolves later engages at once in world
+    // space (transform still IDENTITY); R in that gap must not read the
+    // camera's world position as a target-local range.
+    const { rig, camera } = makeRig()
+    const target = Cartesian3.fromDegrees(14, 50, 400_000)
+    let ready = false
+    rig.follow(() => (ready ? target : null), 3_000)
+    ready = true
+    rig.levelNorth()
+    expect(view(camera, target).range).toBeCloseTo(3_000, 0)
+    expect(Math.abs(CesiumMath.toDegrees(camera.pitch) + 90)).toBeLessThan(0.1)
+    expect(rig.isFollowing()).toBe(true)
+    rig.dispose()
+  })
 })
