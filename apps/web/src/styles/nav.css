@@ -4,7 +4,8 @@
    right stack (on the screen edge while the stack is empty — App renders
    it right after .right-stack for the sibling rule). Phone: the first
    child of .cluster-stack, a column at the cluster's top-right in tall
-   portrait, an in-flow row heading the stack otherwise. Loads after
+   portrait, a column on the right edge beside a lane in the stack on short
+   landscapes, an in-flow row heading the stack otherwise. Loads after
    controls-late.css: the square buttons override its touch padding.
    ============================================================ */
 
@@ -208,6 +209,46 @@
     top: auto;
     right: 0;
     bottom: calc(100% + var(--sp-2));
+    transform: none;
+  }
+}
+
+/* short landscape (568×320): the row would not fit — chip + dock +
+   transport fill the cluster, and the row would sit flush on the tabs.
+   The nav leaves the stack as a column on the cluster's right edge,
+   starting on the mode-tab line beside the tabs (5 × 44 + 4 × 6 fits
+   between that line and the attribution row from a 320px height), and the
+   stack yields a lane for it. */
+@media (orientation: landscape) and (max-height: 359px) {
+  .is-compact .nav-controls {
+    position: absolute;
+    /* the tab line (mode-tabs.css), against the cluster's own top */
+    top: calc(var(--safe-top) + 34px - var(--compact-top));
+    right: 0;
+    flex-direction: column;
+    width: auto;
+    max-width: none;
+    align-self: auto;
+  }
+
+  /* only as much lane as the 640px-capped stack (cluster.css) still
+     needs: none on wide short screens, the full column on 568px */
+  .is-compact .cluster-stack:has(> .nav-controls) {
+    --nav-lane: calc(var(--tap) + var(--sp-2));
+    padding-right: clamp(0px, calc(640px + 2 * var(--nav-lane) - 100%), var(--nav-lane));
+  }
+
+  /* the message anchors to the column, left of it at the cluster top: the
+     free band between the tabs and the stack, never over the tabs and
+     never beside LOCATE at the column foot (the transport bar is there) */
+  .is-compact .nav-locate {
+    position: static;
+  }
+
+  .is-compact .nav-message {
+    top: calc(var(--compact-top) - var(--safe-top) - 34px);
+    right: calc(100% + var(--sp-2));
+    bottom: auto;
     transform: none;
   }
 }
