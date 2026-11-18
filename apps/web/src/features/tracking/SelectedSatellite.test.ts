@@ -14,6 +14,7 @@ const JD_UNIX_EPOCH = 2440587.5
 const satrec = createSatrec(ISS.tle1, ISS.tle2)!
 const EPOCH_MS = (satrec.jdsatepoch - JD_UNIX_EPOCH) * 86_400_000
 const PERIOD_MS = orbitalPeriodMinutes(satrec) * 60_000
+const SHADOW_MS = EPOCH_MS + 12 * 86_400_000 + 2_945_000 // mid-eclipse 2026-07-22T04:30Z (lib/orbital.test.ts)
 
 function fakeVisuals() {
   return {
@@ -115,5 +116,38 @@ describe('SelectedSatellite', () => {
     sel.frame(EPOCH_MS + 180_000, 1201)
     expect(useTelemetry.getState().latDeg).toBe(latAt(EPOCH_MS + 180_000))
     expect(useTelemetry.getState().noradId).toBe(25544)
+  })
+
+  it('select() pushes the orbit facts once, and no sunlit flag yet', () => {
+    new SelectedSatellite(fakeVisuals()).select(ISS, EPOCH_MS)
+    const t = useTelemetry.getState()
+    expect(t.perigeeKm).toBeCloseTo(415.72, 1)
+    expect(t.apogeeKm).toBeCloseTo(424.8, 1)
+    expect(Math.abs(t.lowKm - 419.8)).toBeLessThan(1)
+    expect(Math.abs(t.highKm - 433.0)).toBeLessThan(1)
+    expect(Math.abs(t.tleEpochMs! - Date.UTC(2026, 6, 10, 3, 41, 7, 909))).toBeLessThan(1)
+    expect(t.launchYear).toBe(1998)
+    expect(t.designator).toBe('1998-067A')
+    expect(t.sunlit).toBeNull()
+  })
+
+  it('a blank designator field pushes null launch facts', () => {
+    const tle1 = ISS.tle1.slice(0, 9) + ' '.repeat(8) + ISS.tle1.slice(17)
+    new SelectedSatellite(fakeVisuals()).select({ ...ISS, tle1 }, EPOCH_MS)
+    expect(useTelemetry.getState().launchYear).toBeNull()
+    expect(useTelemetry.getState().designator).toBeNull()
+  })
+
+  it('pushes sunlit with the 5 Hz readout, for the propagated instant', () => {
+    const sel = new SelectedSatellite(fakeVisuals())
+    sel.select(ISS, EPOCH_MS)
+    sel.frame(EPOCH_MS, 1000)
+    expect(useTelemetry.getState().sunlit).toBe(true)
+    sel.frame(SHADOW_MS, 1100) // inside the 200 ms pacing window: held
+    expect(useTelemetry.getState().sunlit).toBe(true)
+    sel.frame(SHADOW_MS, 1300)
+    expect(useTelemetry.getState().sunlit).toBe(false)
+    sel.select(null, EPOCH_MS)
+    expect(useTelemetry.getState().sunlit).toBeNull()
   })
 })
