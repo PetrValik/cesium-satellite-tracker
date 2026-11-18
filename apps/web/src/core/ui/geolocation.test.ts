@@ -4,6 +4,7 @@ import {
   locateAndFly,
   locateDevice,
   locateErrorLabel,
+  locateOutcomeLabel,
   LOCATE_HEIGHT_M,
   LOCATE_MAX_AGE_MS,
   LOCATE_OPTIONS,
@@ -87,7 +88,7 @@ describe('locateAndFly', () => {
     const done = locateAndFly(g, w.opts)
     w.state.seq++ // e.g. HOME pressed while the prompt was open
     g.answer()
-    await expect(done).resolves.toEqual({ ok: false, error: 'stale' })
+    await expect(done).resolves.toEqual({ ok: false, error: 'superseded' })
     expect(w.request).not.toHaveBeenCalled()
   })
   it('drops the flight when the follow lock engaged after the tap', async () => {
@@ -95,7 +96,7 @@ describe('locateAndFly', () => {
     const done = locateAndFly(g, w.opts)
     w.state.following = true // a picked ship auto-follows
     g.answer()
-    await expect(done).resolves.toEqual({ ok: false, error: 'stale' })
+    await expect(done).resolves.toEqual({ ok: false, error: 'superseded' })
     expect(w.request).not.toHaveBeenCalled()
   })
   it('drops the flight when the follow lock released after the tap', async () => {
@@ -104,7 +105,7 @@ describe('locateAndFly', () => {
     const done = locateAndFly(g, w.opts)
     w.state.following = false
     g.answer()
-    await expect(done).resolves.toEqual({ ok: false, error: 'stale' })
+    await expect(done).resolves.toEqual({ ok: false, error: 'superseded' })
     expect(w.request).not.toHaveBeenCalled()
   })
   it('keeps a follow lock that was already on at the tap: the flight releases it as asked', async () => {
@@ -128,7 +129,7 @@ describe('locateAndFly', () => {
     const second = locateAndFly(late, b.opts)
     b.state.nowMs += 16_000
     late.answer()
-    await expect(second).resolves.toEqual({ ok: false, error: 'stale' })
+    await expect(second).resolves.toEqual({ ok: false, error: 'late' })
     expect(b.request).not.toHaveBeenCalled()
   })
   it('honours a shorter maxAgeMs', async () => {
@@ -136,7 +137,7 @@ describe('locateAndFly', () => {
     const done = locateAndFly(g, { ...w.opts, maxAgeMs: 1_000 })
     w.state.nowMs += 1_001
     g.answer()
-    await expect(done).resolves.toEqual({ ok: false, error: 'stale' })
+    await expect(done).resolves.toEqual({ ok: false, error: 'late' })
     expect(w.request).not.toHaveBeenCalled()
   })
   it('reports a denial as before and never flies, stale or not', async () => {
@@ -148,7 +149,23 @@ describe('locateAndFly', () => {
     const result = await done
     expect(result).toEqual({ ok: false, error: 'denied' })
     expect(w.request).not.toHaveBeenCalled()
-    if (!result.ok && result.error !== 'stale') expect(locateErrorLabel(result.error)).toBe('LOCATION DENIED')
+    expect(locateOutcomeLabel(result)).toBe('LOCATION DENIED')
+  })
+  it('a fix superseded by a newer camera move AND late stays silent (superseded wins)', async () => {
+    const g = pendingGeo(), w = world()
+    const done = locateAndFly(g, w.opts)
+    w.state.seq++
+    w.state.nowMs += 60_000
+    g.answer()
+    const result = await done
+    expect(result).toEqual({ ok: false, error: 'superseded' })
+    expect(locateOutcomeLabel(result)).toBeNull()
+  })
+  it('labels a late fix so the user knows to tap again; success and superseded say nothing', async () => {
+    expect(locateOutcomeLabel({ ok: false, error: 'late' })).toBe('LOCATED TOO LATE — TAP AGAIN')
+    expect(locateOutcomeLabel({ ok: false, error: 'superseded' })).toBeNull()
+    expect(locateOutcomeLabel({ ok: true, latDeg: 1, lonDeg: 2, altitudeM: null })).toBeNull()
+    expect(locateOutcomeLabel({ ok: false, error: 'timeout' })).toBe('LOCATION TIMED OUT')
   })
   it('reports a browser without geolocation as unsupported', async () => {
     const w = world()
