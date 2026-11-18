@@ -11,6 +11,9 @@ const pass = (noradId: number): PassPrediction => ({
   maxElDeg: 45,
   maxElMs: 1_500,
   samples: [],
+  riseAzDeg: 270,
+  setAzDeg: 90,
+  nakedEye: false,
 })
 
 /** Minimal in-memory localStorage shim (tests run in plain node — no jsdom). */

@@ -7,6 +7,7 @@ import {
   footprintRadiusM,
   internationalDesignator,
   isSunlit,
+  NAKED_EYE_SUN_MAX_ELEVATION_DEG,
   orbitalPeriodMinutes,
   perigeeApogeeKm,
   predictPasses,
@@ -369,6 +370,25 @@ describe('predictPasses', () => {
       expect(pass.samples[0].elDeg).toBeGreaterThanOrEqual(-0.5)
       expect(pass.samples[pass.samples.length - 1].elDeg).toBeGreaterThanOrEqual(-0.5)
     }
+  })
+
+  it('adds rise/set azimuth and the naked-eye flag (ISS over Prague, 24 h from epoch)', () => {
+    const satrec = issSatrec()
+    const passes = predictPasses(satrec, PRAGUE, tleEpochMs(satrec), 24)
+    // AOS 17:47 (sun +10°), 19:22 (sun −2.3…−3.6°: civil twilight), 20:58, 22:35, 00:12, 01:49 UTC
+    expect(passes.map((p) => p.nakedEye)).toEqual([false, false, true, true, true, true])
+    const azimuths = [[179.2, 85.1], [226.6, 72.8], [260.3, 77.6], [281.1, 96.9], [287.4, 129.4], [277.4, 174.8]]
+    passes.forEach((p, i) => {
+      expect(Math.abs(p.riseAzDeg - azimuths[i][0])).toBeLessThan(0.5)
+      expect(Math.abs(p.setAzDeg - azimuths[i][1])).toBeLessThan(0.5)
+      const above = p.samples.filter((s) => s.elDeg >= 0)
+      expect(p.riseAzDeg).toBe(above[0].azDeg)
+      expect(p.setAzDeg).toBe(above[above.length - 1].azDeg)
+    })
+    // The second pass is false only because of the −6° threshold: sunlit, sky not dark yet.
+    const twilight = sunElevationDeg(PRAGUE, passes[1].maxElMs)
+    expect(twilight).toBeLessThan(0)
+    expect(twilight).toBeGreaterThan(NAKED_EYE_SUN_MAX_ELEVATION_DEG)
   })
 })
 

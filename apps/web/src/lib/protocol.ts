@@ -35,6 +35,19 @@ export interface PassPrediction {
   maxElMs: number
   /** Az/el trajectory for the sky plot, sampled every ~30 s. */
   samples: PassSample[]
+  /**
+   * Azimuth, degrees (0 = N, clockwise), of the first sample with `elDeg >= 0`;
+   * NaN when there is none. A pass already up at the window start "rises"
+   * where it is at the window start.
+   */
+  riseAzDeg: number
+  /** Azimuth, degrees (0 = N, clockwise), of the last sample with `elDeg >= 0`; NaN when none. */
+  setAzDeg: number
+  /**
+   * True when, at one or more samples with `elDeg >= 0`, the satellite is
+   * sunlit while the observer's Sun is below −6° (civil twilight is over).
+   */
+  nakedEye: boolean
 }
 
 export type WorkerRequest =
