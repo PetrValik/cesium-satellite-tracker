@@ -1,19 +1,26 @@
 /**
- * Pass predictions for the selected satellite over the observer: 24 h
- * window anchored at sim time, recomputed when the satellite, observer, or
+ * NEXT PASS OVER YOU for the selected satellite: a 24 h prediction window
+ * anchored at sim time, recomputed when the satellite, the observer or the
  * window changes (windowExpired flips when sim time warps/scrubs outside
- * it). The "→" buttons jump sim time to a pass's AOS and start playback.
+ * it). The heading counts down in sim time; the next pass reads AOS (UTC),
+ * rise → set direction, max elevation, duration and the naked-eye flag;
+ * WATCH ▶ jumps sim time to a pass's AOS and plays at ×10. The observer
+ * folds to one FROM … · CHANGE line.
  */
 import { useEffect, useState } from 'react'
 import { simClock, useSimClock } from '../../core/sim/simClock'
 import { useSatellites } from '../../core/ui/satelliteStore'
-import { formatDuration, formatUtcTime } from '../../lib/format'
+import { formatCompass8, formatCountdown, formatLatLon, formatUtcHm } from '../../lib/format'
 import { createSatrec, MIN_MAX_ELEVATION_DEG, predictPasses } from '../../lib/orbital'
+import type { PassPrediction } from '../../lib/protocol'
 import { DEFAULT_OBSERVER, isValidObserver } from './observer'
 import { usePasses } from './passesStore'
+import { passView, type PassView } from './passView'
 import { SkyPlot } from './SkyPlot'
 
 const WINDOW_HOURS = 24
+
+const NO_VIEW: PassView = { nextIndex: -1, shownIndex: -1, countdown: null }
 
 export function PassesPanel() {
   const sat = useSatellites((s) => (s.selectedId === null ? undefined : s.byId.get(s.selectedId)))
@@ -65,55 +72,133 @@ export function PassesPanel() {
   }, [sat, observer, windowExpired])
 
   if (!sat) return null
-
   // Until the effect claims the new satellite, the store still holds the
-  // previous one's passes — never paint those under this satellite's name.
+  // previous one's passes (startCompute leaves them in place) — never paint
+  // those under this satellite's name: while busy, nothing reads `passes`.
   const busy = computing || computedFor !== sat.noradId
-  const shownIndex = busy ? -1 : (selectedPass ?? passes.findIndex((p) => p.losMs >= epochMs))
-  const shown = shownIndex >= 0 ? passes[shownIndex] : undefined
+  const view = busy ? NO_VIEW : passView(passes, selectedPass, epochMs)
+  const next = view.nextIndex >= 0 ? passes[view.nextIndex] : undefined
+  const shown = view.shownIndex >= 0 ? passes[view.shownIndex] : undefined
+  const later = next ? passes.slice(view.nextIndex + 1) : []
 
   return (
     // passes-panel: a rule-less hook for tests and tooling
     <section className="hud-panel passes-panel">
-      <h2 className="hud-title">PASSES · NEXT {WINDOW_HOURS} H</h2>
-      <ObserverEditor />
+      <h2 className="hud-title">
+        NEXT PASS OVER YOU{view.countdown && ` · ${view.countdown}`}
+      </h2>
       {busy && <div className="panel-empty">COMPUTING…</div>}
       {!busy && passes.length === 0 && (
         <div className="panel-empty">NO PASSES ABOVE {MIN_MAX_ELEVATION_DEG}° FOR THIS OBSERVER</div>
       )}
-      {!busy && passes.length > 0 && !shown && (
+      {!busy && passes.length > 0 && !next && (
         <div className="panel-empty">WINDOW ELAPSED — RECOMPUTING…</div>
       )}
-      {!busy && shown && (
+      {next && (
+        <ul className="pass-list pass-next">
+          <PassRow
+            pass={next}
+            index={view.nextIndex}
+            isNext
+            active={view.nextIndex === view.shownIndex}
+            onSelect={selectPass}
+          />
+        </ul>
+      )}
+      {shown && <SkyPlot pass={shown} epochMs={simClock.get().epochMs} />}
+      {later.length > 0 && (
         <>
-          <SkyPlot pass={shown} epochMs={simClock.get().epochMs} />
+          <div className="pass-later-label">LATER</div>
           <ul className="pass-list">
-            {passes.map((p, i) => (
-              <li key={p.aosMs} className={i === shownIndex ? 'is-active' : ''}>
-                <button className="pass-row" onClick={() => selectPass(i)}>
-                  <span>{formatUtcTime(p.aosMs)}</span>
-                  <span>EL {Math.round(p.maxElDeg)}°</span>
-                  <span>{formatDuration(p.losMs - p.aosMs)}</span>
-                </button>
-                <button
-                  className="hud-button pass-goto"
-                  title="Jump sim time to AOS"
-                  aria-label="Jump sim time to AOS"
-                  onClick={() => {
-                    simClock.get().scrubTo(p.aosMs)
-                    simClock.get().setRate(10)
-                    simClock.get().play()
-                    selectPass(i)
-                  }}
-                >
-                  →
-                </button>
-              </li>
-            ))}
+            {later.map((p, k) => {
+              const i = view.nextIndex + 1 + k
+              return (
+                <PassRow
+                  key={p.aosMs}
+                  pass={p}
+                  index={i}
+                  isNext={false}
+                  active={i === view.shownIndex}
+                  onSelect={selectPass}
+                />
+              )
+            })}
           </ul>
         </>
       )}
+      <ObserverLine />
     </section>
+  )
+}
+
+/** One pass: AOS (UTC), rise → set, max elevation, duration, naked-eye flag, WATCH ▶. */
+function PassRow({
+  pass,
+  index,
+  isNext,
+  active,
+  onSelect,
+}: {
+  pass: PassPrediction
+  index: number
+  isNext: boolean
+  active: boolean
+  onSelect: (index: number) => void
+}) {
+  const hm = formatUtcHm(pass.aosMs)
+  return (
+    <li className={active ? 'is-active' : ''}>
+      <button className="pass-row" onClick={() => onSelect(index)}>
+        <span>{isNext ? `${hm} UTC` : hm}</span>
+        <span>{`${formatCompass8(pass.riseAzDeg)} → ${formatCompass8(pass.setAzDeg)}`}</span>
+        <span>{Math.round(pass.maxElDeg)}°</span>
+        <span>{formatCountdown(pass.losMs - pass.aosMs)}</span>
+        {pass.nakedEye && (
+          <span
+            className="pass-eye"
+            title="Naked-eye pass: sunlit while the Sun is more than 6° below your horizon"
+          >
+            {isNext ? '◉ EYE' : '◉'}
+          </span>
+        )}
+      </button>
+      <button
+        className="hud-button pass-goto"
+        title="Jump sim time to this pass's start and play at ×10"
+        aria-label={`Watch the ${hm} UTC pass`}
+        onClick={() => {
+          simClock.get().scrubTo(pass.aosMs)
+          simClock.get().setRate(10)
+          simClock.get().play()
+          onSelect(index)
+        }}
+      >
+        WATCH ▶
+      </button>
+    </li>
+  )
+}
+
+/** The observer folded to one line; CHANGE opens today's editor (remounted, so it re-reads the store). */
+function ObserverLine() {
+  const observer = usePasses((s) => s.observer)
+  const [editing, setEditing] = useState(false)
+  return (
+    <div className="observer-line">
+      {editing ? (
+        <ObserverEditor />
+      ) : (
+        <span className="observer-from">FROM {formatLatLon(observer.latDeg, observer.lonDeg)}</span>
+      )}
+      <button
+        type="button"
+        className="hud-button observer-change"
+        aria-expanded={editing}
+        onClick={() => setEditing(!editing)}
+      >
+        {editing ? 'DONE' : 'CHANGE'}
+      </button>
+    </div>
   )
 }
 

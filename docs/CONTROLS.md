@@ -163,17 +163,20 @@ read SUSP. Mode and layer choices persist in `localStorage`.
 
 ## Observer & pass prediction (ORBITAL)
 
-With a satellite selected, the PASSES panel predicts AOS/LOS windows above 5°
-elevation for your observer over the **next 24 h** and draws the selected pass
-on a polar azimuth/elevation sky plot.
+With a satellite selected, the NEXT PASS OVER YOU panel predicts AOS/LOS
+windows above 5° elevation for your observer over the **next 24 h** and draws
+the shown pass on a polar azimuth/elevation sky plot.
 
-- **Observer:** edit latitude/longitude in the OBS fields (Enter or blur to
-  commit), or press **GPS** to use browser geolocation; a denied permission or a
-  failed fix is reported under the fields. The default observer is Prague
-  (50.08, 14.44). The observer persists in `localStorage`.
-- **Pass list:** each row shows AOS time, max elevation, and duration. The **→**
-  button jumps sim time to that pass's AOS, sets warp to ×10, and starts
-  playing, so you can watch the pass unfold.
+- **Next pass:** the heading counts down in sim time (`IN 2 H 07`;
+  `NOW · ENDS IN 3 MIN` during a pass). The row shows AOS (UTC), rise → set
+  direction (8-point), max elevation, duration, and ◉ EYE when the satellite is
+  sunlit while your Sun is below −6°.
+- **Later passes:** compact rows; tap one to draw it on the sky plot.
+- **WATCH ▶:** jumps sim time to that pass's AOS, sets warp to ×10, and plays.
+- **Observer:** `FROM … · CHANGE` opens the lat/lon fields and **GPS** (Enter or
+  blur commits; a denied permission or a failed fix is reported under the
+  fields), and DONE folds them. The default observer is Prague (50.08, 14.44);
+  it persists in `localStorage`.
 - Predictions recompute automatically when you change satellite or observer, or
   when sim time is warped/scrubbed outside the current 24 h window.
 
