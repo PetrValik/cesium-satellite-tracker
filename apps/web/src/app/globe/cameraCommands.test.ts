@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 vi.mock('../../lib/api', () => ({ api: {}, ApiError: class extends Error {} }))
-import { requestCamera } from '../../core/ui/cameraStore'
+import { cameraRequestSeq, requestCamera } from '../../core/ui/cameraStore'
 import { useFollow } from '../../core/ui/followStore'
-import { bindCameraCommands, runCameraCommand } from './cameraCommands'
+import { bindCameraCommands, bindCameraIntentInputs, runCameraCommand } from './cameraCommands'
 import { GlobeFollow } from './follow'
 
 function setup(following: boolean) {
@@ -58,5 +58,21 @@ describe('camera commands', () => {
     requestCamera({ kind: 'level' })
     expect(log).toEqual(['flyHome'])
     follow.dispose()
+  })
+})
+
+describe('bindCameraIntentInputs', () => {
+  it('a press or a wheel on the globe counts as a camera move, until unbound', () => {
+    const canvas = new EventTarget()
+    const unbind = bindCameraIntentInputs(canvas)
+    const before = cameraRequestSeq()
+    canvas.dispatchEvent(new Event('pointerdown'))
+    canvas.dispatchEvent(new Event('wheel'))
+    expect(cameraRequestSeq()).toBe(before + 2)
+    canvas.dispatchEvent(new Event('pointermove')) // hovering is not a move
+    expect(cameraRequestSeq()).toBe(before + 2)
+    unbind()
+    canvas.dispatchEvent(new Event('pointerdown'))
+    expect(cameraRequestSeq()).toBe(before + 2)
   })
 })

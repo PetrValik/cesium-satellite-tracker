@@ -1,6 +1,6 @@
 import { CameraRig } from '../../core/engine/CameraRig'
 import { simClock, stepRate } from '../../core/sim/simClock'
-import { requestCamera } from '../../core/ui/cameraStore'
+import { noteCameraIntent, requestCamera } from '../../core/ui/cameraStore'
 import { useFollow } from '../../core/ui/followStore'
 import { useHud } from '../../core/ui/hudStore'
 import { isTypingTarget } from '../../core/ui/keyboard'
@@ -45,6 +45,7 @@ export function globeKeyHandlers(rig: KeyRig) {
   const onKeyDown = (e: GlobeKeyEvent): void => {
     if (isTypingTarget(e.target)) return
     if (CameraRig.isMovementKey(e.code)) {
+      noteCameraIntent() // a camera move: a pending LOCATE goes stale
       rig.press(e.code)
       e.preventDefault()
       return

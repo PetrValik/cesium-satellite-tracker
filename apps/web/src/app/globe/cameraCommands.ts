@@ -1,5 +1,5 @@
 import type { CameraRig } from '../../core/engine/CameraRig'
-import { bindCameraHandler, type CameraCommand } from '../../core/ui/cameraStore'
+import { bindCameraHandler, noteCameraIntent, type CameraCommand } from '../../core/ui/cameraStore'
 import { useFollow } from '../../core/ui/followStore'
 
 /** The rig surface the navigation commands drive — structural, so tests pass fakes. */
@@ -46,4 +46,22 @@ export function runCameraCommand(rig: NavRig, command: CameraCommand): void {
  */
 export function bindCameraCommands(rig: NavRig): () => void {
   return bindCameraHandler((command) => runCameraCommand(rig, command))
+}
+
+/**
+ * A press or a wheel on the globe canvas moves the camera through Cesium's
+ * own controller, not through requestCamera: count it as a camera move, so a
+ * LOCATE still waiting for its fix does not fly away from where the user just
+ * dragged. Hovering is not a move. Returns the unbind for the globe teardown.
+ */
+export function bindCameraIntentInputs(
+  canvas: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>,
+): () => void {
+  const note = () => noteCameraIntent()
+  canvas.addEventListener('pointerdown', note)
+  canvas.addEventListener('wheel', note, { passive: true })
+  return () => {
+    canvas.removeEventListener('pointerdown', note)
+    canvas.removeEventListener('wheel', note)
+  }
 }

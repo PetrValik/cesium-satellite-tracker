@@ -17,7 +17,7 @@ import { TrackingVisuals } from '../../features/tracking/TrackingVisuals'
 import launchSites from '../../data/launchSites.json'
 import ports from '../../data/ports.json'
 import { rendererStep } from './buildFailure'
-import { bindCameraCommands } from './cameraCommands'
+import { bindCameraCommands, bindCameraIntentInputs } from './cameraCommands'
 import { ConstellationFeed } from './constellationFeed'
 import { GlobeFollow } from './follow'
 import { startFrameLoop, type FrameCarry } from './frameLoop'
@@ -154,6 +154,7 @@ export function createGlobe(container: HTMLElement, options: GlobeOptions): Glob
     // After GlobeFollow: teardown runs newest first, so the HUD's camera
     // commands are unbound before the follow and the rig are disposed.
     teardown.push(bindCameraCommands(rig))
+    teardown.push(bindCameraIntentInputs(viewer.canvas))
     const health = own(watchRendererHealth(viewer, options.onRendererLost))
     own(
       new TapPicker(
