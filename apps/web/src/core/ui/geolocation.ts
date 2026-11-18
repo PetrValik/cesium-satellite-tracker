@@ -2,6 +2,8 @@
  * Device position for the HUD (LOCATE ME). Browser geolocation stays out of
  * the engine; this wraps the callback API in a Promise that always resolves.
  */
+import type { CameraCommand } from './cameraStore'
+
 export type LocateError = 'denied' | 'unavailable' | 'timeout' | 'unsupported'
 
 export type LocateResult =
@@ -54,4 +56,50 @@ const LOCATE_ERROR_LABELS: Record<LocateError, string> = {
 /** The short HUD message shown beside the LOCATE button. */
 export function locateErrorLabel(e: LocateError): string {
   return LOCATE_ERROR_LABELS[e]
+}
+
+/** LOCATE flies to this height above the device: a regional view. */
+export const LOCATE_HEIGHT_M = 500_000
+/** A fix arriving later than this after the tap no longer flies. */
+export const LOCATE_MAX_AGE_MS = 15_000
+
+/** A fix that came too late to act on: not an error, so the HUD shows nothing. */
+export type LocateOutcome = LocateResult | { ok: false; error: 'stale' }
+
+export interface LocateFlight {
+  /** Sends the flyTo (requestCamera). */
+  request: (command: CameraCommand) => void
+  /** The camera request counter (cameraRequestSeq). */
+  seq: () => number
+  /** Whether the follow lock is on. */
+  following: () => boolean
+  /** A monotonic clock in ms (performance.now). */
+  nowMs: () => number
+  heightM: number
+  maxAgeMs?: number
+}
+
+/**
+ * LOCATE ME: ask for the device position and fly there, but only while the
+ * tap is still the user's latest camera intent. A permission prompt can stay
+ * open indefinitely; if meanwhile another camera command was requested, the
+ * follow lock changed (picking a ship engages it), or more than `maxAgeMs`
+ * passed, the fix resolves as `stale` and nothing flies. Errors are returned
+ * as they come, stale or not.
+ */
+export async function locateAndFly(geo: GeoSource | undefined, flight: LocateFlight): Promise<LocateOutcome> {
+  const seqAtTap = flight.seq()
+  const followingAtTap = flight.following()
+  const tapMs = flight.nowMs()
+  const result = await locateDevice(geo)
+  if (!result.ok) return result
+  if (
+    flight.seq() !== seqAtTap ||
+    flight.following() !== followingAtTap ||
+    flight.nowMs() - tapMs > (flight.maxAgeMs ?? LOCATE_MAX_AGE_MS)
+  ) {
+    return { ok: false, error: 'stale' }
+  }
+  flight.request({ kind: 'flyTo', lonDeg: result.lonDeg, latDeg: result.latDeg, heightM: flight.heightM })
+  return result
 }

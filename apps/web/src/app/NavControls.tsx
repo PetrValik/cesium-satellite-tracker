@@ -6,11 +6,10 @@
  * rest of the HUD.
  */
 import { useEffect, useRef, useState } from 'react'
-import { requestCamera, useCameraHeading } from '../core/ui/cameraStore'
-import { locateDevice, locateErrorLabel } from '../core/ui/geolocation'
+import { cameraRequestSeq, requestCamera, useCameraHeading } from '../core/ui/cameraStore'
+import { useFollow } from '../core/ui/followStore'
+import { locateAndFly, locateErrorLabel, LOCATE_HEIGHT_M } from '../core/ui/geolocation'
 
-/** LOCATE flies to this height above the device: a regional view. */
-const LOCATE_HEIGHT_M = 500_000
 /** How long a locate error stays beside the button. */
 const LOCATE_MESSAGE_MS = 4_000
 
@@ -52,24 +51,24 @@ function LocateButton() {
     clearTimeout(timer.current)
     setPending(true)
     setMessage({ text: 'LOCATING…', error: false })
-    void locateDevice('geolocation' in navigator ? navigator.geolocation : undefined).then(
-      (result) => {
-        setPending(false)
-        if (result.ok) {
-          setMessage(null)
-          // Fly even if the controls unmounted meanwhile: the user asked.
-          requestCamera({
-            kind: 'flyTo',
-            lonDeg: result.lonDeg,
-            latDeg: result.latDeg,
-            heightM: LOCATE_HEIGHT_M,
-          })
-          return
-        }
-        setMessage({ text: locateErrorLabel(result.error), error: true })
-        timer.current = setTimeout(() => setMessage(null), LOCATE_MESSAGE_MS)
-      },
-    )
+    // Flies even if the controls unmounted meanwhile (the user asked), but
+    // not once a later camera command, a follow-lock change or 15 s has
+    // overtaken the tap: that fix resolves as `stale` and shows nothing.
+    void locateAndFly('geolocation' in navigator ? navigator.geolocation : undefined, {
+      request: requestCamera,
+      seq: cameraRequestSeq,
+      following: () => useFollow.getState().following,
+      nowMs: () => performance.now(),
+      heightM: LOCATE_HEIGHT_M,
+    }).then((result) => {
+      setPending(false)
+      if (result.ok || result.error === 'stale') {
+        setMessage(null)
+        return
+      }
+      setMessage({ text: locateErrorLabel(result.error), error: true })
+      timer.current = setTimeout(() => setMessage(null), LOCATE_MESSAGE_MS)
+    })
   }
 
   return (

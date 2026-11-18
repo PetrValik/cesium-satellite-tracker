@@ -10,6 +10,7 @@ import { useFollow } from '../../core/ui/followStore'
 import { useMode } from '../../core/ui/modeStore'
 import { useSatellites } from '../../core/ui/satelliteStore'
 import { transportVisibleNow } from '../../core/ui/transport'
+import { cameraRequestSeq } from '../../core/ui/cameraStore'
 import { useAircraft } from '../../features/airspace/aircraftStore'
 import { useShips } from '../../features/maritime/shipsStore'
 import { GlobeFollow, orbitalFollowRangeM, releasesFollow } from './follow'
@@ -116,6 +117,18 @@ describe('GlobeFollow', () => {
     follow.liveSelected()
     expect(rig.follow).toHaveBeenCalledTimes(2)
     expect(rig.unfollow).not.toHaveBeenCalled()
+  })
+
+  it('pointing the lock at a target counts as a camera intent (a pending LOCATE goes stale)', () => {
+    const { follow } = fakes()
+    disposers.push(() => follow.dispose())
+    useShips.setState({ selectedMmsi: SHIP.mmsi })
+    const before = cameraRequestSeq()
+    follow.liveSelected() // engages the lock
+    const engaged = cameraRequestSeq()
+    expect(engaged).toBeGreaterThan(before)
+    follow.liveSelected() // re-points it, `following` stays true
+    expect(cameraRequestSeq()).toBeGreaterThan(engaged)
   })
 
   it('clearing a domain the lock does not ride keeps it, whatever the focused mode', () => {

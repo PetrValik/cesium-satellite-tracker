@@ -2,6 +2,7 @@ import { Cartesian3 } from 'cesium'
 import type { Aircraft, Ship } from '@orbital-ops/shared'
 import type { CameraRig } from '../../core/engine/CameraRig'
 import type { WorldDecal } from '../../core/engine/WorldDecal'
+import { noteCameraIntent } from '../../core/ui/cameraStore'
 import { useFollow } from '../../core/ui/followStore'
 import { useMode, type OpsMode } from '../../core/ui/modeStore'
 import { aircraftPositionAt, type AircraftPosition } from '../../features/airspace/aircraftMotion'
@@ -115,6 +116,9 @@ export class GlobeFollow {
       }
       this._rig.follow(this._aircraftTarget, AIRCRAFT_FOLLOW_RANGE_M)
     }
+    // The camera now rides a new target: a LOCATE still waiting for its fix
+    // must not fly away from it (core/ui/geolocation locateAndFly).
+    noteCameraIntent()
     this._followed = mode
   }
 
