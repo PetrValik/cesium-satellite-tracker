@@ -1,12 +1,19 @@
 import type { SatRec } from 'satellite.js'
 import {
+  altitudeSpanKm,
   classifyOrbit,
   createSatrec,
   createSatStateEcef,
+  internationalDesignator,
+  isSunlit,
   orbitalPeriodMinutes,
+  perigeeApogeeKm,
   propagateEcef,
   sampleOrbitRingEci,
+  sunPositionEciKm,
+  tleEpochMs,
   type SatStateEcef,
+  type Vec3Like,
 } from '../../lib/orbital'
 import { GroundTrackWindow } from './GroundTrackWindow'
 import { useTelemetry } from './telemetryStore'
@@ -65,6 +72,8 @@ export class SelectedSatellite {
   private _lastTelemetryMs = 0
   /** Reused propagation state: the seed in `select()` and every `frame()`. */
   private readonly _state = createSatStateEcef()
+  /** The Sun's ECI km position, re-filled at each ~5 Hz telemetry push (the SUNLIT test). */
+  private readonly _sunEciKm: Vec3Like = { x: 0, y: 0, z: 0 }
 
   constructor(visuals: SatelliteVisuals) {
     this._visuals = visuals
@@ -93,11 +102,22 @@ export class SelectedSatellite {
     this._satrec = satrec
     this._groundWindow = new GroundTrackWindow(satrec)
     this._name = sat.name
+    // Orbit facts, once per selection: the span sweep is ~95 SGP4 calls for a LEO.
+    const { perigeeKm, apogeeKm } = perigeeApogeeKm(satrec)
+    const { lowKm, highKm } = altitudeSpanKm(satrec, epochMs)
+    const intl = internationalDesignator(sat.tle1)
     useTelemetry.getState().update({
       noradId: sat.noradId,
       name: sat.name,
       orbitClass: classifyOrbit(satrec),
       periodMinutes: orbitalPeriodMinutes(satrec),
+      perigeeKm,
+      apogeeKm,
+      lowKm,
+      highKm,
+      tleEpochMs: tleEpochMs(satrec),
+      launchYear: intl?.launchYear ?? null,
+      designator: intl?.designator ?? null,
     })
     this._refreshRing(satrec, epochMs)
     return propagateEcef(satrec, epochMs, this._state)
@@ -127,6 +147,8 @@ export class SelectedSatellite {
         velocityKmS: live.velocityKmS,
         latDeg: live.latDeg,
         lonDeg: live.lonDeg,
+        // Sun and satellite in ECI km at the propagated instant; only at this ~5 Hz push.
+        sunlit: isSunlit(live.positionEciKm, sunPositionEciKm(epochMs, this._sunEciKm)),
       })
     }
     return live
