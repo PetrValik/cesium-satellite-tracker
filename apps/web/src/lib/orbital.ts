@@ -49,6 +49,8 @@ const COARSE_STEP_MS = 30_000
 const REFINE_TOLERANCE_MS = 1_000
 /** Passes peaking below this elevation are discarded. */
 export const MIN_MAX_ELEVATION_DEG = 5
+/** A pass is naked-eye only while the observer's Sun is below this elevation (end of civil twilight). */
+export const NAKED_EYE_SUN_MAX_ELEVATION_DEG = -6
 /** Safety cap on the number of predicted passes per request. */
 const MAX_PASSES = 50
 
@@ -483,6 +485,8 @@ interface LookSample {
   azDeg: number
   elDeg: number
   rangeKm: number
+  /** SGP4's ECI km position at the same instant (its own result object, not copied). */
+  eciKm: EciVec3<number>
 }
 
 /** Look angles at one instant; null when propagation fails. */
@@ -505,7 +509,7 @@ function lookAnglesAt(
   if (!Number.isFinite(elDeg) || !Number.isFinite(azDeg) || !Number.isFinite(look.rangeSat)) {
     return null
   }
-  return { azDeg, elDeg, rangeKm: look.rangeSat }
+  return { azDeg, elDeg, rangeKm: look.rangeSat, eciKm: pv.position }
 }
 
 /**
@@ -513,6 +517,11 @@ function lookAnglesAt(
  * Coarse 30 s elevation scan; horizon crossings refined by bisection to ≤1 s;
  * max elevation refined by ternary search. Passes peaking below 5° are
  * dropped; at most 50 passes are returned.
+ *
+ * Each pass also carries its rise / set azimuth (first / last sample at or
+ * above the horizon) and `nakedEye`: some such sample has the satellite out of
+ * the Earth's shadow (`isSunlit`) while the observer's Sun is below
+ * `NAKED_EYE_SUN_MAX_ELEVATION_DEG`. Both are decided on the ~30 s samples.
  *
  * `noradId` defaults to the satrec's parsed catalog number; a caller holding
  * the authoritative catalog id may pass it explicitly.
@@ -563,6 +572,7 @@ export function predictPasses(
     let maxElDeg = elAt(maxElMs)
 
     const samples: PassSample[] = []
+    let nakedEye = false
     const pushSample = (tMs: number): void => {
       const look = lookAnglesAt(satrec, observerGd, tMs)
       if (!look) return
@@ -571,12 +581,35 @@ export function predictPasses(
         maxElDeg = look.elDeg
         maxElMs = tMs
       }
+      if (!nakedEye && look.elDeg >= 0) {
+        // The sky test first: a daylight sample needs no shadow test. Sun and
+        // satellite are both ECI km of this instant.
+        sunPositionEciKm(tMs, scratchSunEciKm)
+        nakedEye =
+          sunElevationFromDeg(observerGd, scratchSunEciKm, tMs) < NAKED_EYE_SUN_MAX_ELEVATION_DEG &&
+          isSunlit(look.eciKm, scratchSunEciKm)
+      }
     }
     for (let t = aosMs; t < losMs; t += COARSE_STEP_MS) pushSample(t)
     pushSample(losMs)
 
     if (maxElDeg < MIN_MAX_ELEVATION_DEG) return
-    passes.push({ noradId, aosMs, losMs, maxElDeg, maxElMs, samples })
+
+    let riseAzDeg = Number.NaN
+    for (let i = 0; i < samples.length; i++) {
+      if (samples[i].elDeg >= 0) {
+        riseAzDeg = samples[i].azDeg
+        break
+      }
+    }
+    let setAzDeg = Number.NaN
+    for (let i = samples.length - 1; i >= 0; i--) {
+      if (samples[i].elDeg >= 0) {
+        setAzDeg = samples[i].azDeg
+        break
+      }
+    }
+    passes.push({ noradId, aosMs, losMs, maxElDeg, maxElMs, samples, riseAzDeg, setAzDeg, nakedEye })
   }
 
   const endMs = startMs + hours * 3_600_000
