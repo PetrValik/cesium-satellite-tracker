@@ -17,6 +17,7 @@ import * as cesium from 'cesium'
 import { constants, eciToEcf, gstime, jday, propagate, sunPos } from 'satellite.js'
 import {
   altitudeSpanKm,
+  altitudeSpanStepMs,
   createSatrec,
   createSatStateEcef,
   isSunlit,
@@ -79,6 +80,32 @@ describe('altitudeSpanKm', () => {
       expect(alt).toBeGreaterThanOrEqual(lowKm - 0.5)
       expect(alt).toBeLessThanOrEqual(highKm + 0.5)
     }
+  })
+  it.each([
+    ['GEO', GEO_TLE2],
+    ['HEO', HEO_TLE2],
+  ] as const)('%s span matches a 5 s SGP4 sweep within 50 m', (_name, tle2) => {
+    const satrec = createSatrec(ISS_TLE1, tle2)!
+    const start = tleEpochMs(satrec)
+    const { lowKm, highKm } = altitudeSpanKm(satrec, start)
+    const s = createSatStateEcef()
+    let min = Infinity
+    let max = -Infinity
+    for (let ms = start; ms <= start + orbitalPeriodMinutes(satrec) * 60_000; ms += 5_000) {
+      if (!propagateEcef(satrec, ms, s)) continue
+      min = Math.min(min, s.altKm)
+      max = Math.max(max, s.altKm)
+    }
+    expect(Math.abs(lowKm - min)).toBeLessThan(0.05)
+    expect(Math.abs(highKm - max)).toBeLessThan(0.05)
+  })
+})
+
+describe('altitudeSpanStepMs', () => {
+  it('samples every minute, but never more than 360 times an orbit', () => {
+    expect(altitudeSpanStepMs(92.9)).toBe(60_000)
+    expect(altitudeSpanStepMs(1436)).toBeCloseTo(239_333.33, 1)
+    expect(altitudeSpanStepMs(19_728)).toBe(3_288_000) // a 13.7-day orbit
   })
 })
 
