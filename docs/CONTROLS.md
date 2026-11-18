@@ -107,8 +107,10 @@ short landscape screen (359 px tall or less) a column on the right edge beside
 the mode tabs. On a phone they hide while a sheet is open. A failed locate shows
 `LOCATION DENIED`, `LOCATION UNAVAILABLE`, `LOCATION TIMED OUT` or `NO LOCATION
 IN THIS BROWSER` next to the controls for about 4 s. A position that arrives
-after you moved the camera with another button, changed or re-pointed the
-follow lock, or more than 15 s after the tap is dropped (no flight). Keys `0` and `R` work while the controls are hidden.
+after you moved the camera yourself (another nav button, W A S D / Q E, a drag,
+pinch or wheel on the globe) or changed or re-pointed the follow lock is
+dropped silently; one that only took more than 15 s (a slow permission prompt)
+shows `LOCATED TOO LATE — TAP AGAIN`. Keys `0` and `R` work while the controls are hidden.
 
 ## Camera follow-lock
 

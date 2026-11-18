@@ -37,8 +37,10 @@ export function cameraRequestSeq(): number {
 
 /**
  * Count a camera move that bypasses requestCamera: the follow lock engaging
- * on, or re-pointing to, a target (app/globe/follow), so a pending LOCATE
- * never flies away from a lock the user just set.
+ * on, or re-pointing to, a target (app/globe/follow), a camera-movement key
+ * (app/globe/globeKeys), or a press / wheel on the globe canvas
+ * (app/globe/cameraCommands bindCameraIntentInputs), so a pending LOCATE
+ * never flies away from where the user just put the camera.
  */
 export function noteCameraIntent(): void {
   requested++

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../lib/api', () => ({ api: {}, ApiError: class extends Error {} }))
 
 import { useSimClock } from '../../core/sim/simClock'
-import { bindCameraHandler, type CameraCommand } from '../../core/ui/cameraStore'
+import { bindCameraHandler, cameraRequestSeq, type CameraCommand } from '../../core/ui/cameraStore'
 import { useFollow } from '../../core/ui/followStore'
 import { useHud } from '../../core/ui/hudStore'
 import { useMode } from '../../core/ui/modeStore'
@@ -50,6 +50,16 @@ beforeEach(() => {
 })
 
 describe('globe keys', () => {
+  it('a held camera-movement key counts as a camera move (a pending LOCATE goes stale)', () => {
+    const { onKeyDown } = setup()
+    const before = cameraRequestSeq()
+    onKeyDown(key('KeyW'))
+    expect(cameraRequestSeq()).toBeGreaterThan(before)
+    const afterMove = cameraRequestSeq()
+    onKeyDown(key('KeyN')) // not a camera move
+    expect(cameraRequestSeq()).toBe(afterMove)
+  })
+
   it('0 flies home and R levels north-up; Ctrl+R, repeats and typing pass', () => {
     const { onKeyDown } = setup()
     const commands: CameraCommand[] = []
