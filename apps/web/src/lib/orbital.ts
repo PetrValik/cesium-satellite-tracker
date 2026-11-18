@@ -16,6 +16,7 @@
  */
 
 import {
+  constants,
   twoline2satrec,
   propagate,
   gstime,
@@ -29,8 +30,14 @@ import type { ObserverGeo, OrbitClass, PassPrediction, PassSample } from './prot
 const KM_TO_M = 1000
 const RAD_TO_DEG = 180 / Math.PI
 const DEG_TO_RAD = Math.PI / 180
+/** Mean Earth radius, for the footprint only. Not the SGP4 radius below. */
 const EARTH_RADIUS_M = 6_371_000
+/** SGP4's own (WGS-72) equatorial radius, 6378.135 km: perigee/apogee and the shadow cylinder. */
+const EARTH_EQUATORIAL_RADIUS_KM = constants.earthRadius
 const MS_PER_MINUTE = 60_000
+const MS_PER_DAY = 86_400_000
+/** Julian date of the Unix epoch (1970-01-01T00:00Z). */
+const JD_UNIX_EPOCH = 2_440_587.5
 
 /** Coarse elevation-scan step for pass prediction. */
 const COARSE_STEP_MS = 30_000
@@ -134,6 +141,74 @@ export function createSatrec(tle1: string, tle2: string): SatRec | null {
 /** Orbital period in minutes. satrec.no is mean motion in radians/minute. */
 export function orbitalPeriodMinutes(satrec: SatRec): number {
   return (2 * Math.PI) / satrec.no
+}
+
+/** Perigee and apogee heights, km above the equatorial radius. */
+export interface PerigeeApogee {
+  perigeeKm: number
+  apogeeKm: number
+}
+
+/**
+ * Perigee / apogee from the mean elements: a·(1 ∓ e) − R, in km, where a is
+ * `satrec.a` (Earth radii, set by `sgp4init`) scaled by R = 6378.135 km, SGP4's
+ * equatorial radius. That is the published convention (height above the
+ * equator's radius), so for an inclined orbit it reads lower than the geodetic
+ * altitude NOW shows — `altitudeSpanKm` is that one.
+ */
+export function perigeeApogeeKm(satrec: SatRec): PerigeeApogee {
+  const R = EARTH_EQUATORIAL_RADIUS_KM
+  const aKm = satrec.a * R
+  const e = satrec.ecco
+  return { perigeeKm: aKm * (1 - e) - R, apogeeKm: aKm * (1 + e) - R }
+}
+
+/**
+ * Lowest and highest geodetic altitude (km above the WGS-84 ellipsoid, the
+ * `altKm` NOW shows) over one SGP4 orbit from `startMs`: `propagateEcef` every
+ * 60 s for k = 0…ceil(period in minutes), so the live value always lies inside
+ * the span. Failed samples are skipped; with none left both are NaN. ~95 SGP4
+ * calls for a LEO, ~1 440 for a GEO: call it once per selection, never per frame.
+ */
+export function altitudeSpanKm(satrec: SatRec, startMs: number): { lowKm: number; highKm: number } {
+  const steps = Math.ceil(orbitalPeriodMinutes(satrec))
+  const state = createSatStateEcef()
+  let lowKm = Infinity
+  let highKm = -Infinity
+  for (let k = 0; k <= steps; k++) {
+    if (!propagateEcef(satrec, startMs + k * MS_PER_MINUTE, state)) continue
+    if (state.altKm < lowKm) lowKm = state.altKm
+    if (state.altKm > highKm) highKm = state.altKm
+  }
+  if (lowKm > highKm) return { lowKm: Number.NaN, highKm: Number.NaN }
+  return { lowKm, highKm }
+}
+
+/** TLE epoch (line 1 cols 19-32) as Unix ms, UTC, from the parsed `satrec.jdsatepoch`. */
+export function tleEpochMs(satrec: SatRec): number {
+  return (satrec.jdsatepoch - JD_UNIX_EPOCH) * MS_PER_DAY
+}
+
+export interface IntlDesignator {
+  /** Four-digit launch year. */
+  launchYear: number
+  /** COSPAR form, e.g. '1998-067A'. */
+  designator: string
+}
+
+const INTL_DESIGNATOR_RE = /^(\d{2})(\d{3})([A-Z]{1,3})$/
+
+/**
+ * International designator from TLE line 1 cols 10-17 (`98067A` → 1998,
+ * '1998-067A'). Two-digit years 57–99 are 19xx and 00–56 are 20xx (Sputnik
+ * launched in 1957). Null for a blank, garbled or truncated field.
+ */
+export function internationalDesignator(tle1: string): IntlDesignator | null {
+  const match = INTL_DESIGNATOR_RE.exec(tle1.slice(9, 17).trimEnd())
+  if (!match) return null
+  const yy = Number(match[1])
+  const launchYear = yy >= 57 ? 1900 + yy : 2000 + yy
+  return { launchYear, designator: `${launchYear}-${match[2]}${match[3]}` }
 }
 
 /**
