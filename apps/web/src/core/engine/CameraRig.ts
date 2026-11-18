@@ -221,7 +221,12 @@ export class CameraRig {
       const target = this._getTarget()
       if (target === null) return
       Transforms.eastNorthUpToFixedFrame(target, undefined, scratchTransform)
-      scratchLevel.range = Cartesian3.magnitude(camera.position) // target-local
+      // An engaged lock whose first frame has not snapped the offset yet is
+      // still in world space (transform IDENTITY): use the range it is about
+      // to get. Otherwise the distance to the target, read frame-free.
+      scratchLevel.range = this._needsInitialOffset
+        ? this._initialRangeM
+        : Cartesian3.distance(camera.positionWC, target)
       camera.lookAtTransform(scratchTransform, scratchLevel)
       this._needsInitialOffset = false
       return
