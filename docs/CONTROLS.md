@@ -32,6 +32,13 @@ The layer toggles (below) sit under the mode content in every mode. Every
 legend swatch and colored label in the panels (vessel type, aircraft category,
 orbit class) uses the same colors as the globe, including your COLORS choices.
 
+Default colours mean the same thing in every domain: red military, blue civil
+aircraft / passenger vessels, green cargo, violet tanker, teal fishing, pink
+high-speed craft, grey other (and aircraft on the ground). Satellites: LEO ice,
+MEO lime, GEO gold, HEO pink. Amber is never a default; it marks the selected or
+followed object. Colours you changed yourself survive the switch to these
+defaults; RESET in COLORS restores the defaults.
+
 ## Mouse
 
 | Input | Action |
