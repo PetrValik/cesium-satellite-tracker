@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Satellite } from '@orbital-ops/shared'
-import { useSatellites } from '../../core/ui/satelliteStore'
 import { api } from '../../lib/api'
 import { formatCount } from '../../lib/format'
+import { pickSearchResult } from './searchPick'
 import { useCatalog } from './catalogStore'
 
 /** Left-rail content for ORBITAL mode: satellite groups + search. */
@@ -59,8 +59,6 @@ function SearchBox() {
   const debounce = useRef<ReturnType<typeof setTimeout>>(undefined)
   // Monotonic request id: a slow early response must not overwrite a later one.
   const searchSeq = useRef(0)
-  const registerSat = useSatellites((s) => s.registerSat)
-  const select = useSatellites((s) => s.select)
 
   useEffect(() => () => clearTimeout(debounce.current), [])
 
@@ -94,8 +92,7 @@ function SearchBox() {
   }
 
   const pick = (sat: Satellite) => {
-    registerSat(sat)
-    select(sat.noradId)
+    pickSearchResult(sat)
     setOpen(false)
     setQ(sat.name)
   }
