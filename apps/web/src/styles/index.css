@@ -28,6 +28,7 @@
 @import './controls.css';
 @import './status-line.css';
 @import './rail.css';
+@import './legend.css';
 @import './search.css';
 @import './telemetry.css';
 @import './transport.css';

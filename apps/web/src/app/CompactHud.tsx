@@ -6,8 +6,8 @@ import { bindSheetsToSelection, sheetId, visibleSheet } from './compactSheets'
 import { HelpButton } from './HelpOverlay'
 import { HideControlsButton } from './HudVisibility'
 import { LayersPanel } from './LayersPanel'
-import { RailPicture } from './LeftRail'
-import { useRailPicture } from './railPicture'
+import { RailPictures } from './LeftRail'
+import { pictureDockLabel, useRailPictures } from './railPicture'
 import { SelectionChip } from './SelectionChip'
 import { SelectionPanels } from './SelectionPanels'
 import { useHasSelectionInMode } from './selectionMode'
@@ -71,12 +71,12 @@ export function CompactHud() {
   const transportOn = useTransportVisible()
   const sheet = useSheet((s) => s.sheet)
   const toggle = useSheet((s) => s.toggle)
-  const picture = useRailPicture()
+  const dockLabel = pictureDockLabel(useRailPictures())
   const hasSelection = useHasSelectionInMode()
 
   useEffect(() => bindSheetsToSelection(), [])
 
-  const openSheet = visibleSheet(sheet, picture !== null, hasSelection)
+  const openSheet = visibleSheet(sheet, dockLabel !== null, hasSelection)
 
   // The store mirrors the screen: a sheet that cannot render is closed, not
   // left pending, and leaving the compact layout (rotation / resize across
@@ -92,9 +92,9 @@ export function CompactHud() {
 
   return (
     <div className="compact-cluster">
-      {openSheet === 'picture' && picture !== null && (
-        <Sheet sheet="picture" title={picture.label}>
-          <RailPicture />
+      {openSheet === 'picture' && dockLabel !== null && (
+        <Sheet sheet="picture" title={dockLabel}>
+          <RailPictures />
         </Sheet>
       )}
       {openSheet === 'layers' && (
@@ -119,14 +119,14 @@ export function CompactHud() {
         {/* the chip stays under the details sheet as its handle */}
         {openSheet !== 'picture' && openSheet !== 'layers' && <SelectionChip />}
         <nav className="hud-dock" aria-label="HUD panels">
-          {picture !== null && (
+          {dockLabel !== null && (
             <button
               className={`hud-button dock-button${openSheet === 'picture' ? ' is-active' : ''}`}
               aria-expanded={openSheet === 'picture'}
               aria-controls={sheetId('picture')}
               onClick={() => toggle('picture')}
             >
-              {picture.label}
+              {dockLabel}
             </button>
           )}
           <button

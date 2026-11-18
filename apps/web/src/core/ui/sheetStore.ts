@@ -5,7 +5,7 @@ import { useMode } from './modeStore'
 /**
  * Compact (phone) HUD sheets. The desktop side panels become sheets that
  * open above the dock, one at a time:
- * - `picture` — the focused mode's left-rail content (catalog / vessel / air picture)
+ * - `picture` — the left-rail pictures of every visible domain (one LEGEND sheet with two or more)
  * - `layers`  — the LAYERS toggles
  * - `details` — the selection panels the desktop shows in the right stack
  * Not persisted: a reload always opens on the bare globe.

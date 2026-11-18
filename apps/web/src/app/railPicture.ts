@@ -71,11 +71,3 @@ export function legendCount(
 ): string {
   return mode !== 'orbital' && !simLive ? 'SUSP' : formatCount(counts[mode])
 }
-
-/**
- * The focused domain's picture, or null while that domain's layer is off.
- * Kept until the stacked legend (LeftRail / CompactHud) replaces its callers.
- */
-export function useRailPicture(): RailPictureEntry | null {
-  return useMode((s) => (isDomainVisible(s, s.mode) ? PICTURES[s.mode] : null))
-}
