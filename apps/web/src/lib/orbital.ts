@@ -4,9 +4,13 @@
  *   - satellite.js speaks ECI (TEME) kilometres and km/s; geodetic radians.
  *   - Positions leave this module as ECEF **metres** (`propagateEcef`,
  *     `propagateBatchEcefM`, `rotateEciKmToEcefM`) and angles as **degrees**;
- *     velocity, altitude and range stay km-based. The one ECI-km export is
- *     `sampleOrbitRingEci`: the renderer rotates that closed ring by each
- *     frame's GMST through `rotateEciKmToEcefM`, never by hand.
+ *     velocity, altitude and range stay km-based. The ECI-km exports are
+ *     `sampleOrbitRingEci`, `SatStateEcef.positionEciKm` and
+ *     `sunPositionEciKm`. They feed frame-free maths and are never drawn: the
+ *     renderer rotates the closed ring by each frame's GMST through
+ *     `rotateEciKmToEcefM`, never by hand, and the Earth-shadow test
+ *     `isSunlit` compares satellite and Sun in ECI, so no position is ever
+ *     converted back from metres.
  *   - Every position goes ECI km → ECEF m through ONE function, `writeEcefM`
  *     (GMST rotation + `KM_TO_M`); callers never scale. The only other km→m
  *     is the scalar altitude inside `footprintRadiusM`.
@@ -60,6 +64,11 @@ const scratchEcefM: [number, number, number] = [0, 0, 0]
 export interface SatStateEcef {
   /** ECEF position [x, y, z], meters. */
   positionEcefM: [number, number, number]
+  /**
+   * ECI (TEME) position, km, at the same instant: the SGP4 vector as returned,
+   * for frame-free maths (the Earth-shadow test). Never drawn.
+   */
+  positionEciKm: Vec3Like
   /** Speed (magnitude of ECI velocity), km/s. */
   velocityKmS: number
   latDeg: number
@@ -81,7 +90,15 @@ type NumericBuffer = { [index: number]: number }
 
 /** A zeroed state to pass as `out` to `propagateEcef` and reuse across calls. */
 export function createSatStateEcef(): SatStateEcef {
-  return { positionEcefM: [0, 0, 0], velocityKmS: 0, latDeg: 0, lonDeg: 0, altKm: 0, gmstRad: 0 }
+  return {
+    positionEcefM: [0, 0, 0],
+    positionEciKm: { x: 0, y: 0, z: 0 },
+    velocityKmS: 0,
+    latDeg: 0,
+    lonDeg: 0,
+    altKm: 0,
+    gmstRad: 0,
+  }
 }
 
 function isFiniteVec(v: EciVec3<number>): boolean {
@@ -255,6 +272,9 @@ export function propagateEcef(
   const state = out ?? createSatStateEcef()
   const p = pv.position
   writeEcefM(p.x, p.y, p.z, Math.cos(gmstRad), Math.sin(gmstRad), state.positionEcefM, 0)
+  state.positionEciKm.x = p.x
+  state.positionEciKm.y = p.y
+  state.positionEciKm.z = p.z
   state.velocityKmS = Math.hypot(pv.velocity.x, pv.velocity.y, pv.velocity.z)
   state.latDeg = latDeg
   state.lonDeg = lonDeg
@@ -389,6 +409,76 @@ export function footprintRadiusM(altKm: number): number {
   return EARTH_RADIUS_M * Math.acos(EARTH_RADIUS_M / (EARTH_RADIUS_M + altKm * KM_TO_M))
 }
 
+/** One astronomical unit, km. */
+const AU_KM = 149_597_870.7
+/** The Sun's ECI km position for `sunElevationDeg` and `predictPasses`; re-filled before every use. */
+const scratchSunEciKm: Vec3Like = { x: 0, y: 0, z: 0 }
+
+/**
+ * The Sun's geocentric position at `epochMs`, ECI km, written into `out` and
+ * returned; allocates nothing. Do NOT swap in satellite.js `sunPos`: 6.0.2
+ * applies deg2rad to the mean anomaly's rate term only, which leaves it ~1.4°
+ * off. Agrees with Cesium's Sun to 0.36–0.37°, the J2000→date precession
+ * Cesium's no-EOP frame leaves out (orbital.crosscheck.test.ts).
+ */
+export function sunPositionEciKm(epochMs: number, out: Vec3Like): Vec3Like {
+  // Vallado low-precision Sun, the series satellite.js 6.0.2 `sunPos` uses, with the mean anomaly
+  // converted as a whole (sunPos applies deg2rad to the rate term only: ~1° error). Mean equator and
+  // equinox of date, which matches TEME to < 0.01°; UTC is used for TT (69 s, < 0.001°).
+  const t = (epochMs / MS_PER_DAY + JD_UNIX_EPOCH - 2_451_545) / 36_525
+  const meanLongDeg = (280.46 + 36_000.77 * t) % 360
+  const m = ((357.5277233 + 35_999.05034 * t) * DEG_TO_RAD) % (2 * Math.PI)
+  const eclLon = (meanLongDeg + 1.914666471 * Math.sin(m) + 0.019994643 * Math.sin(2 * m)) * DEG_TO_RAD
+  const obliquity = (23.439291 - 0.0130042 * t) * DEG_TO_RAD
+  const rKm = (1.000140612 - 0.016708617 * Math.cos(m) - 0.000139589 * Math.cos(2 * m)) * AU_KM
+  out.x = rKm * Math.cos(eclLon)
+  out.y = rKm * Math.cos(obliquity) * Math.sin(eclLon)
+  out.z = rKm * Math.sin(obliquity) * Math.sin(eclLon)
+  return out
+}
+
+/**
+ * Earth-shadow test, cylindrical umbra: false when `sat` is behind the Earth
+ * (a sphere of SGP4's R = 6378.135 km) and inside the cylinder it casts away
+ * from the Sun. Both vectors must share one frame (ECI km) and one instant;
+ * only the Sun's direction is used (a point at infinity). No penumbra: its
+ * edge moves the flag by ~8 s for the ISS. One dot product, no allocation.
+ */
+export function isSunlit(sat: Readonly<Vec3Like>, sun: Readonly<Vec3Like>): boolean {
+  const along = (sat.x * sun.x + sat.y * sun.y + sat.z * sun.z) / Math.hypot(sun.x, sun.y, sun.z)
+  if (along >= 0) return true // day side of the terminator plane
+  const R = EARTH_EQUATORIAL_RADIUS_KM
+  return sat.x * sat.x + sat.y * sat.y + sat.z * sat.z - along * along > R * R // outside the shadow cylinder
+}
+
+/** An observer as satellite.js wants it: geodetic radians and height in km. */
+function toObserverGd(observer: ObserverGeo): GeodeticLocation {
+  return {
+    latitude: observer.latDeg * DEG_TO_RAD,
+    longitude: observer.lonDeg * DEG_TO_RAD,
+    height: observer.heightM / KM_TO_M, // satellite.js wants the observer height in km
+  }
+}
+
+/**
+ * Geometric elevation (degrees, no refraction) of the Sun already written into
+ * `sunEciKm` for `epochMs`, seen from `observerGd` (radians, km). The same
+ * path as the pass look angles: GMST of that instant → ECEF → look angles.
+ */
+function sunElevationFromDeg(
+  observerGd: GeodeticLocation,
+  sunEciKm: Readonly<Vec3Like>,
+  epochMs: number,
+): number {
+  const gmst = gstime(epochMs / MS_PER_DAY + JD_UNIX_EPOCH)
+  return ecfToLookAngles(observerGd, eciToEcf(sunEciKm, gmst)).elevation * RAD_TO_DEG
+}
+
+/** The Sun's geometric elevation over `observer` at `epochMs`, degrees (no refraction). */
+export function sunElevationDeg(observer: ObserverGeo, epochMs: number): number {
+  return sunElevationFromDeg(toObserverGd(observer), sunPositionEciKm(epochMs, scratchSunEciKm), epochMs)
+}
+
 interface LookSample {
   azDeg: number
   elDeg: number
@@ -434,11 +524,7 @@ export function predictPasses(
   hours: number,
   noradId: number = Number.parseInt(satrec.satnum, 10) || 0,
 ): PassPrediction[] {
-  const observerGd: GeodeticLocation = {
-    latitude: observer.latDeg * DEG_TO_RAD,
-    longitude: observer.lonDeg * DEG_TO_RAD,
-    height: observer.heightM / KM_TO_M, // satellite.js wants the observer height in km
-  }
+  const observerGd = toObserverGd(observer)
 
   const elAt = (tMs: number): number =>
     lookAnglesAt(satrec, observerGd, tMs)?.elDeg ?? -90
