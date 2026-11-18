@@ -1,7 +1,7 @@
 /**
  * Color settings: per-domain palettes persisted to localStorage
  * (core/ui/prefsStore), defaults restore via RESET. Each row's chip opens
- * the HUD-styled swatch popover (app/SwatchPopover).
+ * the inline swatch picker (app/SwatchPicker) under its row pair.
  */
 import { useCallback, useRef, useState } from 'react'
 import { SHIP_TYPES } from '@orbital-ops/shared'
@@ -10,7 +10,7 @@ import { usePrefs, type ColorPrefs } from '../core/ui/prefsStore'
 import { AIRCRAFT_CATEGORIES } from '../lib/aircraftCategories'
 import { ORBIT_CLASSES } from '../lib/protocol'
 import { HudDialog } from './HudDialog'
-import { SwatchPopover } from './SwatchPopover'
+import { SwatchPicker } from './SwatchPicker'
 
 function ColorRow({
   domain,
@@ -31,31 +31,34 @@ function ColorRow({
   const setColor = usePrefs((s) => s.setColor)
   const chipRef = useRef<HTMLButtonElement>(null)
 
-  const close = useCallback(
-    (refocus: boolean) => {
-      setOpenPicker(null)
-      if (refocus) chipRef.current?.focus()
-    },
-    [setOpenPicker],
-  )
+  const pickerId = `color-picker-${domain}-${colorKey}`
+  const close = useCallback(() => {
+    setOpenPicker(null)
+    chipRef.current?.focus()
+  }, [setOpenPicker])
 
+  // A fragment: the picker is a direct child of .color-grid, right after its
+  // opener, so it can span the grid under the row pair and Tab runs
+  // chip → swatches → HEX → next chip.
   return (
-    <div className="color-row">
-      <span className="color-row-label">{label}</span>
-      <button
-        ref={chipRef}
-        type="button"
-        className="color-chip"
-        style={{ background: value }}
-        title={value.toUpperCase()}
-        aria-label={`${label} color ${value.toUpperCase()}`}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        onClick={() => setOpenPicker(open ? null : id)}
-      />
+    <>
+      <div className="color-row">
+        <span className="color-row-label">{label}</span>
+        <button
+          ref={chipRef}
+          type="button"
+          className="color-chip"
+          style={{ background: value }}
+          title={value.toUpperCase()}
+          aria-label={`${label} color ${value.toUpperCase()}`}
+          aria-expanded={open}
+          aria-controls={open ? pickerId : undefined}
+          onClick={() => setOpenPicker(open ? null : id)}
+        />
+      </div>
       {open && (
-        <SwatchPopover
-          anchorRef={chipRef}
+        <SwatchPicker
+          id={pickerId}
           label={label}
           fieldName={`color-${domain}-${colorKey}-hex`}
           value={value}
@@ -63,7 +66,7 @@ function ColorRow({
           onClose={close}
         />
       )}
-    </div>
+    </>
   )
 }
 

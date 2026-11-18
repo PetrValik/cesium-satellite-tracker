@@ -5,6 +5,7 @@
 .color-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
+  grid-auto-flow: row dense; /* lets an open picker sit under its row pair */
   gap: var(--sp-1) var(--sp-4);
 }
 
@@ -23,10 +24,6 @@
 }
 
 /* ---- swatch picker (COLORS panel) ------------------------------- */
-/* Replaces input[type=color]: the native OS dialog is a white light-mode
-   popup that breaks the MFD illusion. The popover portals to <body> with
-   fixed positioning — the settings panel scrolls, and its backdrop-filter
-   + clip-path would trap and clip an absolutely positioned child. */
 
 .color-chip {
   width: 34px;
@@ -52,28 +49,30 @@
   }
 }
 
-.swatch-popover {
-  position: fixed;
-  top: 0;
-  left: 0;
-  visibility: hidden; /* revealed by JS once measured and placed */
-  z-index: 60; /* above the settings backdrop (50) */
-  padding: 10px;
+/* The picker follows its opener in the DOM and takes a whole row; dense
+   lets the opener's row partner backfill beside it, so the picker sits
+   under the pair. An inset well, not a floating popover: no shadow. */
+.swatch-picker {
+  position: relative; /* anchors the amber corner tick (panel.css) */
+  grid-column: 1 / -1;
+  margin: var(--sp-1) 0 var(--sp-2);
+  padding: var(--sp-2);
   border: 1px solid var(--hairline-strong);
   border-radius: var(--radius);
-  background: var(--panel-bg-solid);
-  box-shadow: var(--shadow-pop);
+  background: var(--input-bg);
+  scroll-margin-bottom: var(--sp-2); /* scrollIntoView keeps the gap below */
 }
 
-.swatch-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 20px);
-  gap: 6px;
-}
+/* 8 = SWATCH_COLUMNS (app/swatches.ts; swatches.test.ts reads this line).
+   360px phone: 318px dialog content (344px panel - 2 x 12px padding - 2 x 1px
+   border) - 18px picker chrome = 300px >= 8 x 32 + 7 x 6 = 298px; the 3px
+   selected ring fits the 6px gap and the 8px padding. */
+.swatch-grid { display: grid; grid-template-columns: repeat(8, minmax(var(--swatch), var(--swatch-max))); gap: var(--swatch-gap); }
 
 .swatch {
-  width: 20px;
-  height: 20px;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
   padding: 0;
   border: 1px solid var(--hairline);
   border-radius: var(--radius);
@@ -98,10 +97,32 @@
     0 0 0 3px var(--amber);
 }
 
-.swatch-hex {
+/* the base focus ring (offset 2px) lands on the selected ring's amber
+   pixel, so a focused swatch looked selected; 4px keeps them apart and
+   still clears the neighbour (6px gap) and the picker edge (8px padding) */
+.swatch:focus-visible {
+  outline-offset: 4px;
+}
+
+.swatch-hex-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
   margin-top: var(--sp-2);
-  text-align: center;
+}
+
+.swatch-hex-label {
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+  color: var(--text-dim);
+}
+
+/* overrides .hud-input's width: 100% (controls.css loads first);
+   11ch border-box leaves "#RRGGBB" + tracking room inside the padding */
+.swatch-hex {
+  width: 11ch;
   text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---- touch pointers ------------------------------------------------ */
@@ -112,13 +133,16 @@
     height: var(--tap-min);
   }
 
-  .swatch-grid {
-    grid-template-columns: repeat(6, var(--tap-min));
-    gap: var(--sp-1);
+  /* --swatch-max grows swatches to --tap where the dialog has room; on a
+     360px phone 8 columns hold them at ~32px, so each finger target also
+     fills its half of the surrounding gaps (pitch ~38px, no dead strips) */
+  .swatch {
+    position: relative;
   }
 
-  .swatch {
-    width: var(--tap-min);
-    height: var(--tap-min);
+  .swatch::after {
+    content: '';
+    position: absolute;
+    inset: calc(-1px - var(--swatch-gap) / 2); /* border + half the gap */
   }
 }
