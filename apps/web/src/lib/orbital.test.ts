@@ -6,6 +6,7 @@ import {
   createSatStateEcef,
   footprintRadiusM,
   internationalDesignator,
+  isSunlit,
   orbitalPeriodMinutes,
   perigeeApogeeKm,
   predictPasses,
@@ -13,6 +14,8 @@ import {
   propagateEcef,
   rotateEciKmToEcefM,
   sampleOrbitRingEci,
+  sunElevationDeg,
+  sunPositionEciKm,
   tleEpochMs,
 } from './orbital'
 
@@ -171,9 +174,11 @@ describe('propagateEcef', () => {
     const epochMs = tleEpochMs(satrec) + 1_234_567
     const out = createSatStateEcef()
     const positionRef = out.positionEcefM
+    const eciRef = out.positionEciKm
     const result = propagateEcef(satrec, epochMs, out)
     expect(result).toBe(out)
     expect(out.positionEcefM).toBe(positionRef) // tuple reused, not replaced
+    expect(out.positionEciKm).toBe(eciRef)
     expect(out).toEqual(propagateEcef(satrec, epochMs))
   })
 
@@ -183,6 +188,71 @@ describe('propagateEcef', () => {
     const before = structuredClone(out)
     expect(propagateEcef(satrec, tleEpochMs(satrec) + THIRTY_YEARS_MS, out)).toBeNull()
     expect(out).toEqual(before)
+  })
+
+  it('carries the SGP4 ECI km position of the same instant, untouched', () => {
+    const satrec = issSatrec()
+    const ms = tleEpochMs(satrec) + 600_000
+    expect(propagateEcef(satrec, ms)!.positionEciKm).toEqual(propagate(satrec, new Date(ms))!.position)
+  })
+})
+
+describe('sunPositionEciKm', () => {
+  it('puts the Sun at RA 0/90/180/270° on the 2026 equinoxes and solstices', () => {
+    const cases: [number, number, number][] = [
+      [Date.UTC(2026, 2, 20, 14, 46), 0, 0],
+      [Date.UTC(2026, 5, 21, 8, 24), 90, 23.436],
+      [Date.UTC(2026, 8, 23, 0, 5), 180, 0],
+      [Date.UTC(2026, 11, 21, 20, 50), 270, -23.436],
+    ]
+    const sun = { x: 0, y: 0, z: 0 }
+    for (const [ms, raDeg, declDeg] of cases) {
+      expect(sunPositionEciKm(ms, sun)).toBe(sun)
+      const ra = (Math.atan2(sun.y, sun.x) * 180) / Math.PI
+      expect(Math.abs(((ra - raDeg + 540) % 360) - 180)).toBeLessThan(0.05) // measured ≤ 0.007°
+      expect((Math.asin(sun.z / Math.hypot(sun.x, sun.y, sun.z)) * 180) / Math.PI).toBeCloseTo(declDeg, 1)
+    }
+  })
+  it('is 147.1 million km away at perihelion and 152.1 at aphelion (2026)', () => {
+    const sun = { x: 0, y: 0, z: 0 }
+    sunPositionEciKm(Date.UTC(2026, 0, 3), sun)
+    expect(Math.hypot(sun.x, sun.y, sun.z) / 1e6).toBeCloseTo(147.1, 1)
+    sunPositionEciKm(Date.UTC(2026, 6, 6), sun)
+    expect(Math.hypot(sun.x, sun.y, sun.z) / 1e6).toBeCloseTo(152.1, 1)
+  })
+})
+
+describe('isSunlit (cylindrical umbra, R = 6378.135 km)', () => {
+  const sun = { x: 149.6e6, y: 0, z: 0 }
+  it('is lit on the day side and outside the shadow cylinder, dark inside it', () => {
+    expect(isSunlit({ x: 7000, y: 0, z: 0 }, sun)).toBe(true)
+    expect(isSunlit({ x: 0, y: 7000, z: 0 }, sun)).toBe(true) // terminator plane
+    expect(isSunlit({ x: -7000, y: 6400, z: 0 }, sun)).toBe(true)
+    expect(isSunlit({ x: -7000, y: 6300, z: 0 }, sun)).toBe(false)
+    expect(isSunlit({ x: -7000, y: 0, z: 0 }, sun)).toBe(false)
+    expect(isSunlit({ x: -7000, y: 6300, z: 0 }, { x: 1, y: 0, z: 0 })).toBe(false) // direction only
+  })
+  it('ISS: sunlit at the fixture epoch, in shadow mid-eclipse 12 days later', () => {
+    const satrec = issSatrec()
+    const sun = { x: 0, y: 0, z: 0 }
+    const lit = tleEpochMs(satrec) // high-beta season: the whole orbit is sunlit
+    const dark = lit + 12 * 86_400_000 + 2_945_000 // 2026-07-22T04:30Z, middle of a 35 min eclipse
+    expect(isSunlit(propagateEcef(satrec, lit)!.positionEciKm, sunPositionEciKm(lit, sun))).toBe(true)
+    expect(isSunlit(propagateEcef(satrec, dark)!.positionEciKm, sunPositionEciKm(dark, sun))).toBe(false)
+  })
+})
+
+describe('sunElevationDeg', () => {
+  it('peaks at 90° − lat + 23.436° over Prague on the June solstice', () => {
+    let max = -90
+    for (let ms = Date.UTC(2026, 5, 21, 10); ms <= Date.UTC(2026, 5, 21, 12); ms += 60_000) {
+      max = Math.max(max, sunElevationDeg(PRAGUE, ms))
+    }
+    expect(max).toBeCloseTo(90 - 50.08 + 23.436, 1) // measured 63.355
+  })
+  it('is −16.7° at 00:00 and 60.3° at 12:00 UTC over Prague on 2026-07-10', () => {
+    expect(sunElevationDeg(PRAGUE, Date.UTC(2026, 6, 10, 0))).toBeCloseTo(-16.74, 1)
+    expect(sunElevationDeg(PRAGUE, Date.UTC(2026, 6, 10, 12))).toBeCloseTo(60.28, 1)
   })
 })
 
