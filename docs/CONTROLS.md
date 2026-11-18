@@ -88,6 +88,25 @@ ORBITAL and its telemetry opens. Clicking empty space deselects **within the cur
 Keyboard shortcuts are ignored while typing in an input (search, observer
 coordinates).
 
+## Globe navigation
+
+Four HUD buttons move the camera; keys do the same.
+
+| Control | Key | Tap does | While follow-locked |
+|---|---|---|---|
+| Compass | `R` | The needle shows the camera heading. Turns the view north-up and looking straight down, keeping the point under the screen centre | Levels the follow camera around the target; the lock stays |
+| + / − | `Q` / `E` | Smooth zoom step, roughly halving / doubling the distance | Zooms the follow range |
+| HOME | `0` | Flies to the whole-Earth view (lon 15°, lat 35°, 28 000 km, north-up) | Releases the lock first, then flies |
+| LOCATE | — | Asks for your position (the browser prompts once), then flies to about 500 km above it, north-up | Releases the lock first, then flies |
+
+On desktop the buttons are a column under the mode tabs: at the right edge, or
+beside the satellite / vessel / aircraft panels while those are open. On a phone
+in portrait they are a column at the top right of the bottom cluster; in
+landscape or on a short screen they are a row above the dock. On a phone they
+hide while a sheet is open. A failed locate shows `LOCATION DENIED`, `LOCATION
+UNAVAILABLE`, `LOCATION TIMED OUT` or `NO LOCATION IN THIS BROWSER` beside the
+button for about 4 s. Keys `0` and `R` work while the controls are hidden.
+
 ## Camera follow-lock
 
 Follow-lock makes the camera ride the current selection.
@@ -108,8 +127,8 @@ Follow-lock makes the camera ride the current selection.
 ## Hide controls (clean globe)
 
 HIDE takes the whole HUD off the globe — status line, layer tabs, side
-panels, dock and sheets, selection chip, transport bar and the HELP / COLORS
-launchers. Open sheets and the HELP / COLORS dialogs close with it.
+panels, dock and sheets, selection chip, transport bar, navigation buttons
+and the HELP / COLORS launchers. Open sheets and the HELP / COLORS dialogs close with it.
 
 - **Where:** the HIDE button sits next to HELP / COLORS on desktop and at the
   end of the dock on phones; on a keyboard, **U** toggles both ways.

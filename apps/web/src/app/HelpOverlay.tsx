@@ -13,6 +13,7 @@ const TOUCH_SECTION: HelpSection = {
     ['DRAG', 'Rotate the globe / orbit the followed object'],
     ['PINCH', 'Zoom'],
     ['TWO-FINGER DRAG', 'Tilt the view'],
+    ['COMPASS · + / − · HOME · LOCATE', 'Nav buttons: north-up + level, zoom, whole Earth, fly to your location'],
     ['TAP OBJECT', 'Select (ships & aircraft also lock the camera)'],
     ['TAP EMPTY GLOBE', 'Deselect'],
     ['LEGEND · LAYERS', 'Dock buttons: open the legend (named after the domain when only one is on) / layer sheet; with two or more on, tap a heading to fold it'],

@@ -14,6 +14,7 @@ import { HelpButton, HelpOverlay } from './app/HelpOverlay'
 import { HideControlsButton, ShowControlsButton } from './app/HudVisibility'
 import { SettingsButton, SettingsPanel } from './app/SettingsPanel'
 import { LeftRail } from './app/LeftRail'
+import { NavControls } from './app/NavControls'
 import { ModeTabs } from './app/ModeTabs'
 import { SelectionPanels } from './app/SelectionPanels'
 import { StatusLine } from './app/StatusLine'
@@ -70,6 +71,8 @@ export default function App() {
             <div className="right-stack">
               <SelectionPanels />
             </div>
+            {/* after the right stack: nav.css places it beside the stack by DOM order */}
+            <NavControls />
             {transportOn && <TransportBar />}
             <div className="hud-launchers">
               <HelpButton />
