@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { cameraRequestSeq, requestCamera, useCameraHeading } from '../core/ui/cameraStore'
 import { useFollow } from '../core/ui/followStore'
-import { locateAndFly, locateErrorLabel, LOCATE_HEIGHT_M } from '../core/ui/geolocation'
+import { locateAndFly, locateOutcomeLabel, LOCATE_HEIGHT_M } from '../core/ui/geolocation'
 
 /** How long a locate error stays beside the button. */
 const LOCATE_MESSAGE_MS = 4_000
@@ -52,8 +52,8 @@ function LocateButton() {
     setPending(true)
     setMessage({ text: 'LOCATING…', error: false })
     // Flies even if the controls unmounted meanwhile (the user asked), but
-    // not once a later camera command, a follow-lock change or 15 s has
-    // overtaken the tap: that fix resolves as `stale` and shows nothing.
+    // not once a later camera move or follow-lock change has overtaken the
+    // tap (`superseded`, silent) or 15 s have passed (`late`, says so).
     void locateAndFly('geolocation' in navigator ? navigator.geolocation : undefined, {
       request: requestCamera,
       seq: cameraRequestSeq,
@@ -62,11 +62,12 @@ function LocateButton() {
       heightM: LOCATE_HEIGHT_M,
     }).then((result) => {
       setPending(false)
-      if (result.ok || result.error === 'stale') {
+      const label = locateOutcomeLabel(result)
+      if (label === null) {
         setMessage(null)
         return
       }
-      setMessage({ text: locateErrorLabel(result.error), error: true })
+      setMessage({ text: label, error: result.ok ? false : result.error !== 'late' })
       timer.current = setTimeout(() => setMessage(null), LOCATE_MESSAGE_MS)
     })
   }

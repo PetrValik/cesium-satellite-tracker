@@ -63,8 +63,23 @@ export const LOCATE_HEIGHT_M = 500_000
 /** A fix arriving later than this after the tap no longer flies. */
 export const LOCATE_MAX_AGE_MS = 15_000
 
-/** A fix that came too late to act on: not an error, so the HUD shows nothing. */
-export type LocateOutcome = LocateResult | { ok: false; error: 'stale' }
+/**
+ * A fix that is not acted on. `superseded`: the user moved the camera since
+ * the tap (they want something else now), so the HUD shows nothing. `late`:
+ * nothing else happened but the fix took longer than `maxAgeMs` (a slow
+ * first permission prompt), so the HUD says to tap again.
+ */
+export type LocateOutcome =
+  | LocateResult
+  | { ok: false; error: 'superseded' }
+  | { ok: false; error: 'late' }
+
+/** What the HUD shows beside LOCATE for an outcome; null shows nothing. */
+export function locateOutcomeLabel(outcome: LocateOutcome): string | null {
+  if (outcome.ok || outcome.error === 'superseded') return null
+  if (outcome.error === 'late') return 'LOCATED TOO LATE — TAP AGAIN'
+  return locateErrorLabel(outcome.error)
+}
 
 export interface LocateFlight {
   /** Sends the flyTo (requestCamera). */
@@ -83,9 +98,9 @@ export interface LocateFlight {
  * LOCATE ME: ask for the device position and fly there, but only while the
  * tap is still the user's latest camera intent. A permission prompt can stay
  * open indefinitely; if meanwhile another camera command was requested, the
- * follow lock changed (picking a ship engages it), or more than `maxAgeMs`
- * passed, the fix resolves as `stale` and nothing flies. Errors are returned
- * as they come, stale or not.
+ * follow lock changed (picking a ship engages it), the fix resolves as
+ * `superseded`; if only more than `maxAgeMs` passed, as `late`. Neither
+ * flies. Errors are returned as they come, either way.
  */
 export async function locateAndFly(geo: GeoSource | undefined, flight: LocateFlight): Promise<LocateOutcome> {
   const seqAtTap = flight.seq()
@@ -93,12 +108,11 @@ export async function locateAndFly(geo: GeoSource | undefined, flight: LocateFli
   const tapMs = flight.nowMs()
   const result = await locateDevice(geo)
   if (!result.ok) return result
-  if (
-    flight.seq() !== seqAtTap ||
-    flight.following() !== followingAtTap ||
-    flight.nowMs() - tapMs > (flight.maxAgeMs ?? LOCATE_MAX_AGE_MS)
-  ) {
-    return { ok: false, error: 'stale' }
+  if (flight.seq() !== seqAtTap || flight.following() !== followingAtTap) {
+    return { ok: false, error: 'superseded' }
+  }
+  if (flight.nowMs() - tapMs > (flight.maxAgeMs ?? LOCATE_MAX_AGE_MS)) {
+    return { ok: false, error: 'late' }
   }
   flight.request({ kind: 'flyTo', lonDeg: result.lonDeg, latDeg: result.latDeg, heightM: flight.heightM })
   return result
