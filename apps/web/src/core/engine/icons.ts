@@ -3,7 +3,9 @@
  *
  * Every glyph is drawn WHITE on a transparent 64×64 canvas. Billboard.color
  * multiplies the texture, so a single white sprite per layer is tinted per
- * instance: one texture atlas entry, per-object colors.
+ * instance: one texture atlas entry, per-object colors. Black pixels stay
+ * black under any tint, which is how the satellite sprite carries a dark
+ * halo that keeps light palette hues visible on the light basemap.
  *
  * Conventions:
  * - bold, simple silhouettes that stay readable at ~28 px;
@@ -61,22 +63,58 @@ function fillSymmetric(
   ctx.fill()
 }
 
-/** Satellite: central bus with two solar-panel wings (non-rotating glyph). */
+/** Satellite body: solar wings joined to a central bus by short struts. */
+const SATELLITE_BODY: readonly (readonly [number, number, number, number])[] = [
+  [6, 25, 13, 14], // left panel
+  [45, 25, 13, 14], // right panel
+  [19, 30, 4, 4], // left strut
+  [41, 30, 4, 4], // right strut
+  [23, 21, 18, 22], // central bus
+]
+/** Thin gaps in the wings, so they read as solar-cell panels up close. */
+const SATELLITE_GAPS: readonly (readonly [number, number, number, number])[] = [
+  [10, 25, 1.5, 14],
+  [14.5, 25, 1.5, 14],
+  [48, 25, 1.5, 14],
+  [52.5, 25, 1.5, 14],
+]
+/** The glyph is drawn at 90 % so its dark halo fits inside the 64 px canvas. */
+const SATELLITE_GLYPH_SCALE = 0.9
+/** Halo: a 3.5 px dark outline plus a soft dark glow, in canvas px. */
+const SATELLITE_OUTLINE_PX = 3.5
+const SATELLITE_GLOW_PX = 10
+
+/**
+ * Satellite: central bus with two solar-panel wings (non-rotating glyph),
+ * white on a dark halo. Palette v2's light satellite hues vanish on the light
+ * `streets` basemap's day side (contrast ~1.1:1 on land); the halo stays dark
+ * under any tint, so the dot reads at every range: measured 2026-11-18 at the
+ * whole-Earth view, LEO on light land went from 1.10 to 14.4:1 (min) with the
+ * night side unchanged (6.2:1).
+ */
 export const satelliteIcon = memoIcon((ctx) => {
-  // Solar wings joined to the bus by short struts.
-  ctx.fillRect(6, 25, 13, 14) // left panel
-  ctx.fillRect(45, 25, 13, 14) // right panel
-  ctx.fillRect(19, 30, 4, 4) // left strut
-  ctx.fillRect(41, 30, 4, 4) // right strut
-  // Central bus.
-  ctx.fillRect(23, 21, 18, 22)
-  // Cut thin gaps into the wings so they read as solar-cell panels up close.
-  ctx.globalCompositeOperation = 'destination-out'
-  ctx.fillRect(10, 25, 1.5, 14)
-  ctx.fillRect(14.5, 25, 1.5, 14)
-  ctx.fillRect(48, 25, 1.5, 14)
-  ctx.fillRect(52.5, 25, 1.5, 14)
-  ctx.globalCompositeOperation = 'source-over'
+  ctx.save()
+  ctx.translate(CENTER_X, CENTER_X)
+  ctx.scale(SATELLITE_GLYPH_SCALE, SATELLITE_GLYPH_SCALE)
+  ctx.translate(-CENTER_X, -CENTER_X)
+  // Halo: outline the body (with a dark glow), then fill it dark so the
+  // wing gaps show dark too.
+  ctx.fillStyle = '#000000'
+  ctx.strokeStyle = '#000000'
+  ctx.lineWidth = (2 * SATELLITE_OUTLINE_PX) / SATELLITE_GLYPH_SCALE
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.9)'
+  ctx.shadowBlur = SATELLITE_GLOW_PX
+  ctx.beginPath()
+  for (const [x, y, w, h] of SATELLITE_BODY) ctx.rect(x, y, w, h)
+  ctx.stroke()
+  ctx.shadowBlur = 0
+  ctx.fill()
+  // Glyph on top: the white body, then the gaps back in the halo colour.
+  ctx.fillStyle = '#ffffff'
+  for (const [x, y, w, h] of SATELLITE_BODY) ctx.fillRect(x, y, w, h)
+  ctx.fillStyle = '#000000'
+  for (const [x, y, w, h] of SATELLITE_GAPS) ctx.fillRect(x, y, w, h)
+  ctx.restore()
 })
 
 /** Aircraft: top-view airliner silhouette, nose up. */

@@ -17,8 +17,10 @@ interface ClassStyle {
  * scale = targetPx / 64. NearFarScalar lerps that scale by camera distance:
  *  - near 4e5 m (~LEO altitude — camera riding alongside a satellite):
  *    28 / 64 = 0.4375 → a ~28 px icon whose glyph is recognizable;
- *  - far 4e7 m (~whole-globe camera range): the old per-class dot sizes
- *    (1.5–2.5 px) / 64 → from orbit the catalog stays a starfield of dots.
+ *  - far 4e7 m (~whole-globe camera range): per-class dot sizes
+ *    (2.5–3.5 px) / 64 → from orbit the catalog stays a starfield of dots,
+ *    one px larger than before the sprite's dark halo (core/engine/icons)
+ *    so the halo still survives minification on the light basemap.
  */
 const SPRITE_PX = 64
 const ICON_NEAR_M = 4e5
@@ -28,7 +30,7 @@ const ICON_FAR_M = 4e7
 type SatellitePalette = ColorPrefs['satellites']
 
 /** Far dot size per class keeps the original pixelSize hierarchy. */
-const FAR_DOT_PX: Record<OrbitClass, number> = { LEO: 1.5, MEO: 2.0, GEO: 2.5, HEO: 2.0 }
+const FAR_DOT_PX: Record<OrbitClass, number> = { LEO: 2.5, MEO: 3.0, GEO: 3.5, HEO: 3.0 }
 
 /** Indexed by the class byte from the worker; protocol order is authoritative. */
 function buildStyles(palette: SatellitePalette): readonly ClassStyle[] {
