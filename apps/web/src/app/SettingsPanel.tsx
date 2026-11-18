@@ -136,6 +136,9 @@ function SettingsDialog() {
       </div>
 
       <p className="help-footnote">
+        Defaults give each meaning one hue in every domain. Amber marks the selected object only.
+      </p>
+      <p className="help-footnote">
         Saved to this browser (localStorage), together with your last camera position.
       </p>
     </HudDialog>
