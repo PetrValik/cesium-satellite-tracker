@@ -5,9 +5,11 @@ import type { Satellite, Ship } from '@orbital-ops/shared'
 // The domain stores import lib/api; nothing here fetches.
 vi.mock('../../lib/api', () => ({ api: {}, ApiError: class extends Error {} }))
 
+import { isSimLive, useSimClock } from '../../core/sim/simClock'
 import { useFollow } from '../../core/ui/followStore'
 import { useMode } from '../../core/ui/modeStore'
 import { useSatellites } from '../../core/ui/satelliteStore'
+import { transportVisibleNow } from '../../core/ui/transport'
 import { useAircraft } from '../../features/airspace/aircraftStore'
 import { useShips } from '../../features/maritime/shipsStore'
 import { GlobeFollow, orbitalFollowRangeM, releasesFollow } from './follow'
@@ -213,6 +215,30 @@ describe('LayerSync satellite selection', () => {
   beforeEach(() => {
     useMode.setState({ mode: 'orbital' })
     useSatellites.setState({ byId: new Map(), selectedId: null })
+    useSimClock.setState({ epochMs: Date.now(), rate: 1, playing: true })
+  })
+
+  it('hiding SATELLITES while warped snaps sim time back to NOW', () => {
+    mount()
+    useSimClock.getState().setRate(60)
+    useMode.getState().toggleLayer('orbital')
+    expect(useSimClock.getState()).toMatchObject({ rate: 1, playing: true })
+    expect(isSimLive(useSimClock.getState())).toBe(true)
+  })
+  it('hiding SATELLITES at NOW does not jump the clock', () => {
+    mount()
+    const { jumpNonce } = useSimClock.getState()
+    useMode.getState().toggleLayer('orbital')
+    expect(useSimClock.getState().jumpNonce).toBe(jumpNonce)
+  })
+  it('a deselect while warped keeps sim time off NOW and the bar up', () => {
+    mount()
+    useSatellites.getState().registerSat(HIT)
+    useSatellites.getState().select(HIT.noradId)
+    useSimClock.getState().setRate(60)
+    useSatellites.getState().select(null)
+    expect(useSimClock.getState().rate).toBe(60)
+    expect(transportVisibleNow()).toBe(true)
   })
 
   it('a search hit outside the active groups is tracked: registerSat then select', () => {

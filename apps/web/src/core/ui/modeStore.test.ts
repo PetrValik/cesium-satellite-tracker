@@ -18,8 +18,8 @@ function stubStorage(initial: Record<string, string> = {}): Map<string, string> 
 async function loadStore(initial?: Record<string, string>) {
   const backing = stubStorage(initial)
   vi.resetModules()
-  const { useMode, transportVisible } = await import('./modeStore')
-  return { useMode, transportVisible, backing }
+  const { useMode } = await import('./modeStore')
+  return { useMode, backing }
 }
 
 afterEach(() => {
@@ -236,15 +236,5 @@ describe('mode selectors', () => {
     expect(isDomainVisible(flags, 'orbital')).toBe(true)
     expect(isDomainVisible(flags, 'maritime')).toBe(false)
     expect(isDomainVisible(flags, 'airspace')).toBe(true)
-  })
-
-  it('transportVisible follows the ORBITAL layer only', async () => {
-    const { useMode, transportVisible } = await loadStore()
-    expect(transportVisible(useMode.getState())).toBe(true)
-    useMode.getState().toggleLayer('maritime')
-    useMode.getState().toggleLayer('airspace')
-    expect(transportVisible(useMode.getState())).toBe(true)
-    useMode.getState().toggleLayer('orbital')
-    expect(transportVisible(useMode.getState())).toBe(false)
   })
 })
