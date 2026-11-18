@@ -3,8 +3,9 @@ import { simClock, stepRate } from '../../core/sim/simClock'
 import { useFollow } from '../../core/ui/followStore'
 import { useHud } from '../../core/ui/hudStore'
 import { isTypingTarget } from '../../core/ui/keyboard'
-import { transportVisible, useMode } from '../../core/ui/modeStore'
+import { useMode } from '../../core/ui/modeStore'
 import { useSheet } from '../../core/ui/sheetStore'
+import { transportVisibleNow } from '../../core/ui/transport'
 import { deselectInMode, hasSelectionInMode } from '../selectionMode'
 
 /** The rig surface the keys drive — structural, so tests pass a fake. */
@@ -17,13 +18,13 @@ export type GlobeKeyEvent = Pick<
 >
 
 /**
- * The time controls travel with the transport bar: hidden with the ORBITAL
- * layer (the bar is unmounted then, transportVisible) and with the HUD
+ * The time controls travel with the transport bar: hidden under
+ * core/ui/transport's rule (the bar is unmounted then) and with the HUD
  * (the bar is faded out and inert). The keyboard equivalents go quiet with
  * it, or an invisible warp would silently suspend the live feeds.
  */
 export function timeControlsActive(): boolean {
-  return transportVisible(useMode.getState()) && !useHud.getState().hidden
+  return transportVisibleNow() && !useHud.getState().hidden
 }
 
 /** Step the sim rate one SIM_RATES notch; nothing past either end. */

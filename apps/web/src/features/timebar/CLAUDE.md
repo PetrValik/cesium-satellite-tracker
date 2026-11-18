@@ -2,7 +2,7 @@
 The transport bar: play/pause, the warp-rate buttons, a ±12 h scrub against wall-now, the NOW reset and the UTC readout. UI only — it holds no time state of its own.
 
 ## Depends on
-`core/sim/simClock` (the single source of truth for `epochMs`, `rate`, `playing`, plus `stepRate`), `core/sim/wallClock` for "now", and `lib/format` (`formatRate`, `formatUtc`). Rendered by `app/`; no slice imports from here, and this slice imports no sibling.
+`core/sim/simClock` (the single source of truth for `epochMs`, `rate`, `playing`, plus `stepRate`), `core/sim/wallClock` for "now", and `lib/format` (`formatRate`, `formatUtc`). Rendered by `app/` only while `core/ui/transport` `useTransportVisible()` holds; no slice imports from here, and this slice imports no sibling.
 
 ## Invariants
 - `core/sim/simClock` owns sim time; this bar only calls its actions. Nothing here may set `epochMs` directly, and the sync to Cesium is one-way (`core/engine/createViewer.syncViewerClock`).
@@ -11,6 +11,7 @@ The transport bar: play/pause, the warp-rate buttons, a ±12 h scrub against wal
 - The slider position is `scrub.ts` `scrubSliderValue`: the drag value while dragging, else the sim offset clamped to ±12 h.
 - Scrubbing and NOW are discontinuous jumps: the store bumps `jumpNonce`, because an epoch delta cannot tell a jump from one high-warp frame. Anything reacting to jumps watches that, not the delta.
 - The readout is UTC; sim time is never rendered in local time.
+- When the bar shows is one rule, `core/ui/transport` `transportVisibleFor`: ORBITAL layer on and (a satellite selected, or sim time not live). `.has-transport`, the status-line SIM readout and the time keys (`app/globe/globeKeys.ts` `timeControlsActive`) use it too. Off NOW, the bar hides only when ORBITAL turns off, and that resets to NOW (`app/globe/layerSync.ts`). Owner's call 2026-11-18: the bar showed on the boot screen, where warp does nothing.
 
 ## Traps
 None recorded yet; add the first incident here.

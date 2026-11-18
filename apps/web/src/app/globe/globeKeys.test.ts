@@ -7,6 +7,7 @@ import { useSimClock } from '../../core/sim/simClock'
 import { useFollow } from '../../core/ui/followStore'
 import { useHud } from '../../core/ui/hudStore'
 import { useMode } from '../../core/ui/modeStore'
+import { useSatellites } from '../../core/ui/satelliteStore'
 import { useSheet } from '../../core/ui/sheetStore'
 import { useShips } from '../../features/maritime/shipsStore'
 import { globeKeyHandlers, timeControlsActive, type GlobeKeyEvent } from './globeKeys'
@@ -43,10 +44,34 @@ beforeEach(() => {
   useSheet.setState({ sheet: null })
   useFollow.setState({ following: false })
   useShips.setState({ selectedMmsi: null })
-  useSimClock.setState({ rate: 1, playing: true })
+  useSatellites.setState({ selectedId: 25_544 })
+  useSimClock.setState({ rate: 1, playing: true, epochMs: Date.now() })
 })
 
 describe('globe keys', () => {
+  it('time keys follow the time bar: quiet at NOW with nothing picked, on with a pick or off NOW', () => {
+    const { onKeyDown } = setup()
+    useSatellites.setState({ selectedId: null })
+    expect(timeControlsActive()).toBe(false)
+    onKeyDown(key('Period'))
+    expect(useSimClock.getState().rate).toBe(1)
+    const space = key('Space')
+    onKeyDown(space)
+    expect(useSimClock.getState().playing).toBe(true)
+    expect(space.preventDefault).not.toHaveBeenCalled()
+
+    useSatellites.setState({ selectedId: 25_544 })
+    onKeyDown(key('Period'))
+    expect(useSimClock.getState().rate).toBe(10)
+
+    // Deselect while warped: the bar stays, so N still brings time back.
+    useSatellites.setState({ selectedId: null })
+    expect(timeControlsActive()).toBe(true)
+    onKeyDown(key('KeyN'))
+    expect(useSimClock.getState()).toMatchObject({ rate: 1, playing: true })
+    expect(timeControlsActive()).toBe(false)
+  })
+
   it('ignores keys typed into a field, including a select', () => {
     const { onKeyDown } = setup()
     for (const tagName of ['INPUT', 'TEXTAREA', 'SELECT']) {
