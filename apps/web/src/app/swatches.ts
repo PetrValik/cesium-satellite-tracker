@@ -36,3 +36,13 @@ export const SWATCHES: ReadonlyArray<{ hex: string; name: string }> = [
   { hex: '#3b6fd4', name: 'DIM BLUE' },
   { hex: '#5c6674', name: 'DIM GREY' },
 ]
+
+/**
+ * The hex field's rule: `#RRGGBB` or bare `RRGGBB` (either case, trimmed)
+ * becomes lower-case `#rrggbb`, matching DEFAULT_COLORS and the stored
+ * prefs; anything else is null and the field reverts to the stored value.
+ */
+export function parseHexInput(text: string): string | null {
+  const match = /^#?([0-9a-f]{6})$/i.exec(text.trim())
+  return match ? `#${match[1].toLowerCase()}` : null
+}

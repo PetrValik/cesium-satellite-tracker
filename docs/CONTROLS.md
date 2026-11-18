@@ -37,7 +37,10 @@ aircraft / passenger vessels, green cargo, violet tanker, teal fishing, pink
 high-speed craft, grey other (and aircraft on the ground). Satellites: LEO ice,
 MEO lime, GEO gold, HEO pink. Amber is never a default; it marks the selected or
 followed object. Colours you changed yourself survive the switch to these
-defaults; RESET in COLORS restores the defaults.
+defaults; RESET in COLORS restores the defaults. In COLORS, tap a chip to open
+its picker under that row: pick a swatch, or type a hex value (`#RRGGBB` or
+`RRGGBB`; Enter or leaving the field applies it). The picker closes on a swatch
+pick, ESC, or the chip again.
 
 ## Mouse
 
@@ -95,7 +98,7 @@ Follow-lock makes the camera ride the current selection.
   ride it. F toggles the lock and only acts when the current mode has a
   selection. The FOLLOW button does the same.
 - **ESC is staged, one layer per press:** the help overlay closes first, then
-  the COLORS panel, then an open phone sheet (legend / layers / details);
+  an open colour picker, then the COLORS panel, then an open phone sheet (legend / layers / details);
   otherwise if the camera is following it releases the lock (keeping the
   selection); otherwise it deselects. So with nothing open, one ESC releases
   the lock and a second ESC deselects. While the controls are hidden, ESC only

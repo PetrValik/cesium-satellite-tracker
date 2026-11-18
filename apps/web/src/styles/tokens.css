@@ -21,7 +21,6 @@
     rgba(255, 255, 255, 0.02) 0 1px,
     transparent 1px 3px
   );
-  --shadow-pop: 0 10px 26px rgba(3, 5, 9, 0.65); /* floating popovers */
   --scrim: rgba(3, 5, 9, 0.6); /* dialog backdrop */
   --status-fade: linear-gradient(rgba(6, 9, 15, 0.9), rgba(6, 9, 15, 0)); /* --space fading out under the status line */
 
@@ -80,6 +79,9 @@
   --sp-4: 16px;
   --w-catalog: 256px;
   --w-right: 272px;
+  --swatch: 32px; /* COLORS swatch floor: 8 columns fit a 360px phone's dialog */
+  --swatch-max: 32px; /* grows to --tap on touch pointers where there is room */
+  --swatch-gap: 6px; /* keeps the 3px selected ring clear of its neighbour */
 
   /* ---- device edges (notch, home indicator; 0 on desktop) --- */
   --safe-top: env(safe-area-inset-top, 0px);
@@ -122,6 +124,7 @@
     --tab-h: var(--tap);
     --transport-h: 64px;
     --restore-size: var(--tap);
+    --swatch-max: var(--tap);
   }
 }
 

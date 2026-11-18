@@ -33,11 +33,11 @@
   transition: border-color var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out);
 }
 
-/* amber corner tick on the header side; the COLORS swatch popover
-   (colors.css) wears the same tick but no chamfer — clip-path would cut
-   off its drop shadow */
+/* amber corner tick on the header side; the inline COLORS swatch picker
+   (colors.css) wears the same tick without a chamfer — it is an inset well
+   inside the dialog's bezel, not an instrument of its own */
 .hud-panel::before,
-.swatch-popover::before {
+.swatch-picker::before {
   content: '';
   position: absolute;
   top: 0;
