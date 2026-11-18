@@ -14,7 +14,7 @@ The AIS vessel slice: the polling store, the dead-reckoning and bearing rules (`
 - Only a 503 means the feed is unconfigured server-side (`configured: false`, backing off `UNCONFIGURED_RECHECK_TICKS` polls); any other failure sets `connected: false` and keeps the last snapshot.
 
 ## Traps
-- `ShipsLayer.ts:40` — with `scene.globe.depthTestAgainstTerrain` on (set in `apps/web/src/core/engine/createViewer.ts:165`), surface billboards half-sink into the globe and z-fight at grazing angles; the fix is a negative-z `eyeOffset`, because eye coordinates are left-handed with +z INTO the screen.
+- `ShipsLayer.ts:40` — with `scene.globe.depthTestAgainstTerrain` on (set in `apps/web/src/core/engine/createViewer.ts:168`), surface billboards half-sink into the globe and z-fight at grazing angles; the fix is a negative-z `eyeOffset`, because eye coordinates are left-handed with +z INTO the screen.
 - `shipMotion.ts:29` — `MIN_COS_LAT` floors the equirectangular longitude step so a (data-error) vessel reported at a pole cannot divide by ~0.
 - `MaritimePicture.tsx:32` — vessels dead-reckon on WALL time, so the layer hides while sim time is warped away from NOW; the panel must say so rather than show a misleading count.
 

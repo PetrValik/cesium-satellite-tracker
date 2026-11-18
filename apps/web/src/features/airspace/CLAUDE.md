@@ -14,7 +14,7 @@ The ADS-B aircraft slice: the polling store with its altitude bands and heuristi
 - A 503 backs the poll off `UNCONFIGURED_RECHECK_TICKS` ticks; a failed poll never clears the last snapshot.
 
 ## Traps
-- `AircraftLayer.ts:59` — with `scene.globe.depthTestAgainstTerrain` on (`apps/web/src/core/engine/createViewer.ts:165`), taxiing and low-flying aircraft half-sink into terrain and z-fight; the negative-z `eyeOffset` is the fix, and the sign is only right because eye coordinates are left-handed with +z INTO the screen.
+- `AircraftLayer.ts:59` — with `scene.globe.depthTestAgainstTerrain` on (`apps/web/src/core/engine/createViewer.ts:168`), taxiing and low-flying aircraft half-sink into terrain and z-fight; the negative-z `eyeOffset` is the fix, and the sign is only right because eye coordinates are left-handed with +z INTO the screen.
 - `aircraftMotion.ts:22` — `MIN_COS_LAT` floors the longitude step for the data-error case of an aircraft reported at a pole.
 - `aircraftCategory.ts:2` — the ADS-B protocol carries no civil/cargo/military flag, so the category is a heuristic stack (military ICAO-hex blocks + military callsign prefixes + cargo airline prefixes) whose coverage is partial by nature; treat a category as a display hint, never as ground truth.
 

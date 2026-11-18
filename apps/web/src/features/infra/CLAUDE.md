@@ -13,7 +13,7 @@ The two static ground overlays: orbital launch sites (signal-amber rocket) and m
 - The two files are deliberate near-duplicates; a change to one is almost always a change to both.
 
 ## Traps
-- `LaunchSitesLayer.ts:50` (and `PortsLayer.ts:50`) — with `scene.globe.depthTestAgainstTerrain` on (`apps/web/src/core/engine/createViewer.ts:165`), surface-level billboards half-sink into terrain and z-fight at grazing angles; the negative-z `eyeOffset` fixes it, and the sign is only right because eye coordinates are left-handed with +z INTO the screen.
+- `LaunchSitesLayer.ts:50` (and `PortsLayer.ts:50`) — with `scene.globe.depthTestAgainstTerrain` on (`apps/web/src/core/engine/createViewer.ts:168`), surface-level billboards half-sink into terrain and z-fight at grazing angles; the negative-z `eyeOffset` fixes it, and the sign is only right because eye coordinates are left-handed with +z INTO the screen.
 
 ## How to test
 No test file exists for this slice. `npm test -w apps/web` covers its neighbours only; verify by `npm run dev` and looking at the globe (`CLAUDE.md` → *Verification*). No API, no Docker.
