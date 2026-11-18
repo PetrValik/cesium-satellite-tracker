@@ -5,12 +5,15 @@ import {
   createSatrec,
   createSatStateEcef,
   footprintRadiusM,
+  internationalDesignator,
   orbitalPeriodMinutes,
+  perigeeApogeeKm,
   predictPasses,
   propagateBatchEcefM,
   propagateEcef,
   rotateEciKmToEcefM,
   sampleOrbitRingEci,
+  tleEpochMs,
 } from './orbital'
 
 /** ISS (ZARYA), epoch 2026-07-10T03:41:07.908Z (day 191.15356376 of 2026). */
@@ -34,20 +37,12 @@ const DECAYING_TLE1 = '1 25544U 98067A   26191.15356376  .00005628  00000+0  990
 /** Thirty years past epoch SGP4 fails for the ISS element set (satellite.js 6.0.2). */
 const THIRTY_YEARS_MS = 30 * 365 * 86_400_000
 
-/** Julian date of the Unix epoch. */
-const JD_UNIX_EPOCH = 2440587.5
-
 const PRAGUE = { latDeg: 50.08, lonDeg: 14.44, heightM: 300 }
 
 function issSatrec() {
   const satrec = createSatrec(ISS_TLE1, ISS_TLE2)
   expect(satrec).not.toBeNull()
   return satrec!
-}
-
-/** TLE epoch as Unix ms, derived from the parsed element set (deterministic). */
-function tleEpochMs(satrec: { jdsatepoch: number }): number {
-  return (satrec.jdsatepoch - JD_UNIX_EPOCH) * 86_400_000
 }
 
 describe('createSatrec', () => {
@@ -78,6 +73,44 @@ describe('classifyOrbit / orbitalPeriodMinutes', () => {
     expect(orbitalPeriodMinutes(satrec!)).toBeGreaterThan(1336)
     expect(orbitalPeriodMinutes(satrec!)).toBeLessThan(1536)
     expect(classifyOrbit(satrec!)).toBe('GEO')
+  })
+})
+
+describe('perigeeApogeeKm', () => {
+  it('ISS fixture: 415.7 / 424.8 km above the equatorial radius', () => {
+    const { perigeeKm, apogeeKm } = perigeeApogeeKm(issSatrec())
+    expect(perigeeKm).toBeCloseTo(415.72, 1)
+    expect(apogeeKm).toBeCloseTo(424.8, 1)
+  })
+  it('GEO fixture spans about ±28 km around 35 787 km', () => {
+    const { perigeeKm, apogeeKm } = perigeeApogeeKm(createSatrec(ISS_TLE1, GEO_TLE2)!)
+    expect(perigeeKm).toBeCloseTo(35_759.0, 0)
+    expect(apogeeKm).toBeCloseTo(35_815.4, 0)
+  })
+})
+
+describe('tleEpochMs', () => {
+  it('is 2026-07-10T03:41:07.909Z, matching line 1 cols 19-32 read by hand', () => {
+    const ms = tleEpochMs(issSatrec())
+    expect(Math.abs(ms - Date.UTC(2026, 6, 10, 3, 41, 7, 909))).toBeLessThan(1)
+    const field = ISS_TLE1.slice(18, 32) // '26191.15356376'
+    const byHand = Date.UTC(2000 + Number(field.slice(0, 2)), 0, 1) + (Number(field.slice(2)) - 1) * 86_400_000
+    expect(Math.abs(ms - byHand)).toBeLessThan(1)
+  })
+})
+
+describe('internationalDesignator', () => {
+  const withField = (f: string) => ISS_TLE1.slice(0, 9) + f + ISS_TLE1.slice(17)
+  it('reads line 1 cols 10-17 with the 57 year pivot', () => {
+    expect(internationalDesignator(ISS_TLE1)).toEqual({ launchYear: 1998, designator: '1998-067A' })
+    expect(internationalDesignator(withField('24001AB '))).toEqual({ launchYear: 2024, designator: '2024-001AB' })
+    expect(internationalDesignator(withField('57001B  '))).toEqual({ launchYear: 1957, designator: '1957-001B' })
+    expect(internationalDesignator(withField('56123C  '))).toEqual({ launchYear: 2056, designator: '2056-123C' })
+  })
+  it('returns null for a blank, garbled or short field', () => {
+    expect(internationalDesignator(withField('        '))).toBeNull()
+    expect(internationalDesignator(withField('9806 A  '))).toBeNull()
+    expect(internationalDesignator('1 25544U')).toBeNull()
   })
 })
 
