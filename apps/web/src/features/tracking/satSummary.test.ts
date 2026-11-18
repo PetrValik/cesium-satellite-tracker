@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { satChipSummary, tleInclinationDeg } from './satSummary'
+import { formatOrbitPeriod, formatOrbitSpan, satChipSummary, tleInclinationDeg } from './satSummary'
 
 // Same ISS element set as lib/orbital.test.ts.
 const ISS_TLE2 = '2 25544  51.6302 186.4276 0006683 277.8890  82.1339 15.48965714575314'
@@ -37,5 +37,23 @@ describe('satChipSummary', () => {
       key: 'ALT',
       value: '—',
     })
+  })
+})
+
+describe('formatOrbitPeriod', () => {
+  it('minutes below 2 h, hours above, with revolutions per day', () => {
+    expect(formatOrbitPeriod(92.9756)).toBe('EVERY 93.0 MIN · 15.5× A DAY')
+    expect(formatOrbitPeriod(1436.13)).toBe('EVERY 23.9 H · 1.0× A DAY')
+    expect(formatOrbitPeriod(717.81)).toBe('EVERY 12.0 H · 2.0× A DAY')
+  })
+})
+describe('formatOrbitSpan', () => {
+  it('rounds to whole km, thin-space thousands, one value when equal', () => {
+    expect(formatOrbitSpan(415.72, 424.8)).toBe('416–425 KM')
+    expect(formatOrbitSpan(35_759.01, 35_815.37)).toBe('35 759–35 815 KM')
+    expect(formatOrbitSpan(500.2, 500.4)).toBe('500 KM')
+  })
+  it('reads — when SGP4 failed over the whole orbit (NaN span)', () => {
+    expect(formatOrbitSpan(Number.NaN, Number.NaN)).toBe('—')
   })
 })

@@ -1,37 +1,47 @@
 /**
- * Selected-satellite readout: identity from the catalog, live numbers from
- * the telemetry store (pushed by the render loop at ~5 Hz). The CLASS badge
- * wears the hue the globe paints that orbit class with (user palette).
+ * Selected-satellite readout, grouped for reading at a glance: NOW (live,
+ * pushed by the render loop at ~5 Hz) and ORBIT (from the TLE, pushed once
+ * per selection), then a small identity line. The class badge wears the hue
+ * the globe paints that orbit class with (user palette).
  */
+import { useSimClock } from '../../core/sim/simClock'
 import { FollowButton } from '../../core/ui/FollowButton'
 import { hueStyle } from '../../core/ui/hueStyle'
 import { usePrefs } from '../../core/ui/prefsStore'
 import { useSatellites } from '../../core/ui/satelliteStore'
-import { tleInclinationDeg } from './satSummary'
+import { formatDataAge, formatDeg, formatKm, formatLatLon, formatUtc } from '../../lib/format'
+import { formatOrbitPeriod, formatOrbitSpan, tleInclinationDeg } from './satSummary'
 import { useTelemetry } from './telemetryStore'
-import { formatDeg, formatKm, formatLatLon } from '../../lib/format'
 
 export function TelemetryPanel() {
-  const noradId = useTelemetry((s) => s.noradId)
-  const name = useTelemetry((s) => s.name)
-  const orbitClass = useTelemetry((s) => s.orbitClass)
-  const altKm = useTelemetry((s) => s.altKm)
-  const velocityKmS = useTelemetry((s) => s.velocityKmS)
-  const latDeg = useTelemetry((s) => s.latDeg)
-  const lonDeg = useTelemetry((s) => s.lonDeg)
-  const periodMinutes = useTelemetry((s) => s.periodMinutes)
-  const classColor = usePrefs((s) => (orbitClass === null ? null : s.colors.satellites[orbitClass]))
+  const t = useTelemetry()
+  const classColor = usePrefs((s) =>
+    t.orbitClass === null ? null : s.colors.satellites[t.orbitClass],
+  )
   const select = useSatellites((s) => s.select)
-  const sat = useSatellites((s) => (noradId === null ? undefined : s.byId.get(noradId)))
+  const sat = useSatellites((s) => (t.noradId === null ? undefined : s.byId.get(t.noradId)))
+  // Data age is measured against sim time (what the shown position is
+  // propagated to), refreshed once per sim minute like the passes panel.
+  const simMin = useSimClock((s) => Math.floor(s.epochMs / 60_000))
 
-  if (noradId === null) return null
+  if (t.noradId === null) return null
   const inclinationDeg = sat ? tleInclinationDeg(sat.tle2) : null
+  // A no-break space before each dot: a wrapped line never starts with '·'.
+  const groups = sat?.groups.join('\u00a0· ').toUpperCase()
 
   return (
     // telemetry-panel: a rule-less hook shared by the three selection panels
-    <section className="hud-panel telemetry-panel">
-      <header className="telemetry-header">
-        <h2 className="hud-title">TRACKING</h2>
+    <section className="hud-panel telemetry-panel sat-detail">
+      <header className="telemetry-header sat-title">
+        <h2 className="telemetry-name" title={t.name}>
+          {t.name}
+        </h2>
+        <span
+          className="orbit-class"
+          style={classColor === null ? undefined : hueStyle(classColor)}
+        >
+          {t.orbitClass ?? '—'}
+        </span>
         <span className="panel-actions">
           <FollowButton />
           <button className="hud-button" onClick={() => select(null)} title="Deselect (Esc)">
@@ -39,27 +49,63 @@ export function TelemetryPanel() {
           </button>
         </span>
       </header>
-      <div className="telemetry-name">{name}</div>
-      <dl className="telemetry-grid">
-        <dt>NORAD</dt>
-        <dd>{noradId}</dd>
-        <dt>CLASS</dt>
-        <dd className="orbit-class" style={classColor === null ? undefined : hueStyle(classColor)}>
-          {orbitClass ?? '—'}
-        </dd>
-        <dt>ALT</dt>
-        <dd>{formatKm(altKm)}</dd>
-        <dt>VEL</dt>
-        <dd>{velocityKmS.toFixed(2)} KM/S</dd>
-        <dt>POS</dt>
-        <dd>{formatLatLon(latDeg, lonDeg)}</dd>
-        <dt>PERIOD</dt>
-        <dd>{periodMinutes.toFixed(1)} MIN</dd>
-        <dt>INCL</dt>
-        <dd>{inclinationDeg === null ? '—' : formatDeg(inclinationDeg, 1)}</dd>
-        <dt>GROUPS</dt>
-        <dd>{sat?.groups.join(' · ').toUpperCase() ?? '—'}</dd>
-      </dl>
+
+      <h3 className="sat-block-title">NOW</h3>
+      <p className="sat-line">
+        {formatKm(t.altKm, 0)} · {t.velocityKmS.toFixed(2)} KM/S
+        {t.sunlit !== null && (
+          <>
+            {' · '}
+            {t.sunlit ? (
+              <span className="sat-sunlit">☀︎ SUNLIT</span>
+            ) : (
+              <span className="sat-shadow">● IN SHADOW</span>
+            )}
+          </>
+        )}
+      </p>
+      <p className="sat-line">OVER {formatLatLon(t.latDeg, t.lonDeg)}</p>
+
+      <h3 className="sat-block-title">ORBIT</h3>
+      <p className="sat-line">{formatOrbitPeriod(t.periodMinutes)}</p>
+      <p className="sat-line">
+        <span
+          title={`Lowest–highest altitude over one orbit. Perigee–apogee ${Math.round(t.perigeeKm)}–${Math.round(t.apogeeKm)} km above the 6378 km equatorial radius.`}
+        >
+          {formatOrbitSpan(t.lowKm, t.highKm)}
+        </span>
+        {inclinationDeg !== null && (
+          <>
+            {' · '}
+            <span title="Inclination: the orbit's angle to the equator">
+              TILTED {formatDeg(inclinationDeg, 1)}
+            </span>
+          </>
+        )}
+      </p>
+      <p className="sat-line">
+        {t.launchYear !== null && <>LAUNCHED {t.launchYear} · </>}
+        {t.tleEpochMs !== null && (
+          <span
+            title={`TLE epoch ${formatUtc(t.tleEpochMs)} UTC — position accuracy falls the further sim time is from it`}
+          >
+            DATA {formatDataAge(simMin * 60_000 - t.tleEpochMs)}
+          </span>
+        )}
+      </p>
+
+      <p className="sat-identity">
+        NORAD {t.noradId}
+        {t.designator !== null && (
+          <>
+            {'\u00a0· '}
+            <span title="International designator: launch year, launch number, piece">
+              {t.designator}
+            </span>
+          </>
+        )}
+        {groups && <>{'\u00a0· '}{groups}</>}
+      </p>
     </section>
   )
 }

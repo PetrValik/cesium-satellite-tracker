@@ -1,0 +1,115 @@
+/* ============================================================
+   satellite detail — the tracking panel's NOW / ORBIT readout
+   (features/tracking/TelemetryPanel). The header parts every selection
+   panel shares (.telemetry-header, .telemetry-name, .orbit-class,
+   .panel-actions) are skinned in telemetry.css; this file puts them on
+   one row and lays out the readout blocks. .sat-detail on the section
+   carries no rule of its own: like .telemetry-panel it is a hook.
+   Loads after telemetry.css (index.css): .sat-title restyles its parts.
+   ============================================================ */
+
+/* ---- header: NAME · CLASS · FOLLOW ✕ on one row ------------------- */
+
+/* The name gives way (ellipsis; the full name is its title), the badge
+   and the buttons never do; the badge keeps a fixed place left of the
+   buttons. 246px of content: FOLLOW ✕ 105 + badge 32 + 2 × 6 gap leaves
+   the name 97px — "ISS (ZARYA)" is 93 at 14px untracked. Touch pointers'
+   44px buttons (136) would leave it 6 characters, so below a 6em name
+   (76px once the -8px margins count) the buttons wrap to a second row
+   instead: flex-basis drives the line break, flex-grow then fills the
+   row. The phone sheet hides .panel-actions (sheet.css), which hands
+   their width to the name. */
+.sat-title {
+  flex-wrap: wrap;
+  gap: var(--sp-1) 6px;
+}
+
+.sat-title .telemetry-name {
+  flex: 1 1 6em;
+  min-width: 0;
+  /* the name is an h2 now: drop telemetry.css's stacked-name margins.
+     padding + equal negative margin give the amber glow 4px of room
+     inside overflow:hidden without moving the row or the left edge */
+  margin: calc(-1 * var(--sp-1));
+  padding: var(--sp-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: normal;
+}
+
+.sat-title .orbit-class {
+  flex: none;
+  padding: 0 var(--sp-1) 1px;
+}
+
+.sat-title .panel-actions {
+  flex: none;
+  margin-left: auto;
+}
+
+/* ---- block headings: NOW / ORBIT ----------------------------------- */
+
+/* HUD label with a hairline running on to the panel edge */
+.sat-block-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0 var(--sp-1);
+  color: var(--text-dim);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  letter-spacing: var(--ls-label);
+}
+
+.sat-block-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--hairline);
+}
+
+.sat-title + .sat-block-title {
+  margin-top: var(--sp-2);
+}
+
+/* ---- readout lines -------------------------------------------------- */
+
+.sat-line {
+  margin: 0;
+  font-size: var(--fs-data);
+  line-height: 1.5;
+  letter-spacing: var(--ls-data);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Every span is one fact (the low–high span, TILTED …, DATA …, the
+   light flag), so a narrow stack wraps between facts, never inside one.
+   formatOrbitSpan's thousands separator is a thin space, which is a
+   line-break opportunity: unguarded, "35 759" could split. */
+.sat-line span {
+  white-space: nowrap;
+}
+
+/* sunlit / shadow: a state, not the selection — never amber. Cyan is
+   also the sky-plot track and the passes panel's naked-eye flag, so a
+   ◉ EYE pass and ☀︎ SUNLIT read as the same signal */
+.sat-sunlit {
+  color: var(--cyan);
+}
+
+.sat-shadow {
+  color: var(--text-dim);
+}
+
+/* NORAD · designator · groups: small and dim, last in the panel */
+.sat-identity {
+  margin: var(--sp-2) 0 0;
+  color: var(--text-dim);
+  font-size: var(--fs-label);
+  line-height: 1.5;
+  letter-spacing: var(--ls-label-tight);
+  font-variant-numeric: tabular-nums;
+  /* a long group name must not push the panel wider */
+  overflow-wrap: anywhere;
+}

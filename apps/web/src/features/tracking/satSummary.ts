@@ -4,7 +4,7 @@
  */
 import { useSatellites } from '../../core/ui/satelliteStore'
 import type { SelectionSummary } from '../../core/ui/selectionSummary'
-import { formatKm } from '../../lib/format'
+import { formatCount, formatKm } from '../../lib/format'
 import { useTelemetry } from './telemetryStore'
 
 /**
@@ -16,6 +16,27 @@ export function tleInclinationDeg(tle2: string): number | null {
   if (field === '') return null
   const deg = Number(field)
   return Number.isFinite(deg) && deg >= 0 && deg <= 180 ? deg : null
+}
+
+/**
+ * ORBIT line one: the period (minutes below 2 h, else hours, one decimal)
+ * and revolutions per day, e.g. `EVERY 93.0 MIN · 15.5× A DAY`.
+ */
+export function formatOrbitPeriod(periodMinutes: number): string {
+  const period =
+    periodMinutes < 120 ? `${periodMinutes.toFixed(1)} MIN` : `${(periodMinutes / 60).toFixed(1)} H`
+  return `EVERY ${period} · ${(1440 / periodMinutes).toFixed(1)}× A DAY`
+}
+
+/**
+ * ORBIT low–high altitude in whole km, e.g. `416–425 KM`; one value when
+ * both round equal, '—' when SGP4 failed over the whole orbit (NaN).
+ */
+export function formatOrbitSpan(lowKm: number, highKm: number): string {
+  if (!Number.isFinite(lowKm) || !Number.isFinite(highKm)) return '—'
+  const low = Math.round(lowKm)
+  const high = Math.round(highKm)
+  return low === high ? `${formatCount(low)} KM` : `${formatCount(low)}–${formatCount(high)} KM`
 }
 
 /**
