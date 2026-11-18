@@ -6,6 +6,7 @@ import { bindSheetsToSelection, sheetId, visibleSheet } from './compactSheets'
 import { HelpButton } from './HelpOverlay'
 import { HideControlsButton } from './HudVisibility'
 import { LayersPanel } from './LayersPanel'
+import { NavControls } from './NavControls'
 import { RailPictures } from './LeftRail'
 import { pictureDockLabel, useRailPictures } from './railPicture'
 import { SelectionChip } from './SelectionChip'
@@ -116,6 +117,7 @@ export function CompactHud() {
         </section>
       )}
       <div className="cluster-stack">
+        {openSheet === null && <NavControls />}
         {/* the chip stays under the details sheet as its handle */}
         {openSheet !== 'picture' && openSheet !== 'layers' && <SelectionChip />}
         <nav className="hud-dock" aria-label="HUD panels">

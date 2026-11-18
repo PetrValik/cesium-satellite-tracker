@@ -1,0 +1,213 @@
+/* ============================================================
+   nav controls — compass, zoom + / −, whole Earth, locate
+   app/NavControls. Desktop: a column under the mode tabs, beside the
+   right stack (on the screen edge while the stack is empty — App renders
+   it right after .right-stack for the sibling rule). Phone: the first
+   child of .cluster-stack, a column at the cluster's top-right in tall
+   portrait, an in-flow row heading the stack otherwise. Loads after
+   controls-late.css: the square buttons override its touch padding.
+   ============================================================ */
+
+.nav-controls {
+  --nav-size: 32px; /* --tap on touch pointers and phones */
+  position: absolute;
+  /* desktop: under the mode tabs ... */
+  top: calc(38px + var(--safe-top) + var(--tab-h) + var(--sp-2));
+  /* ... beside the right stack */
+  right: calc(var(--sp-3) + var(--safe-right) + var(--w-right) + var(--sp-2));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none; /* only the buttons take taps */
+}
+
+/* no selection: the stack is empty, the column moves to the edge */
+.right-stack:empty ~ .nav-controls {
+  right: calc(var(--sp-3) + var(--safe-right));
+}
+
+.nav-controls > * {
+  pointer-events: auto;
+}
+
+@media (pointer: coarse) {
+  .nav-controls {
+    --nav-size: var(--tap);
+  }
+}
+
+.is-compact .nav-controls {
+  --nav-size: var(--tap);
+}
+
+/* ---- buttons --------------------------------------------------------
+   Square bezels on the panel glass, like the compact dock: a transparent
+   .hud-button would vanish over the day side of the light basemap. */
+
+.nav-button {
+  display: grid;
+  place-items: center;
+  width: var(--nav-size);
+  height: var(--nav-size);
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  color: var(--text-dim);
+  background-color: var(--panel-bg);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
+}
+
+/* pressed: the amber wash over the glass, not instead of it */
+.nav-button:active {
+  background-color: var(--panel-bg);
+  background-image: linear-gradient(var(--amber-wash), var(--amber-wash));
+}
+
+.nav-button:focus-visible {
+  color: var(--amber);
+  border-color: var(--amber-outline);
+}
+
+/* locating: held amber until the fix or the error lands (no spinner —
+   the HUD does not animate live state) */
+.nav-button[aria-busy='true'] {
+  color: var(--amber);
+  border-color: var(--amber-outline);
+  cursor: progress;
+}
+
+/* ---- glyphs: 24-unit stroke icons, ~56% of the button ---------------- */
+
+.nav-icon {
+  display: block;
+  width: calc(var(--nav-size) * 0.56);
+  height: calc(var(--nav-size) * 0.56);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.nav-icon .nav-icon-dot {
+  fill: currentColor;
+  stroke: none;
+}
+
+/* ---- compass: the column's head instrument --------------------------- */
+
+.nav-compass {
+  position: relative;
+  border-color: var(--hairline-strong);
+}
+
+/* the panels' amber corner tick, scaled to the button */
+.nav-compass::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-top: 2px solid var(--amber);
+  border-left: 2px solid var(--amber);
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+/* rotated inline by -heading every published degree: it ticks, it never
+   tweens (no transition, whatever a future .nav-icon rule adds). Larger
+   than the other glyphs: a slim needle at their size reads as a dot. */
+.nav-compass-needle {
+  width: calc(var(--nav-size) * 0.72);
+  height: calc(var(--nav-size) * 0.72);
+  transform-origin: 50% 50%;
+  transition: none;
+}
+
+.nav-compass-north {
+  fill: var(--alert);
+  stroke: none;
+}
+
+.nav-compass-south {
+  fill: currentColor;
+  stroke: none;
+}
+
+/* ---- locate message --------------------------------------------------
+   Left of the button in a column, above it in a row. Empty, it keeps no
+   box but stays in the accessibility tree, so the role=status region
+   exists before its text arrives and the change is announced. */
+
+.nav-locate {
+  position: relative;
+  display: flex;
+}
+
+.nav-message {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + var(--sp-2));
+  transform: translateY(-50%);
+  padding: 4px var(--sp-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  color: var(--text);
+  background: var(--panel-bg);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.nav-message:empty {
+  padding: 0;
+  border: 0;
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.nav-message.is-error {
+  color: var(--alert);
+  border-color: var(--alert-outline);
+  text-shadow: var(--glow-alert-text);
+}
+
+/* ---- compact (phone) --------------------------------------------------
+   The absolute column resolves against .compact-cluster (cluster.css);
+   the row takes the .cluster-stack > * width rules, so it is as wide as
+   the dock. */
+
+/* tall portrait: a column at the cluster's top-right, under the tabs */
+@media (orientation: portrait) and (min-height: 601px) {
+  .is-compact .nav-controls {
+    top: 0;
+    right: 0;
+    width: auto;
+    max-width: none;
+    align-self: auto;
+  }
+}
+
+/* landscape phone / short portrait: an in-flow row heading the cluster
+   stack, right-aligned to the dock; the message rises above the button */
+@media (orientation: landscape), (max-height: 600px) {
+  .is-compact .nav-controls {
+    position: static;
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+
+  .is-compact .nav-message {
+    top: auto;
+    right: 0;
+    bottom: calc(100% + var(--sp-2));
+    transform: none;
+  }
+}

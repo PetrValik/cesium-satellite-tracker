@@ -18,7 +18,9 @@
    - mode-tabs.css after controls-late.css: on touch pointers the
      tabs keep their own side padding over the finger-sized button's;
    - dock.css keeps .hud-dock > .hide-button after the dock button
-     rule (same specificity).
+     rule (same specificity);
+   - nav.css after controls-late.css: its square nav buttons override
+     the touch padding.
    ============================================================ */
 
 @import './tokens.css';
@@ -46,4 +48,5 @@
 @import './sheet.css';
 @import './chip.css';
 @import './dock.css';
+@import './nav.css';
 @import './restore.css';
