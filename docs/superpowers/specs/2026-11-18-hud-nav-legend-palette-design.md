@@ -1,6 +1,6 @@
 # HUD round: globe navigation, multi-domain legend, meaningful colours, satellite-only time bar
 
-**Date:** 2026-11-18 · **Status:** parts 1–4 approved by the owner 2026-11-18; part 5 approach picked the same day · **Branch:** `feat/hud-nav-legend-palette`
+**Date:** 2026-11-18 · **Status:** parts 1–4 approved by the owner 2026-11-18; part 5 approach picked the same day; calls 10, 15 and 16 revised or added while planning · **Branch:** `feat/hud-nav-legend-palette` · **Plan:** `docs/superpowers/plans/2026-11-18-hud-nav-legend-palette.md`
 
 ## Why
 
@@ -159,7 +159,10 @@ are `@hud-designer`'s call within those rules.
   right stack is never shortened to make room. Where the right edge is taken (desktop with telemetry +
   passes open, `styles/telemetry.css:19-20`; a landscape phone, which also uses the compact layout,
   `core/ui/useCompactLayout.ts:10`), the stack may become a horizontal row in the bottom-right band, next to
-  the launchers / dock. On the phone it hides while a sheet is open. It belongs to `.hud-layer`, so HIDE / U
+  the launchers / dock. *Revised while planning (call 10):* on desktop that band overlaps the right stack
+  from 900 to 1419 px wide with the bar mounted, so the desktop column sits under the mode tabs, at the right
+  edge while the right stack is empty and beside it while panels show. The landscape phone keeps the row,
+  heading the bottom cluster. On the phone it hides while a sheet is open. It belongs to `.hud-layer`, so HIDE / U
   hides it with the rest of the HUD. Exact position, icons and sizing are `@hud-designer`'s call (targets
   ≥ 44 px).
 
@@ -248,7 +251,9 @@ altitude, speed, **sunlit or in Earth's shadow**, sub-satellite point.
 
 **ORBIT** (from the TLE, computed once per selection):
 - period and orbits per day;
-- **low–high point**: perigee and apogee altitude from mean motion + eccentricity;
+- **low–high point**: *revised while planning (call 15):* the min / max geodetic altitude over one SGP4 orbit,
+  the same altitude NOW shows, so the live value always lies inside it. Perigee and apogee from mean motion +
+  eccentricity (measured above the equatorial radius, so up to ~8 km lower for the ISS) go into its title;
 - inclination, labelled in words ("tilted 51.6°", with a title explaining "angle to the equator");
 - **launch year + international designator** from TLE line 1 cols 10–17 (`98067A` → 1998, `1998-067A`);
   two-digit years 57–99 are 19xx, 00–56 are 20xx;
@@ -269,8 +274,9 @@ altitude, speed, **sunlit or in Earth's shadow**, sub-satellite point.
   and the GPS button.
 
 **Where the maths lives.** New pure helpers in `apps/web/src/lib/orbital.ts` (perigee/apogee, TLE epoch,
-international designator, sun position and the Earth-shadow test via `satellite.js` 6.0.2 `sunPos`, observer
-sun elevation) with unit tests. `predictPasses` gains the per-pass rise/set azimuth and the naked-eye flag
+international designator, sun position and the Earth-shadow test, observer sun elevation) with unit tests.
+The sun position is a corrected copy of the Vallado series behind `satellite.js` 6.0.2 `sunPos`, not `sunPos`
+itself (call 16). `predictPasses` gains the per-pass rise/set azimuth and the naked-eye flag
 on `PassPrediction` (`lib/protocol.ts`). The shadow test for NOW runs at the 5 Hz telemetry push, not per
 frame, and allocates nothing (scratch objects). `@orbital-mechanics` owns these; `@hud-designer` owns the
 layout.
@@ -316,9 +322,17 @@ reads UTC everywhere, `features/timebar/CLAUDE.md`).
 7. The new time-bar rule applies on desktop too.
 8. Picking a satellite from the catalog search switches focus to ORBITAL, like tapping it on the globe.
 9. Swatch grid: at most 8 columns (neighbouring hue families merged) so swatches stay ≥ 32 px on a phone.
-10. Where the right edge is full (desktop with satellite panels open, landscape phone), the nav controls
-    become a row in the bottom-right corner instead of shrinking the panels.
+10. *(Revised while planning.)* The nav controls never shrink the panels. On desktop they are a column under
+    the mode tabs, beside the right stack while panels show; a bottom-right row would overlap the right stack
+    from 900 to 1419 px wide. On a landscape phone they are a row heading the bottom cluster.
 11. Folded legend sections start unfolded and are remembered per domain; a lone section cannot fold.
 12. Satellite detail: pass times stay in UTC (the HUD's rule), labelled as such.
 13. Data age is measured against sim time, not wall time.
 14. Naked-eye flag = satellite sunlit while the observer's sun is below −6° at some point of the pass.
+15. *(Added while planning.)* The ORBIT low–high span is the geodetic altitude over one orbit (ISS ≈ 420–433
+    km), not perigee/apogee (≈ 416–425 km), because otherwise the NOW altitude would read above the orbit's
+    "highest point". Perigee/apogee stay in the title.
+16. *(Added while planning.)* `satellite.js` 6.0.2 `sunPos` has a unit bug (`lib/sun.js:45` converts only the
+    rate term of the mean anomaly to radians): it is 1.40° off and puts the ISS in shadow on 22 of 558 samples
+    of an orbit Cesium shows fully sunlit. `lib/orbital` carries a corrected copy, and a canary test flags
+    the upgrade that fixes it upstream.
