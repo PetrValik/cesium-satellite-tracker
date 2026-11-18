@@ -37,7 +37,8 @@ orbit class) uses the same colors as the globe, including your COLORS choices.
 | CLICK EMPTY | Deselect |
 
 Clicking an object that belongs to another domain switches to that mode and
-selects it. Clicking empty space deselects **within the current mode only**.
+selects it. Picking a satellite from the CATALOG search does the same: focus moves to
+ORBITAL and its telemetry opens. Clicking empty space deselects **within the current mode only**.
 
 ## Keyboard
 

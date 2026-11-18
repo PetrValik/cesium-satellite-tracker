@@ -2,7 +2,7 @@
 Group loading — curated groups, which groups are active, the merged working set sent to the propagation worker, the per-group cache — and the catalog panel (group toggles + search) that drives it. Satellite entities (`byId`) and the selection are not here: they live in `core/ui/satelliteStore`.
 
 ## Depends on
-`GET /api/groups`, `/api/satellites?group=`, `/api/satellites/search` through `lib/api`; `GroupInfo`/`Satellite` from `@orbital-ops/shared`; `core/ui/satelliteStore`, which it writes (`upsertSats` for every new working set, `registerSat` + `select` for a search pick). `app/globe/constellationFeed` reads `sats` to (re)init the worker.
+`GET /api/groups`, `/api/satellites?group=`, `/api/satellites/search` through `lib/api`; `GroupInfo`/`Satellite` from `@orbital-ops/shared`; `core/ui/satelliteStore`, which it writes (`upsertSats` for every new working set, `registerSat` + `select` for a search pick). `app/globe/constellationFeed` reads `sats` to (re)init the worker; `core/ui/modeStore` (`setMode('orbital')` on a search pick).
 
 ## Invariants
 - No sibling slice imports this one and it imports none (`docs/ARCHITECTURE.md:33`); what `tracking` and `passes` need — entities and the selection — is in `core/ui/satelliteStore`.
@@ -12,11 +12,11 @@ Group loading — curated groups, which groups are active, the merged working se
 - `groupCache` is module-scope, so toggling a group off and on again never refetches.
 - `starlink` (10k+ objects) is the one group off by default.
 - `init` uses `Promise.allSettled` and keeps only the groups that actually loaded; a total failure sets `offline` and clears `booting` rather than hanging on the boot overlay.
-- `satelliteStore.registerSat` (first registration wins) is what makes a search hit selectable while its group is inactive; the panel calls it before `select`.
+- `registerSat` (first registration wins) makes a search hit selectable while its group is inactive. `pickSearchResult` (`searchPick.ts`) calls it, then `setMode('orbital')`, then `select`. This is a globe tap's order (`app/globe/tapRouting.ts:49`), because the panel can render stacked under another focused domain whose details would hide the pick.
 - A failed `api.search` shows SEARCH UNAVAILABLE in the dropdown (`CatalogPanel.tsx` `failed`), never an empty list that reads as "no matches"; only the latest request (`searchSeq`) may set it.
 
 ## Traps
 None recorded yet; add the first incident here.
 
 ## How to test
-`npm test -w apps/web -- catalogStore` (vitest; also pins byId-before-sats and the toggle-off selection) and `-- satelliteStore` for the entity/selection store. No API, no Docker — `lib/api` is mocked. The API side of the same contract is `npm test -w apps/api -- app` / `-- db`.
+`npm test -w apps/web -- catalogStore` (vitest; also pins byId-before-sats and the toggle-off selection) and `-- satelliteStore` for the entity/selection store, and `-- searchPick` (a search pick focuses ORBITAL before it selects). No API, no Docker — `lib/api` is mocked. The API side of the same contract is `npm test -w apps/api -- app` / `-- db`.
