@@ -1,5 +1,6 @@
+import { create } from 'zustand'
 import { isSimLive, simClock } from '../sim/simClock'
-import { useSimLive } from '../sim/simLive'
+import { useWallClock } from '../sim/wallClock'
 import { useMode } from './modeStore'
 import { useSatellites } from './satelliteStore'
 
@@ -34,10 +35,58 @@ export function transportVisibleNow(): boolean {
   })
 }
 
-/** React hook: re-renders on layer, selection and sim-liveness changes. */
+/**
+ * The flag React reads, derived from the four stores the rule depends on and
+ * stored only when it flips, so its subscribers hear only a flip. Hooking the
+ * inputs directly re-rendered every caller (the App root among them) on each
+ * scrub step, rate change and 10 s wall tick.
+ *
+ * It recomputes on the events that can flip it: the ORBITAL layer, the
+ * selection, rate / play-pause / jumpNonce, and the wall tick. Not on
+ * epochMs, which moves every frame: at a playing 1x the sim-to-wall offset
+ * is constant between events, and the background-tab gap (rAF starved, the
+ * epoch left behind) is closed by the wall tick, which frameLoop's
+ * needsWallResync fires at once when frames resume. Liveness reads a fresh
+ * Date.now() through transportVisibleNow(), never the wall store's nowMs
+ * (up to a tick stale), so a NOW reset counts as live at once.
+ *
+ * Subscribed at module scope on purpose: every input is a module-singleton
+ * store, so these subscriptions are made once per page and live exactly as
+ * long as the stores, like wallClock's interval; no component owns them and
+ * none can leak one. The HMR dispose stops a dev edit of this file from
+ * stacking a second set on the surviving stores.
+ */
+const useVisibility = create<{ visible: boolean }>(() => ({ visible: transportVisibleNow() }))
+
+function recompute(): void {
+  const visible = transportVisibleNow()
+  if (visible !== useVisibility.getState().visible) useVisibility.setState({ visible })
+}
+
+const unsubscribers = [
+  useMode.subscribe((s, prev) => {
+    if (s.satellitesVisible !== prev.satellitesVisible) recompute()
+  }),
+  useSatellites.subscribe((s, prev) => {
+    if (s.selectedId !== prev.selectedId) recompute()
+  }),
+  simClock.subscribe((s, prev) => {
+    if (s.rate !== prev.rate || s.playing !== prev.playing || s.jumpNonce !== prev.jumpNonce) recompute()
+  }),
+  useWallClock.subscribe(recompute),
+]
+import.meta.hot?.dispose(() => {
+  for (const unsubscribe of unsubscribers) unsubscribe()
+})
+
+/** Non-React access to the derived flag; a subscriber hears each flip, nothing else. */
+export const transportVisibility = {
+  get: (): boolean => useVisibility.getState().visible,
+  subscribe: (listener: (visible: boolean) => void): (() => void) =>
+    useVisibility.subscribe((s) => listener(s.visible)),
+}
+
+/** React hook: re-renders only when the visibility flips. */
 export function useTransportVisible(): boolean {
-  const satellitesVisible = useMode((s) => s.satellitesVisible)
-  const satelliteSelected = useSatellites((s) => s.selectedId !== null)
-  const simLive = useSimLive()
-  return transportVisibleFor({ satellitesVisible, satelliteSelected, simLive })
+  return useVisibility((s) => s.visible)
 }

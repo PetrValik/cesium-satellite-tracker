@@ -32,8 +32,9 @@ export function frameAdvanceMs(rawDtMs: number, rate: number): number {
  * True after a frame gap long enough to flip sim liveness: a background tab
  * starves requestAnimationFrame, so the 10 s wall tick may have read the
  * stale epoch as not live. The first frame back catches the epoch up; a
- * fresh wall tick then re-runs `useSimLive` at once, instead of leaving the
- * time bar (core/ui/transport) on screen until the next tick.
+ * fresh wall tick then re-runs the liveness check (`core/ui/transport`'s
+ * derived flag, `useSimLive`) at once, instead of leaving the time bar on
+ * screen until the next tick.
  */
 export function needsWallResync(rawDtMs: number): boolean {
   return rawDtMs >= LIVE_EPSILON_MS
