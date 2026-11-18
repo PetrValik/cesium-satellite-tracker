@@ -182,25 +182,60 @@ export function perigeeApogeeKm(satrec: SatRec): PerigeeApogee {
   return { perigeeKm: aKm * (1 - e) - R, apogeeKm: aKm * (1 + e) - R }
 }
 
+/** Coarse samples per orbit for `altitudeSpanKm` (never closer than a minute apart). */
+const SPAN_SAMPLES_PER_ORBIT = 360
+/** Ternary-search steps per extreme: shrinks a 2-step bracket by (2/3)^24 ≈ 6e-5. */
+const SPAN_REFINE_STEPS = 24
+
+/** `altitudeSpanKm`'s coarse step: every minute, but never more than 360 samples an orbit. */
+export function altitudeSpanStepMs(periodMinutes: number): number {
+  return Math.max(MS_PER_MINUTE, (periodMinutes * MS_PER_MINUTE) / SPAN_SAMPLES_PER_ORBIT)
+}
+
 /**
  * Lowest and highest geodetic altitude (km above the WGS-84 ellipsoid, the
- * `altKm` NOW shows) over one SGP4 orbit from `startMs`: `propagateEcef` every
- * 60 s for k = 0…ceil(period in minutes), so the live value always lies inside
- * the span. Failed samples are skipped; with none left both are NaN. ~95 SGP4
- * calls for a LEO, ~1 440 for a GEO: call it once per selection, never per frame.
+ * `altKm` NOW shows) over one SGP4 orbit from `startMs`, so the live value
+ * always lies inside the span. A coarse sweep (`altitudeSpanStepMs`, ≤ 361
+ * samples) finds each extreme, then a ternary search inside its ±1 step
+ * bracket pins it: ≤ ~460 SGP4 calls whatever the period (a 60 s sweep of a
+ * 13.7-day orbit was ~20 000). Failed samples are skipped; with none left
+ * both are NaN. Call it once per selection, never per frame.
  */
 export function altitudeSpanKm(satrec: SatRec, startMs: number): { lowKm: number; highKm: number } {
-  const steps = Math.ceil(orbitalPeriodMinutes(satrec))
+  const stepMs = altitudeSpanStepMs(orbitalPeriodMinutes(satrec))
+  const steps = Math.ceil((orbitalPeriodMinutes(satrec) * MS_PER_MINUTE) / stepMs)
+  const endMs = startMs + steps * stepMs
   const state = createSatStateEcef()
+  const altAt = (ms: number) => (propagateEcef(satrec, ms, state) ? state.altKm : Number.NaN)
   let lowKm = Infinity
   let highKm = -Infinity
+  let lowMs = startMs
+  let highMs = startMs
   for (let k = 0; k <= steps; k++) {
-    if (!propagateEcef(satrec, startMs + k * MS_PER_MINUTE, state)) continue
-    if (state.altKm < lowKm) lowKm = state.altKm
-    if (state.altKm > highKm) highKm = state.altKm
+    const ms = startMs + k * stepMs
+    const alt = altAt(ms)
+    if (Number.isNaN(alt)) continue
+    if (alt < lowKm) [lowKm, lowMs] = [alt, ms]
+    if (alt > highKm) [highKm, highMs] = [alt, ms]
   }
   if (lowKm > highKm) return { lowKm: Number.NaN, highKm: Number.NaN }
-  return { lowKm, highKm }
+  // sign 1 refines a maximum, −1 a minimum; never worse than the coarse value.
+  const refine = (centreMs: number, sign: 1 | -1, coarseKm: number) => {
+    let lo = Math.max(startMs, centreMs - stepMs)
+    let hi = Math.min(endMs, centreMs + stepMs)
+    for (let i = 0; i < SPAN_REFINE_STEPS; i++) {
+      const m1 = lo + (hi - lo) / 3
+      const m2 = hi - (hi - lo) / 3
+      const a1 = altAt(m1)
+      const a2 = altAt(m2)
+      if (Number.isNaN(a1) || Number.isNaN(a2)) break
+      if (sign * a1 < sign * a2) lo = m1
+      else hi = m2
+    }
+    const best = altAt((lo + hi) / 2)
+    return Number.isNaN(best) ? coarseKm : sign > 0 ? Math.max(best, coarseKm) : Math.min(best, coarseKm)
+  }
+  return { lowKm: refine(lowMs, -1, lowKm), highKm: refine(highMs, 1, highKm) }
 }
 
 /** TLE epoch (line 1 cols 19-32) as Unix ms, UTC, from the parsed `satrec.jdsatepoch`. */
