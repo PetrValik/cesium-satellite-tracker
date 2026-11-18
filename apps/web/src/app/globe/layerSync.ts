@@ -1,7 +1,7 @@
 import type { Viewer } from 'cesium'
 import { setViewerBasemap } from '../../core/engine/createViewer'
 import { isSimLive, simClock } from '../../core/sim/simClock'
-import { isDomainVisible, OPS_MODES, transportVisible, useMode } from '../../core/ui/modeStore'
+import { isDomainVisible, OPS_MODES, useMode } from '../../core/ui/modeStore'
 import { usePrefs } from '../../core/ui/prefsStore'
 import { useSatellites } from '../../core/ui/satelliteStore'
 import type { AircraftLayer } from '../../features/airspace/AircraftLayer'
@@ -111,10 +111,15 @@ export class LayerSync {
           // the selection alive.
           if (!visible) deselectInMode(domain)
         }
-        // The transport bar unmounts with transportVisible. A clock left
-        // warped/paused would keep the live feeds suspended with no visible
-        // way back — snap it to real time instead.
-        if (transportVisible(prev) && !transportVisible(state) && !isSimLive(simClock.get())) {
+        // ORBITAL takes the time bar with it (core/ui/transport). Off NOW the
+        // bar hides for no other reason, so this is the one place a warped or
+        // paused clock could be stranded with the live feeds suspended and no
+        // visible way back — snap it to real time instead.
+        if (
+          isDomainVisible(prev, 'orbital') &&
+          !isDomainVisible(state, 'orbital') &&
+          !isSimLive(simClock.get())
+        ) {
           simClock.get().resetToNow()
         }
       }),

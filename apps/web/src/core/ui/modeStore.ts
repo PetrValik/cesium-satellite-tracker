@@ -87,15 +87,6 @@ export function isDomainVisible(s: Pick<StoredMode, DomainFlag>, mode: OpsMode):
   return s[DOMAIN_FLAG[mode]]
 }
 
-/**
- * Time warp only moves satellites (live feeds suspend under warp), so the
- * transport controls — the bar, the sim-rate readout and their keys — travel
- * with the ORBITAL layer. The one place that rule is written.
- */
-export function transportVisible(s: Pick<StoredMode, 'satellitesVisible'>): boolean {
-  return s.satellitesVisible
-}
-
 /** First visible domain in tab order — where focus falls when the focused one hides. */
 function firstVisibleDomain(s: StoredMode): OpsMode | null {
   for (const m of OPS_MODES) if (s[DOMAIN_FLAG[m]]) return m
