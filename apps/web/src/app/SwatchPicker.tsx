@@ -106,7 +106,9 @@ export function SwatchPicker({
           className="hud-input swatch-hex"
           name={fieldName}
           value={text}
-          maxLength={7}
+          // Room for a paste with spaces around it: parseHexInput trims, then
+          // rejects anything that is not #RRGGBB / RRGGBB.
+          maxLength={16}
           inputMode="text"
           autoCapitalize="characters"
           autoComplete="off"
