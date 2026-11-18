@@ -37,6 +37,8 @@ const SECTIONS: HelpSection[] = [
     rows: [
       ['W A S D / ARROWS', 'Rotate view / orbit target'],
       ['Q / E', 'Zoom in / out'],
+      ['0', 'Whole Earth view (HOME button)'],
+      ['R', 'North up, look straight down (compass button)'],
       ['F', 'Toggle camera follow-lock on the selection'],
       ['ESC', 'Close help / colors / sheet, then release follow-lock, then deselect'],
     ],

@@ -60,6 +60,8 @@ ORBITAL and its telemetry opens. Clicking empty space deselects **within the cur
 |---|---|
 | W A S D / ARROWS | Rotate view / orbit target |
 | Q / E | Zoom in / out |
+| 0 | Fly to the whole-Earth view (HOME button); releases a follow-lock |
+| R | Turn north-up and look straight down (compass button); keeps a follow-lock |
 | F | Toggle camera follow-lock on the selection |
 | ESC | Close help → COLORS → open sheet, then release follow-lock, then deselect |
 

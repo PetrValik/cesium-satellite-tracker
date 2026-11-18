@@ -1,5 +1,6 @@
 import { CameraRig } from '../../core/engine/CameraRig'
 import { simClock, stepRate } from '../../core/sim/simClock'
+import { requestCamera } from '../../core/ui/cameraStore'
 import { useFollow } from '../../core/ui/followStore'
 import { useHud } from '../../core/ui/hudStore'
 import { isTypingTarget } from '../../core/ui/keyboard'
@@ -50,6 +51,13 @@ export function globeKeyHandlers(rig: KeyRig) {
     }
     if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return
     switch (e.code) {
+      // Camera keys work with the HUD hidden too, like W A S D.
+      case 'Digit0':
+        requestCamera({ kind: 'home' })
+        break
+      case 'KeyR':
+        requestCamera({ kind: 'level' })
+        break
       case 'KeyF':
         if (hasSelectionInMode()) useFollow.getState().toggle()
         break

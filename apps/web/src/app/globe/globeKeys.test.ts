@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../lib/api', () => ({ api: {}, ApiError: class extends Error {} }))
 
 import { useSimClock } from '../../core/sim/simClock'
+import { bindCameraHandler, type CameraCommand } from '../../core/ui/cameraStore'
 import { useFollow } from '../../core/ui/followStore'
 import { useHud } from '../../core/ui/hudStore'
 import { useMode } from '../../core/ui/modeStore'
@@ -49,6 +50,31 @@ beforeEach(() => {
 })
 
 describe('globe keys', () => {
+  it('0 flies home and R levels north-up; Ctrl+R, repeats and typing pass', () => {
+    const { onKeyDown } = setup()
+    const commands: CameraCommand[] = []
+    const unbind = bindCameraHandler((c) => { commands.push(c) })
+    onKeyDown(key('Digit0'))
+    onKeyDown(key('KeyR'))
+    const reload = key('KeyR', { ctrlKey: true })
+    onKeyDown(reload)
+    onKeyDown(key('Digit0', { repeat: true }))
+    onKeyDown(key('KeyR', { target: { tagName: 'INPUT' } as unknown as EventTarget }))
+    unbind()
+    expect(commands).toEqual([{ kind: 'home' }, { kind: 'level' }])
+    expect(reload.preventDefault).not.toHaveBeenCalled()
+  })
+
+  it('0 and R still work while the HUD is hidden', () => {
+    const { onKeyDown } = setup()
+    useHud.setState({ hidden: true })
+    const commands: CameraCommand[] = []
+    const unbind = bindCameraHandler((c) => { commands.push(c) })
+    onKeyDown(key('Digit0'))
+    unbind()
+    expect(commands).toEqual([{ kind: 'home' }])
+  })
+
   it('time keys follow the time bar: quiet at NOW with nothing picked, on with a pick or off NOW', () => {
     const { onKeyDown } = setup()
     useSatellites.setState({ selectedId: null })
