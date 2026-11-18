@@ -10,7 +10,7 @@ Pass prediction for one observer: the observer store (persisted via `lib/storage
 - Changing the observer clears `passes`, `computedFor` and `windowStartMs` together; stale predictions for a moved observer are never shown.
 - `windowExpired` is the only thing that recomputes on time: sim time warped or scrubbed outside `[windowStartMs, +24 h]` invalidates the window.
 - `passView` (`passView.ts`) alone decides the next pass, the shown pass and the countdown; a picked pass that ended falls back to the next; pass times are UTC, labelled. While `busy` the panel reads no `passes` at all (`startCompute` leaves the old ones in place).
-- `computedFor` is read via `getState()`, deliberately out of the effect deps, so `startCompute()` cannot retrigger the effect and cancel its own timer (`PassesPanel.tsx:43`).
+- `computedFor` is read via `getState()`, deliberately out of the effect deps, so `startCompute()` cannot retrigger the effect and cancel its own timer (`PassesPanel.tsx:50`).
 - A stored observer is re-validated on load (finite, |lat| ≤ 90, |lon| ≤ 180); corrupt or unavailable `localStorage` falls back to the default rather than throwing.
 - `skyProjection` (drawn by `SkyPlot`) projects `r = (90 − el)/90 · R` with north up and east right, and drops samples below the horizon.
 
