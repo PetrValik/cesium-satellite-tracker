@@ -1,4 +1,4 @@
-import { Camera, Cartesian3, GeographicProjection, Matrix4 } from 'cesium'
+import { Camera, Cartesian3, Ellipsoid, GeographicProjection, Matrix4 } from 'cesium'
 import type { Viewer } from 'cesium'
 import { describe, expect, it } from 'vitest'
 import { CameraRig } from './CameraRig'
@@ -12,6 +12,8 @@ function makeRig() {
     drawingBufferWidth: 375,
     drawingBufferHeight: 667,
     mapProjection: new GeographicProjection(),
+    // Free-camera distance (zoom) reads the globe's ellipsoid.
+    globe: { ellipsoid: Ellipsoid.WGS84 },
   }
   const camera = new Camera(scene as never)
   const viewer = {
@@ -83,6 +85,62 @@ describe('CameraRig follow-lock', () => {
     rig.update(16)
     expect(Cartesian3.equalsEpsilon(camera.position, local, 0, 1e-6)).toBe(true)
     expect(view(camera, target).range).toBeCloseTo(1_500_000, -1)
+    rig.dispose()
+  })
+})
+
+const heightOf = (camera: Camera) => Ellipsoid.WGS84.cartesianToCartographic(camera.positionWC).height
+const frames = (rig: CameraRig, n: number, dtMs: number) => { for (let i = 0; i < n; i++) rig.update(dtMs) }
+
+describe('CameraRig zoomStep', () => {
+  it('one tap halves / doubles the free camera height over ~0.3 s, at any frame rate', () => {
+    for (const [dtMs, n] of [[16, 40], [100, 5]] as const) {
+      const { rig, camera } = makeRig()
+      camera.setView({ destination: Cartesian3.fromDegrees(15, 35, 8e6) })
+      rig.zoomStep(1)
+      frames(rig, n, dtMs)
+      expect(heightOf(camera) / 4e6).toBeCloseTo(1, 3)
+    }
+    const { rig, camera } = makeRig()
+    camera.setView({ destination: Cartesian3.fromDegrees(15, 35, 8e6) })
+    rig.zoomStep(-1)
+    frames(rig, 40, 16)
+    expect(heightOf(camera) / 16e6).toBeCloseTo(1, 3)
+  })
+  it('two quick taps stack; an opposite tap replaces the rest', () => {
+    const { rig, camera } = makeRig()
+    camera.setView({ destination: Cartesian3.fromDegrees(15, 35, 8e6) })
+    rig.zoomStep(1); rig.zoomStep(1)
+    frames(rig, 60, 16)
+    expect(heightOf(camera) / 2e6).toBeCloseTo(1, 3)
+    rig.zoomStep(1); rig.zoomStep(-1)
+    frames(rig, 40, 16)
+    expect(heightOf(camera) / 4e6).toBeCloseTo(1, 3)
+  })
+  it('zooms the follow range while locked, never under 2 km', () => {
+    const { rig, camera } = makeRig()
+    const target = Cartesian3.fromDegrees(14, 50, 400_000)
+    let ready = false
+    rig.follow(() => (ready ? target : null), 1_500_000)
+    ready = true
+    rig.update(16)
+    rig.zoomStep(1)
+    frames(rig, 40, 16)
+    expect(view(camera, target).range / 750_000).toBeCloseTo(1, 3)
+    expect(rig.isFollowing()).toBe(true)
+    rig.dispose()
+  })
+  it('never zooms a locked camera under 2 km', () => {
+    const { rig, camera } = makeRig()
+    const target = Cartesian3.fromDegrees(14, 50, 400_000)
+    let ready = false
+    rig.follow(() => (ready ? target : null), 3_000)
+    ready = true
+    rig.update(16)
+    rig.zoomStep(1); rig.zoomStep(1); rig.zoomStep(1)
+    frames(rig, 80, 16)
+    expect(view(camera, target).range).toBeCloseTo(2_000, 0)
+    expect(rig.isFollowing()).toBe(true)
     rig.dispose()
   })
 })

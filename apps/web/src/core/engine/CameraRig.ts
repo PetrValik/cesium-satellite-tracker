@@ -18,6 +18,10 @@ const ROTATE_RAD_PER_S = 1.1
 const ZOOM_PER_S = 0.9
 /** Follow orbit is never allowed closer than this. */
 const MIN_FOLLOW_RANGE_M = 2_000
+/** One zoom tap halves (in) or doubles (out) the distance over this long. */
+const ZOOM_STEP_SECONDS = 0.3
+/** Exponential zoom rate per second: e^(rate · ZOOM_STEP_SECONDS) = 2. */
+const ZOOM_RATE = Math.LN2 / ZOOM_STEP_SECONDS
 
 const MOVEMENT_KEYS = new Set([
   'KeyW',
@@ -57,6 +61,9 @@ export class CameraRig {
   private _initialRangeM = 1_000_000
   /** Non-null while the fly-in animation toward a new target is running. */
   private _transitionTarget: (() => Cartesian3 | null) | null = null
+  /** Pending zoom impulse: its direction (1 in, -1 out) and the seconds still to run. */
+  private _zoomDir: 1 | -1 = 1
+  private _zoomLeftS = 0
 
   constructor(viewer: Viewer) {
     this._viewer = viewer
@@ -151,7 +158,25 @@ export class CameraRig {
     return this._getTarget !== null || this._transitionTarget !== null
   }
 
-  /** Per-frame: refresh the follow frame and apply held movement keys. */
+  /**
+   * One smooth zoom step: `1` halves the distance (in), `-1` doubles it
+   * (out), over ZOOM_STEP_SECONDS. A same-direction tap while one is pending
+   * adds another step; an opposite tap replaces the rest. A running flight
+   * is cancelled first — a follow fly-in then engages the lock synchronously
+   * (its `cancel: engage`), so the step zooms the follow range.
+   */
+  zoomStep(direction: 1 | -1): void {
+    if (this._viewer.isDestroyed()) return
+    this._viewer.camera.cancelFlight()
+    if (this._zoomLeftS > 0 && this._zoomDir === direction) {
+      this._zoomLeftS += ZOOM_STEP_SECONDS
+    } else {
+      this._zoomDir = direction
+      this._zoomLeftS = ZOOM_STEP_SECONDS
+    }
+  }
+
+  /** Per-frame: refresh the follow frame, run the zoom impulse and apply held movement keys. */
   update(dtMs: number): void {
     if (this._viewer.isDestroyed()) return
     const camera = this._viewer.camera
@@ -189,6 +214,18 @@ export class CameraRig {
       }
     }
 
+    // Zoom impulse: exact exponential steps, so the result is the same at any
+    // frame rate. Numbers only — no allocation.
+    if (this._zoomLeftS > 0) {
+      const s = Math.min(dt, this._zoomLeftS)
+      this._zoomLeftS -= s
+      const d = this._distance()
+      if (this._zoomDir === 1) {
+        const floor = this._getTarget !== null ? MIN_FOLLOW_RANGE_M : 0
+        camera.zoomIn(Math.min(d * (1 - Math.exp(-ZOOM_RATE * s)), Math.max(0, d - floor)))
+      } else camera.zoomOut(d * (Math.exp(ZOOM_RATE * s) - 1))
+    }
+
     if (this._pressed.size === 0) return
     const rot = ROTATE_RAD_PER_S * dt
     if (this._pressed.has('KeyA') || this._pressed.has('ArrowLeft')) camera.rotateLeft(rot)
@@ -201,13 +238,7 @@ export class CameraRig {
     if (zoomIn || zoomOut) {
       // Scale the step to the current distance so zooming feels uniform from
       // LEO range down to airport range.
-      const distance = this._getTarget !== null
-        ? Cartesian3.magnitude(camera.position) // position is target-local while following
-        : this._viewer.scene.globe.ellipsoid.cartesianToCartographic(
-            camera.position,
-            scratchCartographic,
-          )?.height ?? 1e6
-      const step = Math.max(distance, MIN_FOLLOW_RANGE_M) * ZOOM_PER_S * dt
+      const step = Math.max(this._distance(), MIN_FOLLOW_RANGE_M) * ZOOM_PER_S * dt
       if (zoomIn) camera.zoomIn(step)
       if (zoomOut) camera.zoomOut(step)
     }
@@ -216,5 +247,17 @@ export class CameraRig {
   dispose(): void {
     this.unfollow()
     this._pressed.clear()
+    this._zoomLeftS = 0
+  }
+
+  /** Follow range while locked, else the free camera's height above the ellipsoid. */
+  private _distance(): number {
+    const camera = this._viewer.camera
+    return this._getTarget !== null
+      ? Cartesian3.magnitude(camera.position) // position is target-local while following
+      : this._viewer.scene.globe.ellipsoid.cartesianToCartographic(
+          camera.position,
+          scratchCartographic,
+        )?.height ?? 1e6
   }
 }
