@@ -1,32 +1,161 @@
 /* ============================================================
-   passes — observer editor, sky plot, pass list
+   passes — NEXT PASS OVER YOU: heading, next pass, sky plot,
+   later passes, observer line (features/passes/PassesPanel)
+   Widths that bind: the 272px right stack leaves 246px of content
+   (235px once its thin scrollbar shows); the 360px phone sheet 318px.
    ============================================================ */
 
-.observer-editor {
+/* ---- heading: NEXT PASS OVER YOU · IN 2 H 07 ----------------------- */
+
+/* The one .hud-title with an .observer-line sibling (.passes-panel is a
+   rule-less hook, telemetry.css). Label tracking instead of --ls-wide:
+   "… · IN 23 H 59" (31 ch) then fits one line at 246px / 235px, coarse
+   11px included; "… · NOW · ENDS IN 12 MIN" (41 ch) wraps, and balance
+   breaks it at its middle " · " rather than inside the countdown.
+   Without :has (old engines) the title keeps --ls-wide and still wraps. */
+.hud-title:has(~ .observer-line) {
+  letter-spacing: var(--ls-label-tight);
+  text-wrap: balance;
+}
+
+/* ---- pass rows ------------------------------------------------------ */
+
+.pass-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+/* the next pass: a single row that is never scrolled */
+.pass-next {
+  max-height: none;
+  overflow: visible;
+}
+
+.pass-list li {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: var(--sp-2);
+  gap: var(--sp-1);
 }
 
-.observer-label {
+.pass-list li.is-active .pass-row {
+  color: var(--amber);
+  text-shadow: var(--glow-amber-text);
+  box-shadow: inset 2px 0 0 var(--amber-outline);
+}
+
+/* The cells wrap between each other, never inside one: the row may take
+   two lines, the panel never gets wider. The row button fills the li's
+   height, so its tap target is the whole row beside WATCH ▶. */
+.pass-row {
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: center;
+  justify-content: flex-start;
+  gap: 2px 5px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: var(--fs-label);
+  font-variant-numeric: tabular-nums;
+  /* untracked: the 22-character worst case (NW → SE · 10 MIN · ◉) then
+     fits one line beside WATCH ▶ even with the stack's scrollbar */
+  letter-spacing: normal;
+  text-align: left;
+  /* no right padding: free space or WATCH ▶ follows, never the edge */
+  padding: var(--sp-1) 0 var(--sp-1) var(--sp-1);
+  cursor: pointer;
+  transition: background-color var(--t-fast) var(--ease-out);
+}
+
+.pass-row > span {
+  white-space: nowrap;
+}
+
+/* Later rows read as a table: time · direction · elevation · duration ·
+   eye in fixed character columns, numbers right-aligned.
+   "NW → SE" 7, "64°" 3, "10 MIN" 6 characters. */
+.pass-row > :nth-child(2) {
+  min-width: 7ch;
+}
+
+.pass-row > :nth-child(3) {
+  min-width: 3ch;
+  text-align: right;
+}
+
+.pass-row > :nth-child(4) {
+  min-width: 6ch;
+  text-align: right;
+}
+
+/* the next pass is the hero: larger, tracked, natural widths. The cell
+   gap is wider than a space, so cells that hold spaces ("18:42 UTC",
+   "NW → SE") still read apart; in the 272px stack it wraps into
+   "18:42 UTC  NW → SE" / "64°  6 MIN  ◉ EYE" */
+.pass-next .pass-row {
+  gap: 2px var(--sp-3);
+  font-size: var(--fs-data);
+  letter-spacing: var(--ls-data);
+}
+
+.pass-next .pass-row > span {
+  min-width: 0;
+  text-align: left;
+}
+
+/* naked-eye flag: a state, not the selection — cyan like the sky track
+   and ☀︎ SUNLIT, and without the active row's amber halo */
+.pass-eye {
+  color: var(--cyan);
+  text-shadow: none;
+}
+
+@media (hover: hover) {
+  .pass-row:hover {
+    background-color: var(--amber-wash);
+  }
+}
+
+.pass-goto {
+  flex: none;
+  padding: 1px 6px;
+}
+
+/* the lists clip overflow (overflow-y: auto), which would shear the
+   outset focus ring off rows that span the full width */
+.pass-list :focus-visible {
+  outline-offset: -2px;
+}
+
+/* LATER: HUD label with a hairline, like the tracking panel's blocks */
+.pass-later-label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: var(--sp-1) 0 2px;
   color: var(--text-dim);
   font-size: var(--fs-label);
+  font-weight: 600;
   letter-spacing: var(--ls-label);
 }
 
-.observer-input {
-  width: 64px;
-  padding: 4px 6px;
-  font-variant-numeric: tabular-nums;
+.pass-later-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--hairline);
 }
 
-.observer-error {
-  margin: -2px 0 var(--sp-2);
-  color: var(--alert);
-  font-size: var(--fs-label);
-  letter-spacing: var(--ls-label);
-}
+/* ---- sky plot -------------------------------------------------------- */
 
 .sky-plot {
   display: block;
@@ -86,58 +215,96 @@
   }
 }
 
-.pass-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-height: 160px;
-  overflow-y: auto;
+/* ---- observer line: FROM … · CHANGE (the panel's last child) --------- */
+
+/* Folded: FROM 50.08°N 14.42°E with CHANGE on the right. Open: the
+   editor (OBS lat lon GPS), its GPS error on a row of its own, then
+   DONE — on the right of the editor where it fits (phone), on the next
+   row where it does not (246px). Visual order stays the DOM / tab order. */
+.observer-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--hairline);
 }
 
-.pass-list li {
+/* basis 0: on a narrow stack the coordinates wrap beside CHANGE (as tall
+   as the 44px touch button anyway) rather than push it to a row below */
+.observer-from {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.observer-change {
+  flex: none;
+  margin-left: auto;
+  padding: 1px 7px;
+}
+
+.observer-editor {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 
-.pass-list li.is-active .pass-row {
-  color: var(--amber);
-  text-shadow: var(--glow-amber-text);
+.observer-label {
+  color: var(--text-dim);
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
 }
 
-.pass-row {
-  flex: 1;
-  display: flex;
-  justify-content: space-between;
-  gap: var(--sp-2);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius);
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: var(--fs-label-lg);
+.observer-input {
+  width: 64px;
+  padding: 4px 6px;
   font-variant-numeric: tabular-nums;
-  letter-spacing: var(--ls-data);
-  padding: var(--sp-1);
-  cursor: pointer;
-  transition: background-color var(--t-fast) var(--ease-out);
 }
 
-@media (hover: hover) {
-  .pass-row:hover {
-    background-color: var(--amber-wash);
-  }
-}
-
-.pass-goto {
-  padding: 1px 6px;
+.observer-error {
+  flex-basis: 100%;
+  margin: 0;
+  text-wrap: balance;
+  color: var(--alert);
+  font-size: var(--fs-label);
+  letter-spacing: var(--ls-label);
 }
 
 /* ---- touch pointers ------------------------------------------------ */
 
+/* WATCH ▶, CHANGE / DONE and GPS get the 44px finger-sized .hud-button
+   from controls-late.css, which loads after this file */
 @media (pointer: coarse) {
+  /* no list scroller inside the stack / sheet scroller: at 44px a row,
+     four rows overflow 160px, and a nested touch scroll both traps the
+     drag and spends a scrollbar's width that wraps every row */
+  .pass-list {
+    max-height: none;
+    overflow: visible;
+  }
+
+  /* 44px WATCH buttons would otherwise butt border to border */
+  .pass-list li + li {
+    margin-top: var(--sp-1);
+  }
+
   .pass-row {
     min-height: var(--tap-min);
+  }
+
+  /* still ≥ 44px wide (53px of label); the narrower side padding hands
+     the row 8px, which keeps a later row on one line in the 272px stack
+     (only a ◉ row wraps, and only once a scrollbar takes 11px).
+     Two classes: outranks controls-late's .hud-button. */
+  .pass-list .pass-goto {
+    padding: 0 var(--sp-2);
   }
 
   /* OBS lat / lon / GPS must still fit the 272px right stack */
