@@ -11,8 +11,13 @@ form.
 
 An MFD-style tab strip toggles each domain's layer (amber = on); any subset can
 render on the globe at once. Turning a domain on also focuses it: the focused
-mode drives which left-rail and right-stack panels are shown, and which layer
-clicks resolve to first. Turning the focused domain off moves focus to the first
+mode drives the right-stack panels and which layer clicks resolve to first. The
+left rail shows the picture of every domain that is on, stacked in tab order
+(CATALOG, VESSELS, AIRCRAFT) above LAYERS. On a phone, one dock button opens them
+all: it carries the domain's name when one is on and LEGEND when two or more
+are. With two or more on, tap a section heading to fold it to one row with its
+live count (SUSP for vessels and aircraft while sim time is off NOW). Folds are
+remembered per domain in this browser, and a lone section never folds. Turning the focused domain off moves focus to the first
 domain still on (tab order). Keys `1` / `2` / `3` work like the tabs; hiding a
 layer drops any selection in it. Clicking an object from another domain jumps to
 its mode automatically.
@@ -81,7 +86,7 @@ Follow-lock makes the camera ride the current selection.
   ride it. F toggles the lock and only acts when the current mode has a
   selection. The FOLLOW button does the same.
 - **ESC is staged, one layer per press:** the help overlay closes first, then
-  the COLORS panel, then an open phone sheet (catalog / layers / details);
+  the COLORS panel, then an open phone sheet (legend / layers / details);
   otherwise if the camera is following it releases the lock (keeping the
   selection); otherwise it deselects. So with nothing open, one ESC releases
   the lock and a second ESC deselects. While the controls are hidden, ESC only

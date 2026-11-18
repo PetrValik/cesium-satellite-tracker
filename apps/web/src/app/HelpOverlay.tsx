@@ -15,7 +15,7 @@ const TOUCH_SECTION: HelpSection = {
     ['TWO-FINGER DRAG', 'Tilt the view'],
     ['TAP OBJECT', 'Select (ships & aircraft also lock the camera)'],
     ['TAP EMPTY GLOBE', 'Deselect'],
-    ['CATALOG · LAYERS', 'Dock buttons: open the picture / layer sheet'],
+    ['LEGEND · LAYERS', 'Dock buttons: open the legend (named after the domain when only one is on) / layer sheet; with two or more on, tap a heading to fold it'],
     ['FOLLOW · DETAILS · ✕', 'Selection chip: follow-lock, full readout, deselect'],
     ['▶ ❚❚ · − + · NOW', 'Time bar (with a satellite picked): play / pause, slower / faster warp, reset to NOW'],
     ['HIDE', 'Dock: hide every control; the eye button bottom-left brings them back'],

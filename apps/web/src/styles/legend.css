@@ -1,0 +1,104 @@
+/* ============================================================
+   legend sections — the stacked, foldable domain pictures
+   app/LegendSection.tsx wraps each picture once two or more domains
+   are on (a lone domain renders its picture bare). The same sections
+   stack in the desktop rail (.rail-panel) and the phone picture sheet.
+   Loads after panel.css: .legend-heading overrides .hud-title at equal
+   specificity.
+   ============================================================ */
+
+/* ---- section stack ------------------------------------------------- */
+
+/* hairline between stacked sections, the LAYERS .infra-title spacing */
+.legend-section + .legend-section {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* the fold row is the whole title: no gap left under a folded section */
+.legend-heading {
+  margin: 0;
+}
+
+/* ---- fold row ------------------------------------------------------ */
+
+/* Inherits the .hud-title type (font, colour, tracking, uppercase); no
+   padding, so its text lines up with every other panel title. The focus
+   ring is the global :focus-visible outline (base.css). */
+.legend-fold {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  text-transform: inherit;
+  cursor: pointer;
+  transition: color var(--t-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .legend-fold:hover {
+    color: var(--text);
+  }
+}
+
+/* fixed cell: ▾ may come from a fallback font, and line-height 1 keeps
+   the rotation centred on the glyph */
+.legend-chevron {
+  flex: none;
+  width: 1ch;
+  line-height: 1;
+  text-align: center;
+  transition: transform var(--t-fast) var(--ease-out);
+}
+
+.legend-fold[aria-expanded='false'] .legend-chevron {
+  transform: rotate(-90deg);
+}
+
+.legend-count {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---- section body -------------------------------------------------- */
+
+/* the gap the zeroed title margin gave up, only while the body shows */
+.legend-body {
+  margin-top: 10px;
+}
+
+/* the fold row carries the title — relies on each picture rendering its
+   <h2 className="hud-title"> first, the same coupling as sheet.css
+   .sheet-body > .hud-title:first-child */
+.legend-body > .hud-title:first-child {
+  display: none;
+}
+
+/* a folded body stays folded even if a later rule gives it a display */
+.legend-body[hidden] {
+  display: none;
+}
+
+/* ---- touch pointers ------------------------------------------------ */
+
+@media (pointer: coarse) {
+  .legend-fold {
+    min-height: var(--tap);
+  }
+
+  /* the finger-sized row already leaves air under the title text */
+  .legend-body {
+    margin-top: 0;
+  }
+}

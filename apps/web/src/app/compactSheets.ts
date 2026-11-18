@@ -13,8 +13,8 @@ export function sheetId(sheet: HudSheet): string {
 }
 
 /**
- * The sheet that can render: `picture` needs the focused domain's picture
- * (its layer on), `details` needs a selection in the focused mode. A sheet
+ * The sheet that can render: `picture` needs at least one visible domain's
+ * picture, `details` needs a selection in the focused mode. A sheet
  * with nothing to show is closed (null).
  */
 export function visibleSheet(

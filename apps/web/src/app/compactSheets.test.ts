@@ -18,7 +18,7 @@ describe('sheetId', () => {
 })
 
 describe('visibleSheet', () => {
-  it('closes the picture sheet while the focused domain has no picture', () => {
+  it('closes the picture sheet while no domain is on', () => {
     expect(visibleSheet('picture', false, true)).toBeNull()
     expect(visibleSheet('picture', true, false)).toBe('picture')
   })
