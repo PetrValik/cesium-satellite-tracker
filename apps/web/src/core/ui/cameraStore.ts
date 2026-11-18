@@ -17,10 +17,31 @@ export type CameraCommand =
   | { kind: 'flyTo'; lonDeg: number; latDeg: number; heightM: number }
 
 let handler: ((command: CameraCommand) => void) | null = null
+let requested = 0
 
 /** Hand `command` to the bound globe, once and synchronously; dropped while none is bound. */
 export function requestCamera(command: CameraCommand): void {
+  requested++
   handler?.(command)
+}
+
+/**
+ * How many camera commands have been requested so far, bound or not; only
+ * ever grows. A slow request (LOCATE waiting on a permission prompt)
+ * compares it before and after to tell whether the user has since asked the
+ * camera for something else.
+ */
+export function cameraRequestSeq(): number {
+  return requested
+}
+
+/**
+ * Count a camera move that bypasses requestCamera: the follow lock engaging
+ * on, or re-pointing to, a target (app/globe/follow), so a pending LOCATE
+ * never flies away from a lock the user just set.
+ */
+export function noteCameraIntent(): void {
+  requested++
 }
 
 /**

@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { bindCameraHandler, headingMoved, publishHeading, requestCamera, useCameraHeading } from './cameraStore'
+import {
+  bindCameraHandler,
+  cameraRequestSeq,
+  headingMoved,
+  publishHeading,
+  requestCamera,
+  useCameraHeading,
+} from './cameraStore'
 
 let unbind: (() => void) | null = null
 afterEach(() => { unbind?.(); unbind = null })
@@ -32,6 +39,15 @@ describe('camera commands', () => {
     requestCamera({ kind: 'level' })
     expect(old).not.toHaveBeenCalled()
     expect(next).toHaveBeenCalledTimes(1)
+  })
+  it('counts every request once, bound or not', () => {
+    const start = cameraRequestSeq()
+    requestCamera({ kind: 'home' }) // no globe bound: dropped, still counted
+    expect(cameraRequestSeq()).toBe(start + 1)
+    unbind = bindCameraHandler(vi.fn())
+    requestCamera({ kind: 'level' })
+    requestCamera({ kind: 'zoom', direction: -1 })
+    expect(cameraRequestSeq()).toBe(start + 3)
   })
 })
 
