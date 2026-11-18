@@ -6,11 +6,18 @@ import {
   Matrix4,
   Transforms,
   HeadingPitchRange,
+  IntersectionTests,
+  Ray,
 } from 'cesium'
 import type { Viewer } from 'cesium'
+import { HOME_VIEW } from './createViewer'
 
 /** Duration of the fly-in before the follow frame engages. */
 const FLY_TO_SECONDS = 1.2
+/** Duration of a HOME / fly-to-a-point flight. */
+const FLIGHT_SECONDS = 1.5
+/** Duration of the free camera's level-north flight. */
+const LEVEL_SECONDS = 0.6
 
 /** Rotation speed for held movement keys, radians per second. */
 const ROTATE_RAD_PER_S = 1.1
@@ -43,6 +50,11 @@ const scratchLocalPosition = new Cartesian3()
 const scratchLocalDirection = new Cartesian3()
 const scratchLocalUp = new Cartesian3()
 const scratchCartographic = new Cartographic()
+// Per-tap scratches (levelNorth). Never hand one to a flight as its destination.
+const scratchRay = new Ray()
+const scratchCenter = new Cartesian3()
+/** Locked level-north pose around the target: north-up, straight down; range set per call. */
+const scratchLevel = new HeadingPitchRange(0, -CesiumMath.PI_OVER_TWO, 0)
 
 /**
  * Keyboard camera movement + follow-lock.
@@ -176,6 +188,64 @@ export class CameraRig {
     }
   }
 
+  /**
+   * Fly north-up, looking straight down, to `heightM` over the point, in
+   * FLIGHT_SECONDS. Drops a follow lock first — a safety net: the command
+   * wiring has already released it through `useFollow`.
+   */
+  flyTo(lonDeg: number, latDeg: number, heightM: number): void {
+    if (this._viewer.isDestroyed()) return
+    this.unfollow()
+    this._stopMotion()
+    this._fly(Cartesian3.fromDegrees(lonDeg, latDeg, heightM), FLIGHT_SECONDS)
+  }
+
+  /** Fly back to the first-visit view. */
+  flyHome(): void {
+    this.flyTo(HOME_VIEW.lonDeg, HOME_VIEW.latDeg, HOME_VIEW.heightM)
+  }
+
+  /**
+   * North-up, looking straight down, at the same distance. Free: fly over the
+   * screen-centre point on the ellipsoid (the camera's own spot when it looks
+   * at space). Locked: re-pose inside the follow frame and keep the lock — a
+   * flight would drop the frame.
+   */
+  levelNorth(): void {
+    if (this._viewer.isDestroyed()) return
+    // Before the lock check: cancelling a follow fly-in engages the lock.
+    this._stopMotion()
+    const camera = this._viewer.camera
+
+    if (this._getTarget !== null) {
+      const target = this._getTarget()
+      if (target === null) return
+      Transforms.eastNorthUpToFixedFrame(target, undefined, scratchTransform)
+      scratchLevel.range = Cartesian3.magnitude(camera.position) // target-local
+      camera.lookAtTransform(scratchTransform, scratchLevel)
+      this._needsInitialOffset = false
+      return
+    }
+
+    const ellipsoid = this._viewer.scene.globe.ellipsoid
+    Cartesian3.clone(camera.positionWC, scratchRay.origin)
+    Cartesian3.clone(camera.directionWC, scratchRay.direction)
+    const hit = IntersectionTests.rayEllipsoid(scratchRay, ellipsoid)
+    let spot: Cartographic | undefined
+    let heightM: number
+    if (hit !== undefined) {
+      // Camera.pickEllipsoid's rule: the near hit, or the far one from inside.
+      Ray.getPoint(scratchRay, hit.start > 0 ? hit.start : hit.stop, scratchCenter)
+      heightM = Cartesian3.distance(camera.positionWC, scratchCenter)
+      spot = ellipsoid.cartesianToCartographic(scratchCenter, scratchCartographic)
+    } else {
+      spot = ellipsoid.cartesianToCartographic(camera.positionWC, scratchCartographic)
+      heightM = spot?.height ?? 0
+    }
+    if (spot === undefined) return
+    this._fly(Cartesian3.fromRadians(spot.longitude, spot.latitude, heightM), LEVEL_SECONDS)
+  }
+
   /** Per-frame: refresh the follow frame, run the zoom impulse and apply held movement keys. */
   update(dtMs: number): void {
     if (this._viewer.isDestroyed()) return
@@ -248,6 +318,25 @@ export class CameraRig {
     this.unfollow()
     this._pressed.clear()
     this._zoomLeftS = 0
+  }
+
+  /** Drop a pending zoom step and any running flight. */
+  private _stopMotion(): void {
+    this._zoomLeftS = 0
+    this._viewer.camera.cancelFlight()
+  }
+
+  /**
+   * Fly north-up, straight down. `destination` must be a fresh Cartesian3:
+   * Cesium closes over it for the whole flight (CameraFlightPath
+   * createUpdate3D), so a scratch would be overwritten mid-flight.
+   */
+  private _fly(destination: Cartesian3, seconds: number): void {
+    this._viewer.camera.flyTo({
+      destination,
+      orientation: { heading: 0, pitch: -CesiumMath.PI_OVER_TWO, roll: 0 },
+      duration: seconds,
+    })
   }
 
   /** Follow range while locked, else the free camera's height above the ellipsoid. */

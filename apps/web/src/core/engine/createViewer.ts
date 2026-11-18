@@ -49,6 +49,9 @@ export function setViewerBasemap(viewer: Viewer, basemap: Basemap): void {
   if (oldBase !== undefined) layers.remove(oldBase, true)
 }
 
+/** The first-visit view and HOME's destination: the whole Earth, centred over Europe. */
+export const HOME_VIEW = { lonDeg: 15, latDeg: 35, heightM: 28_000_000 } as const
+
 /**
  * Engine-layer viewer factory for Orbital Ops. No React in here —
  * app/globe/createGlobe composes it directly.
@@ -182,9 +185,9 @@ export function createOrbitalViewer(container: HTMLElement, basemap: Basemap = '
   viewer.clock.shouldAnimate = false
   viewer.clock.clockStep = ClockStep.SYSTEM_CLOCK_MULTIPLIER
 
-  // Whole-Earth default view centered over Europe.
+  // Whole-Earth default view centered over Europe (north-up, straight down).
   viewer.camera.setView({
-    destination: Cartesian3.fromDegrees(15, 35, 28e6),
+    destination: Cartesian3.fromDegrees(HOME_VIEW.lonDeg, HOME_VIEW.latDeg, HOME_VIEW.heightM),
   })
 
   return viewer
