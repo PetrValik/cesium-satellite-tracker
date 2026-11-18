@@ -13,7 +13,7 @@ src/
 ├── core/
 │   ├── engine/   # non-React Cesium machinery (viewer, CameraRig, tap picking, renderer health)
 │   ├── sim/      # simulation clock + coarse wall clock
-│   └── ui/       # cross-domain UI state (mode, follow, prefs, hud, sheet, satellites, legend folds) + shared atoms
+│   └── ui/       # cross-domain UI state (mode, follow, prefs, hud, sheet, satellites, legend folds, camera) + shared atoms
 ├── features/     # one folder per slice
 │   ├── catalog/        # satellite groups, the worker's working set, search
 │   ├── constellation/  # whole-catalog rendering
