@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
   formatAge,
+  formatCompass8,
   formatCount,
+  formatCountdown,
+  formatDataAge,
   formatDuration,
   formatLatLon,
   formatRate,
   formatUtc,
+  formatUtcHm,
 } from './format'
 
 describe('format helpers', () => {
@@ -38,5 +42,31 @@ describe('format helpers', () => {
   it('formatRate marks rewind', () => {
     expect(formatRate(60)).toBe('×60')
     expect(formatRate(-60)).toBe('−×60')
+  })
+
+  it('formatCountdown: rounded-up minutes, H MM from an hour', () => {
+    expect(formatCountdown(7_620_000)).toBe('2 H 07')
+    expect(formatCountdown(180_000)).toBe('3 MIN')
+    expect(formatCountdown(20_000)).toBe('1 MIN')
+    expect(formatCountdown(0)).toBe('1 MIN')
+    expect(formatCountdown(3_540_001)).toBe('1 H 00')
+    expect(formatCountdown(476_250)).toBe('8 MIN') // a pass duration
+  })
+  it('formatCompass8: 45° sectors centred on the points, boundaries go clockwise', () => {
+    const cases: [number, string][] = [[0, 'N'], [22.4, 'N'], [22.5, 'NE'], [90, 'E'], [179.2, 'S'], [226.6, 'SW'],
+      [260.3, 'W'], [292.5, 'NW'], [337.4, 'NW'], [337.5, 'N'], [359.9, 'N'], [360, 'N'], [-45, 'NW']]
+    for (const [az, point] of cases) expect(formatCompass8(az)).toBe(point)
+    expect(formatCompass8(Number.NaN)).toBe('—')
+  })
+  it('formatDataAge: magnitude with OLD / AHEAD', () => {
+    expect(formatDataAge(25 * 60_000)).toBe('25 MIN OLD')
+    expect(formatDataAge(-5 * 3_600_000)).toBe('5.0 H AHEAD')
+    expect(formatDataAge(103_680_000)).toBe('1.2 D OLD')
+    expect(formatDataAge(15 * 86_400_000)).toBe('15 D OLD')
+    expect(formatDataAge(0)).toBe('0 MIN OLD')
+  })
+  it('formatUtcHm renders HH:MM UTC with seconds truncated', () => {
+    expect(formatUtcHm(Date.UTC(2026, 6, 10, 18, 42, 59))).toBe('18:42')
+    expect(formatUtcHm(Date.UTC(2026, 6, 10, 3, 5, 0))).toBe('03:05')
   })
 })
