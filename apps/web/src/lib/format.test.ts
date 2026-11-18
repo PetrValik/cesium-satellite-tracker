@@ -64,6 +64,10 @@ describe('format helpers', () => {
     expect(formatDataAge(103_680_000)).toBe('1.2 D OLD')
     expect(formatDataAge(15 * 86_400_000)).toBe('15 D OLD')
     expect(formatDataAge(0)).toBe('0 MIN OLD')
+  // unit edges: a value that rounds up into the next unit reads in that unit
+  expect(formatDataAge(59.6 * 60_000)).toBe('1.0 H OLD')
+  expect(formatDataAge(23.97 * 3_600_000)).toBe('1.0 D OLD')
+  expect(formatDataAge(9.97 * 86_400_000)).toBe('10 D OLD')
   })
   it('formatUtcHm renders HH:MM UTC with seconds truncated', () => {
     expect(formatUtcHm(Date.UTC(2026, 6, 10, 18, 42, 59))).toBe('18:42')

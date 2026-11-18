@@ -84,12 +84,13 @@ export function formatDataAge(deltaMs: number): string {
   const minutes = ms / 60_000
   const hours = minutes / 60
   const days = hours / 24
+  // Pick the unit from the ROUNDED value, so 59.6 min reads 1.0 H, never 60 MIN.
   const magnitude =
-    hours < 1
+    Math.round(minutes) < 60
       ? `${Math.round(minutes)} MIN`
-      : days < 1
+      : Number(hours.toFixed(1)) < 24
         ? `${hours.toFixed(1)} H`
-        : days < 10
+        : Number(days.toFixed(1)) < 10
           ? `${days.toFixed(1)} D`
           : `${Math.round(days)} D`
   return `${magnitude} ${deltaMs < 0 ? 'AHEAD' : 'OLD'}`
