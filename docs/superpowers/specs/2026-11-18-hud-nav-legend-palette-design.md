@@ -1,6 +1,6 @@
 # HUD round: globe navigation, multi-domain legend, meaningful colours, satellite-only time bar
 
-**Date:** 2026-11-18 · **Status:** draft, awaiting owner approval · **Branch:** `feat/hud-nav-legend-palette`
+**Date:** 2026-11-18 · **Status:** parts 1–4 approved by the owner 2026-11-18; part 5 approach picked the same day · **Branch:** `feat/hud-nav-legend-palette`
 
 ## Why
 
@@ -13,6 +13,8 @@ friction points:
 3. **Several domains on.** With MARITIME + AIRSPACE both on, the legend (counts, colours, filters) is
    reachable only for the last domain turned on.
 4. **Time bar.** It should show only when it is useful: when a satellite is picked.
+5. **Satellite detail** (added 2026-11-18 after approval of 1–4). The information is interesting but hard
+   to read; make it clearer and finish it.
 
 Success: on a phone, the owner can type a hex colour, read a legend whose colours mean the same thing in
 every domain, get back to the whole Earth (or level a tilted view) in one tap, reach the legend of every
@@ -27,6 +29,7 @@ domain that is on, and see the time bar only while it does something.
 | 2 | No navigation aids | Every Cesium widget is off (`core/engine/createViewer.ts:77-89`). The only camera inputs are gestures and W A S D / Q E. The app reopens at the last saved camera (`app/globe/createGlobe.ts:51-58`), so the only way back to the whole Earth is pinching out. A two-finger tilt is easy to trigger by accident and nothing levels it again. |
 | 3 | One domain's legend only | `app/railPicture.ts:25-27` returns the *focused* domain's picture (focus = the last tab turned on). Both the desktop left rail and the phone dock use it. |
 | 4 | Time bar | `core/ui/modeStore.ts:95-97`: shown whenever the ORBITAL layer is on, with or without a selection. |
+| 5 | Satellite detail hard to read | `features/tracking/TelemetryPanel.tsx:43-62` is one flat list of eight abbreviated rows (NORAD, CLASS, ALT, VEL, POS, PERIOD, INCL, GROUPS). `features/passes/PassesPanel.tsx:78-115` opens with raw observer lat/lon inputs, then a sky plot and rows like `14:35 EL 64° 6M →` with no countdown, direction or visibility. |
 
 ## Goals
 
@@ -74,6 +77,7 @@ Picked by the owner on 2026-11-18 (all four were the recommended option).
 | Several domains | (a) one dock button, its sheet stacks every domain that is on · (b) one dock button per domain, HELP/COLORS/HIDE squeezed into a ⋯ menu · (c) one sheet with domain tabs inside | **(a)**: the dock stays at five buttons and one tap shows everything; (b) crowds the dock, (c) hides all but one again |
 | Colours | (a) same meaning = same colour + rebuilt grid · (b) rebuild the grid only · (c) new defaults only | **(a)** |
 | Navigation | home · zoom + / − · compass (north + level) · locate me | **all four** |
+| Satellite detail | (a) tidy only · (b) tidy + facts derivable from the TLE and the sun, no server change · (c) (b) + CelesTrak SATCAT facts (owner, object type, launch site, size) through a new API endpoint | **(b)** |
 
 ## Design
 
@@ -216,6 +220,64 @@ are `@hud-designer`'s call within those rules.
   reset to NOW (`app/globe/layerSync.ts:113-119`). A deselect alone never hides the bar while off NOW, so
   it never needs a reset.
 
+### 5. Satellite detail: clearer, and finished
+
+Owner's pick: regroup with plain labels, and add the facts the TLE and the sun position already give us.
+No server or shared-schema change. Target layout (desktop right stack and the phone details sheet alike):
+
+```
+┌ ISS (ZARYA)   LEO   [FOLLOW][✕] ┐
+│ 418 km · 7.66 km/s · ☀ SUNLIT     │   NOW
+│ over 51.2°N 12.3°E                 │
+├ ORBIT ───────────────────────────┤
+│ every 92.9 min · 15.5× a day      │
+│ 415–422 km · tilted 51.6°         │
+│ launched 1998 · data 1.2 d old     │
+├ NEXT PASS OVER YOU · IN 2 H 07 ──┤
+│ 18:42  NW → SE  64°  6 min  ◉ EYE │
+│        (sky plot)                 │
+│ later  20:19  W → S  22°  4 min ▶ │
+│ from 50.08 N 14.42 E      CHANGE  │
+└──────────────────────────────────┘
+```
+
+**Header.** Name, orbit-class badge (palette hue, as today), FOLLOW, ✕.
+
+**NOW** (live, from the existing ~5 Hz telemetry push, `features/tracking/SelectedSatellite.ts`):
+altitude, speed, **sunlit or in Earth's shadow**, sub-satellite point.
+
+**ORBIT** (from the TLE, computed once per selection):
+- period and orbits per day;
+- **low–high point**: perigee and apogee altitude from mean motion + eccentricity;
+- inclination, labelled in words ("tilted 51.6°", with a title explaining "angle to the equator");
+- **launch year + international designator** from TLE line 1 cols 10–17 (`98067A` → 1998, `1998-067A`);
+  two-digit years 57–99 are 19xx, 00–56 are 20xx;
+- **data age**: distance between the TLE epoch (line 1 cols 19–32) and **sim time**, because that distance
+  is what limits the accuracy of the shown position;
+- NORAD id and groups move to a small identity line at the bottom of the block.
+
+**NEXT PASS OVER YOU** (passes slice):
+- heading carries a **countdown** in sim time (`IN 2 H 07`; `NOW · ENDS IN 3 MIN` during a pass), at the
+  panel's existing per-sim-minute refresh;
+- the next pass row: AOS time (UTC, labelled), **rise → set direction** (8-point compass from the first and
+  last above-horizon sample's azimuth), max elevation, duration, and a **naked-eye flag** when the satellite
+  is sunlit while the observer's sun is below −6° (civil twilight) at some sample of the pass;
+- the sky plot stays, for the shown pass;
+- later passes as compact rows with the same columns; the `→` button becomes a labelled **WATCH ▶**
+  (jumps sim time to AOS at 10×, as today);
+- the observer folds to one line, `FROM 50.08°N 14.42°E · CHANGE`. CHANGE reveals today's lat/lon inputs
+  and the GPS button.
+
+**Where the maths lives.** New pure helpers in `apps/web/src/lib/orbital.ts` (perigee/apogee, TLE epoch,
+international designator, sun position and the Earth-shadow test via `satellite.js` 6.0.2 `sunPos`, observer
+sun elevation) with unit tests. `predictPasses` gains the per-pass rise/set azimuth and the naked-eye flag
+on `PassPrediction` (`lib/protocol.ts`). The shadow test for NOW runs at the 5 Hz telemetry push, not per
+frame, and allocates nothing (scratch objects). `@orbital-mechanics` owns these; `@hud-designer` owns the
+layout.
+
+**Not in scope:** owner/country, object type, launch site, size (option c); local-time display (the HUD
+reads UTC everywhere, `features/timebar/CLAUDE.md`).
+
 ## Verification
 
 - `npm run lint && npm test` green. New unit tests: the transport rule (each clause), the colour migration
@@ -226,6 +288,10 @@ are `@hud-designer`'s call within those rules.
   compass / zoom / home / locate (with emulated geolocation, allowed and denied) both free and follow-locked;
   confirm no camera snap-back; watch for console errors. Take a heap snapshot after a few minutes of
   nav use to look for retained Cesium objects (`@cesium-engine` checklist).
+- Satellite numbers are checked by a different method, not the same formula twice: perigee/apogee against
+  the min/max altitude of an SGP4 propagation over one orbit; the shadow flag against Cesium's own sun
+  position at the same instant; one known TLE (ISS) against published values (~415–422 km, 51.6°,
+  1998-067A).
 - The soft-keyboard case (1a) cannot be emulated: the owner checks it on the phone after the deploy. The PR
   says so.
 
@@ -253,3 +319,6 @@ are `@hud-designer`'s call within those rules.
 10. Where the right edge is full (desktop with satellite panels open, landscape phone), the nav controls
     become a row in the bottom-right corner instead of shrinking the panels.
 11. Folded legend sections start unfolded and are remembered per domain; a lone section cannot fold.
+12. Satellite detail: pass times stay in UTC (the HUD's rule), labelled as such.
+13. Data age is measured against sim time, not wall time.
+14. Naked-eye flag = satellite sunlit while the observer's sun is below −6° at some point of the pass.
