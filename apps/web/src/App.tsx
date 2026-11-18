@@ -17,7 +17,7 @@ import { LeftRail } from './app/LeftRail'
 import { ModeTabs } from './app/ModeTabs'
 import { SelectionPanels } from './app/SelectionPanels'
 import { StatusLine } from './app/StatusLine'
-import { transportVisible, useMode } from './core/ui/modeStore'
+import { useTransportVisible } from './core/ui/transport'
 import { showHudOnModalOpen, useHud } from './core/ui/hudStore'
 import { closeSheetOnModalOpen } from './core/ui/sheetStore'
 import { useCompactLayout } from './core/ui/useCompactLayout'
@@ -30,7 +30,7 @@ import { TransportBar } from './features/timebar/TransportBar'
 export default function App() {
   const booting = useCatalog((s) => s.booting)
   const init = useCatalog((s) => s.init)
-  const transportOn = useMode(transportVisible)
+  const transportOn = useTransportVisible()
   const compact = useCompactLayout()
   const hudHidden = useHud((s) => s.hidden)
   useHudShortcuts()

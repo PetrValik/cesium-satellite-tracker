@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
-import { transportVisible, useMode } from '../core/ui/modeStore'
+import { useTransportVisible } from '../core/ui/transport'
 import { closeSheetOnEscape, useSheet, type HudSheet } from '../core/ui/sheetStore'
 import { TransportBar } from '../features/timebar/TransportBar'
 import { bindSheetsToSelection, sheetId, visibleSheet } from './compactSheets'
@@ -68,7 +68,7 @@ function Sheet({ sheet, title, children }: { sheet: HudSheet; title: string; chi
  * nothing needs to know another element's height.
  */
 export function CompactHud() {
-  const transportOn = useMode(transportVisible)
+  const transportOn = useTransportVisible()
   const sheet = useSheet((s) => s.sheet)
   const toggle = useSheet((s) => s.toggle)
   const picture = useRailPicture()

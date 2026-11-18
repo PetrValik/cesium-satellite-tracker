@@ -4,7 +4,7 @@
  * spans (styles/status-line.css); the inline spans render identically on desktop.
  */
 import { useSimClock } from '../core/sim/simClock'
-import { transportVisible, useMode } from '../core/ui/modeStore'
+import { useTransportVisible } from '../core/ui/transport'
 import { useWallClock } from '../core/sim/wallClock'
 import { useCatalog } from '../features/catalog/catalogStore'
 import { formatAge, formatCount, formatRate } from '../lib/format'
@@ -14,7 +14,7 @@ export function StatusLine() {
   const offline = useCatalog((s) => s.offline)
   const groups = useCatalog((s) => s.groups)
   const activeSlugs = useCatalog((s) => s.activeSlugs)
-  const transportOn = useMode(transportVisible)
+  const transportOn = useTransportVisible()
   const rate = useSimClock((s) => s.rate)
   const playing = useSimClock((s) => s.playing)
   const nowMs = useWallClock((s) => s.nowMs)

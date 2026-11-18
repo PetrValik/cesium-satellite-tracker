@@ -1,7 +1,8 @@
 import type { Viewer } from 'cesium'
 import type { CameraRig } from '../../core/engine/CameraRig'
 import { applyRenderDensity, syncViewerClock } from '../../core/engine/createViewer'
-import { simClock } from '../../core/sim/simClock'
+import { LIVE_EPSILON_MS, simClock } from '../../core/sim/simClock'
+import { useWallClock } from '../../core/sim/wallClock'
 import { usePrefs } from '../../core/ui/prefsStore'
 import type { AircraftLayer } from '../../features/airspace/AircraftLayer'
 import type { ConstellationLayer } from '../../features/constellation/ConstellationLayer'
@@ -24,6 +25,17 @@ const CAMERA_SAVE_INTERVAL_MS = 5000
  */
 export function frameAdvanceMs(rawDtMs: number, rate: number): number {
   return rate === 1 ? rawDtMs : Math.min(rawDtMs, MAX_WARP_FRAME_MS)
+}
+
+/**
+ * True after a frame gap long enough to flip sim liveness: a background tab
+ * starves requestAnimationFrame, so the 10 s wall tick may have read the
+ * stale epoch as not live. The first frame back catches the epoch up; a
+ * fresh wall tick then re-runs `useSimLive` at once, instead of leaving the
+ * time bar (core/ui/transport) on screen until the next tick.
+ */
+export function needsWallResync(rawDtMs: number): boolean {
+  return rawDtMs >= LIVE_EPSILON_MS
 }
 
 /** Timing one globe hands the next across a rebuild. */
@@ -60,7 +72,8 @@ export function startFrameLoop(p: FrameParts): () => void {
   let lastDpr = window.devicePixelRatio || 1
 
   const frame = (now: number) => {
-    const dt = frameAdvanceMs(now - lastFrame, simClock.get().rate)
+    const rawDt = now - lastFrame
+    const dt = frameAdvanceMs(rawDt, simClock.get().rate)
     lastFrame = now
     carry.lastFrameMs = now
     // Browser zoom / monitor move changes the DPR: keep the 2× render cap.
@@ -70,6 +83,7 @@ export function startFrameLoop(p: FrameParts): () => void {
       applyRenderDensity(viewer, dpr)
     }
     simClock.get().advance(dt)
+    if (needsWallResync(rawDt)) useWallClock.setState({ nowMs: Date.now() })
     const epochMs = simClock.get().epochMs
     syncViewerClock(viewer, epochMs)
     const clockLive = layerSync.updateLiveness()

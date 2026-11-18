@@ -17,7 +17,7 @@ const TOUCH_SECTION: HelpSection = {
     ['TAP EMPTY GLOBE', 'Deselect'],
     ['CATALOG · LAYERS', 'Dock buttons: open the picture / layer sheet'],
     ['FOLLOW · DETAILS · ✕', 'Selection chip: follow-lock, full readout, deselect'],
-    ['▶ ❚❚ · − + · NOW', 'Play / pause, slower / faster warp, reset to NOW'],
+    ['▶ ❚❚ · − + · NOW', 'Time bar (with a satellite picked): play / pause, slower / faster warp, reset to NOW'],
     ['HIDE', 'Dock: hide every control; the eye button bottom-left brings them back'],
   ],
 }
@@ -45,9 +45,9 @@ const SECTIONS: HelpSection[] = [
     title: 'LAYERS & TIME',
     rows: [
       ['1 / 2 / 3', 'Toggle ORBITAL / MARITIME / AIRSPACE layer'],
-      ['SPACE', 'Play / pause simulation time (ORBITAL on)'],
-      [', / .', 'Slower / faster time warp (ORBITAL on)'],
-      ['N', 'Reset simulation to NOW'],
+      ['SPACE', 'Play / pause simulation time (time bar shown)'],
+      [', / .', 'Slower / faster time warp (time bar shown)'],
+      ['N', 'Reset simulation to NOW (time bar shown)'],
       ['H or ?', 'Toggle this help'],
     ],
   },

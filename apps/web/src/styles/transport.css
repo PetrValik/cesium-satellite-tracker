@@ -171,8 +171,8 @@
    The centred transport bar (852px; 872px on coarse pointers) reaches under
    the bottom-left HELP / COLORS / HIDE launcher row (right edge ~243px;
    ~261px coarse) and the bottom-right attribution below ~1366px — lift both
-   above it, but only while the bar is mounted (App sets .has-transport with
-   the ORBITAL layer); the compact layout stacks these in its own cluster.
+   above it, but only while the bar is mounted (App sets .has-transport from
+   core/ui/transport: ORBITAL on and a satellite picked, or sim time off NOW); the compact layout stacks these in its own cluster.
    The wider coarse row meets the bar up to ~1394px (1366px iPad Pro
    landscape), so coarse pointers lift until 1420px, where it clears by
    ~13px like the fine row does at 1366px.

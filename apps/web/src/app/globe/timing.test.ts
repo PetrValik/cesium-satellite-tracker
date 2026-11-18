@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('../../lib/api', () => ({ api: {}, ApiError: class extends Error {} }))
 
 import { tickIntervalMs, tickLeadMs } from './constellationFeed'
-import { frameAdvanceMs } from './frameLoop'
+import { LIVE_EPSILON_MS } from '../../core/sim/simClock'
+import { frameAdvanceMs, needsWallResync } from './frameLoop'
 
 describe('tickIntervalMs', () => {
   it('ticks once a second up to ×60, four times a second beyond, either direction', () => {
@@ -40,5 +41,13 @@ describe('frameAdvanceMs', () => {
     expect(frameAdvanceMs(16, 3600)).toBe(16)
     expect(frameAdvanceMs(30_000, 3600)).toBe(500)
     expect(frameAdvanceMs(30_000, -60)).toBe(500)
+  })
+})
+
+describe('needsWallResync', () => {
+  it('re-reads the wall clock after a background gap of 10 s or more', () => {
+    expect(needsWallResync(LIVE_EPSILON_MS - 1)).toBe(false)
+    expect(needsWallResync(LIVE_EPSILON_MS)).toBe(true)
+    expect(needsWallResync(30_000)).toBe(true)
   })
 })

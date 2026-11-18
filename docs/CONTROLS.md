@@ -55,9 +55,9 @@ selects it. Clicking empty space deselects **within the current mode only**.
 | Key | Action |
 |---|---|
 | 1 / 2 / 3 | Toggle the ORBITAL / MARITIME / AIRSPACE layer (like the tabs) |
-| SPACE | Play / pause simulation time (ORBITAL layer on) |
-| , / . | Slower / faster time warp (ORBITAL layer on) |
-| N | Reset simulation to NOW |
+| SPACE | Play / pause simulation time (while the time bar shows) |
+| , / . | Slower / faster time warp (while the time bar shows) |
+| N | Reset simulation to NOW (while the time bar shows) |
 | H or ? | Toggle the controls help |
 
 ### HUD
@@ -153,5 +153,11 @@ Cesium day/night terminator. The bottom transport bar controls it:
 | NOW (`N`) | Reset to the current wall-clock time, rate ×1, playing |
 | UTC readout | Current sim time in UTC |
 
-The top status line mirrors this: tracked-object count, TLE data age, and the
-current SIM rate (or HOLD when paused).
+The bar shows while the SATELLITES layer is on **and** a satellite is selected.
+It also stays while sim time is away from NOW (warped, paused or scrubbed), so a
+deselect never hides the way back; once sim time is at NOW with nothing selected,
+it hides. Turning SATELLITES off while away from NOW resets sim time to NOW. The
+time keys and the status line's SIM readout come and go with the bar.
+
+The top status line mirrors this: tracked-object count, TLE data age, and, while
+the bar shows, the current SIM rate (or HOLD when paused).
