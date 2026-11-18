@@ -199,7 +199,8 @@ export function altitudeSpanStepMs(periodMinutes: number): number {
  * samples) finds each extreme, then a ternary search inside its ±1 step
  * bracket pins it: ≤ ~460 SGP4 calls whatever the period (a 60 s sweep of a
  * 13.7-day orbit was ~20 000). Failed samples are skipped; with none left
- * both are NaN. Call it once per selection, never per frame.
+ * both are NaN. Call it once per selection and at most once per 12 sim-hours
+ * after that (the tracking slice's ~5 Hz push re-sweeps it), never per frame.
  */
 export function altitudeSpanKm(satrec: SatRec, startMs: number): { lowKm: number; highKm: number } {
   const stepMs = altitudeSpanStepMs(orbitalPeriodMinutes(satrec))

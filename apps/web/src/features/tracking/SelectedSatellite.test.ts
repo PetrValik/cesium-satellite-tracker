@@ -1,7 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createSatrec, orbitalPeriodMinutes, propagateEcef } from '../../lib/orbital'
+import {
+  altitudeSpanKm,
+  createSatrec,
+  orbitalPeriodMinutes,
+  propagateEcef,
+} from '../../lib/orbital'
 import { ringNeedsRefresh, SelectedSatellite, type SatelliteVisuals } from './SelectedSatellite'
 import { useTelemetry } from './telemetryStore'
+
+// The real sweep, wrapped so a test can count how often SelectedSatellite runs it.
+vi.mock('../../lib/orbital', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/orbital')>()
+  return { ...actual, altitudeSpanKm: vi.fn(actual.altitudeSpanKm) }
+})
+const spanSweeps = vi.mocked(altitudeSpanKm)
 
 /** ISS (ZARYA), epoch 2026-07-10 — same fixture as orbital.test.ts. */
 const ISS = {
@@ -15,6 +27,8 @@ const satrec = createSatrec(ISS.tle1, ISS.tle2)!
 const EPOCH_MS = (satrec.jdsatepoch - JD_UNIX_EPOCH) * 86_400_000
 const PERIOD_MS = orbitalPeriodMinutes(satrec) * 60_000
 const SHADOW_MS = EPOCH_MS + 12 * 86_400_000 + 2_945_000 // mid-eclipse 2026-07-22T04:30Z (lib/orbital.test.ts)
+const HOUR_MS = 3_600_000
+const DAY_MS = 86_400_000
 
 function fakeVisuals() {
   return {
@@ -25,7 +39,10 @@ function fakeVisuals() {
   }
 }
 
-beforeEach(() => useTelemetry.getState().clear())
+beforeEach(() => {
+  useTelemetry.getState().clear()
+  spanSweeps.mockClear()
+})
 
 describe('ringNeedsRefresh', () => {
   it('holds inside [anchor − 0.1 P, anchor + 0.6 P] and refreshes outside it', () => {
@@ -149,5 +166,62 @@ describe('SelectedSatellite', () => {
     expect(useTelemetry.getState().sunlit).toBe(false)
     sel.select(null, EPOCH_MS)
     expect(useTelemetry.getState().sunlit).toBeNull()
+  })
+
+  it('re-sweeps the low–high span after a multi-day warp, so NOW stays inside it', () => {
+    const sel = new SelectedSatellite(fakeVisuals())
+    sel.select(ISS, EPOCH_MS)
+    const at = EPOCH_MS + 3 * DAY_MS
+    sel.frame(at, 1000)
+    const { lowKm, highKm } = useTelemetry.getState()
+    const expected = altitudeSpanKm(satrec, at)
+    expect(Math.abs(lowKm - expected.lowKm)).toBeLessThan(0.01)
+    expect(Math.abs(highKm - expected.highKm)).toBeLessThan(0.01)
+    // The live readout across that day (each push 300 ms apart, so each is taken) stays inside.
+    for (const [k, h] of [0.5, 3, 6, 9, 11.5].entries()) {
+      sel.frame(at + h * HOUR_MS, 1300 + 300 * k)
+      const t = useTelemetry.getState()
+      expect(t.lowKm).toBe(lowKm)
+      expect(t.altKm).toBe(propagateEcef(satrec, at + h * HOUR_MS)!.altKm)
+      expect(t.altKm).toBeGreaterThanOrEqual(lowKm - 0.5)
+      expect(t.altKm).toBeLessThanOrEqual(highKm + 0.5)
+    }
+  })
+
+  it('holds the span within 12 h of the instant it was swept for, and re-sweeps only at the 5 Hz push', () => {
+    const sel = new SelectedSatellite(fakeVisuals())
+    sel.select(ISS, EPOCH_MS)
+    expect(spanSweeps).toHaveBeenCalledTimes(1)
+    const { lowKm, highKm } = useTelemetry.getState()
+    let now = 1000
+    for (const h of [1, 6, 11.9, 12, -6, -12]) sel.frame(EPOCH_MS + h * HOUR_MS, (now += 300))
+    expect(spanSweeps).toHaveBeenCalledTimes(1)
+    expect(useTelemetry.getState().lowKm).toBe(lowKm)
+    expect(useTelemetry.getState().highKm).toBe(highKm)
+    // Past 12 h but inside the 200 ms pacing window: no sweep on this frame…
+    const past = EPOCH_MS + 13 * HOUR_MS
+    sel.frame(past, now + 100)
+    expect(spanSweeps).toHaveBeenCalledTimes(1)
+    // …the next paced push takes it, for that push's instant.
+    sel.frame(past, (now += 300))
+    expect(spanSweeps).toHaveBeenCalledTimes(2)
+    expect(spanSweeps.mock.lastCall?.[1]).toBe(past)
+    // Re-anchored at +13 h: +24 h is 11 h away and holds.
+    sel.frame(EPOCH_MS + 24 * HOUR_MS, (now += 300))
+    expect(spanSweeps).toHaveBeenCalledTimes(2)
+  })
+
+  it('a warp back more than 12 h re-sweeps the span too', () => {
+    const sel = new SelectedSatellite(fakeVisuals())
+    const start = EPOCH_MS + 3 * DAY_MS
+    sel.select(ISS, start)
+    sel.frame(start - 11 * HOUR_MS, 1000)
+    expect(spanSweeps).toHaveBeenCalledTimes(1)
+    const back = start - 12 * HOUR_MS - 60_000
+    sel.frame(back, 1300)
+    expect(spanSweeps).toHaveBeenCalledTimes(2)
+    const expected = altitudeSpanKm(satrec, back)
+    expect(Math.abs(useTelemetry.getState().lowKm - expected.lowKm)).toBeLessThan(0.01)
+    expect(Math.abs(useTelemetry.getState().highKm - expected.highKm)).toBeLessThan(0.01)
   })
 })
