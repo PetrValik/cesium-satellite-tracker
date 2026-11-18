@@ -1,8 +1,9 @@
-import type { Viewer } from 'cesium'
+import { Math as CesiumMath, type Viewer } from 'cesium'
 import type { CameraRig } from '../../core/engine/CameraRig'
 import { applyRenderDensity, syncViewerClock } from '../../core/engine/createViewer'
 import { LIVE_EPSILON_MS, simClock } from '../../core/sim/simClock'
 import { useWallClock } from '../../core/sim/wallClock'
+import { publishHeading } from '../../core/ui/cameraStore'
 import { usePrefs } from '../../core/ui/prefsStore'
 import type { AircraftLayer } from '../../features/airspace/AircraftLayer'
 import type { ConstellationLayer } from '../../features/constellation/ConstellationLayer'
@@ -99,6 +100,8 @@ export function startFrameLoop(p: FrameParts): () => void {
     // decals, and the first live frame's pose re-shows them.
     if (clockLive) follow.poseDecals(wallNowMs, viewer.camera.positionWC)
     rig.update(dt)
+    // The compass: a number compare per frame, a store set only on a ≥ 1° turn.
+    publishHeading(CesiumMath.toDegrees(viewer.camera.heading))
     // Persist the free camera every few seconds so the next session
     // reopens at the same spot (skipped while follow-locked: the camera
     // lives in a moving target-local frame there).
