@@ -57,3 +57,46 @@ export function formatDuration(ms: number): string {
 export function formatRate(rate: number): string {
   return rate < 0 ? `−×${Math.abs(rate)}` : `×${rate}`
 }
+
+/**
+ * A span of sim time as rounded-up whole minutes, never under one:
+ * `'3 MIN'`, or `'2 H 07'` from an hour. Pass countdowns and durations.
+ */
+export function formatCountdown(ms: number): string {
+  const m = Math.max(1, Math.ceil(ms / 60_000))
+  return m < 60 ? `${m} MIN` : `${Math.floor(m / 60)} H ${pad(m % 60)}`
+}
+
+const COMPASS_8 = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const
+
+/** 8-point compass for an azimuth (45° sectors centred on the points); '—' when not finite. */
+export function formatCompass8(azDeg: number): string {
+  if (!Number.isFinite(azDeg)) return '—'
+  return COMPASS_8[Math.round((((azDeg % 360) + 360) % 360) / 45) % 8]
+}
+
+/**
+ * Age of the orbit data, `deltaMs = sim time − TLE epoch`: the magnitude
+ * plus OLD, or AHEAD when sim time sits before the epoch.
+ */
+export function formatDataAge(deltaMs: number): string {
+  const ms = Math.abs(deltaMs)
+  const minutes = ms / 60_000
+  const hours = minutes / 60
+  const days = hours / 24
+  const magnitude =
+    hours < 1
+      ? `${Math.round(minutes)} MIN`
+      : days < 1
+        ? `${hours.toFixed(1)} H`
+        : days < 10
+          ? `${days.toFixed(1)} D`
+          : `${Math.round(days)} D`
+  return `${magnitude} ${deltaMs < 0 ? 'AHEAD' : 'OLD'}`
+}
+
+/** `'18:42'`: UTC hours and minutes, seconds truncated. */
+export function formatUtcHm(epochMs: number): string {
+  const d = new Date(epochMs)
+  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
+}
