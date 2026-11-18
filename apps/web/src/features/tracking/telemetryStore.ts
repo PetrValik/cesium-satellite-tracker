@@ -21,8 +21,9 @@ export interface TelemetryState {
   perigeeKm: number
   apogeeKm: number
   /**
-   * Lowest / highest geodetic altitude over one orbit from the selection
-   * instant, km: the same altitude as `altKm`, so the live value lies inside.
+   * Lowest / highest geodetic altitude over one orbit from the instant it
+   * was last swept for (the selection, then again after > 12 h of sim drift),
+   * km: the same altitude as `altKm`, so the live value lies inside.
    * NaN when SGP4 failed over that whole orbit.
    */
   lowKm: number
