@@ -27,7 +27,7 @@ apps/web/src/
   data/           committed static datasets (launch sites, ports)
   styles/         index.css (entry) → tokens.css + one CSS file per HUD component, imported in cascade order
 apps/web/pwa/     service-worker template + stamp helper + sw.test.ts (stamped into dist/sw.js by vite.config.ts);
-                  manifest, icon.svg and committed PNG icons in apps/web/public/ (re-render: scripts/make-icons.sh)
+                  manifest, icon.svg and committed PNG icons in apps/web/public/ (re-render: apps/web/scripts/make-icons.sh)
 apps/api/src/
   app.ts          composition root: CORS, rate limit, mounts the slice routers, /api 404, static web
   index.ts        bootstrap: env, SQLite, seed, feeds, listen, SIGTERM shutdown — the only file reading process.env
