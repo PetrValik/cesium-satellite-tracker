@@ -131,7 +131,8 @@ what goes stale.
 ## Git workflow
 
 - Branch from **`main`**; never commit directly to it.
-- Branch names: `feat/<kebab>`, `fix/<kebab>`, `chore/<kebab>`, `docs/<kebab>`.
+- Branch names: `feat/<kebab>`, `fix/<kebab>`, `chore/<kebab>`, `docs/<kebab>`,
+  `refactor/<kebab>` — the set is `git.branch_prefixes` in `.claude/kit.profile.yaml`.
 - Push the branch and open a PR into `main`. `ci.yml` gates it; `deploy.yml` rolls to the
   `cloud` box, so a merge is a deploy.
 - Commit subject: `<type>(<scope>): <summary>` — ≤ 70 chars, imperative, lowercase after the
