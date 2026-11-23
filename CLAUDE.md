@@ -30,10 +30,11 @@ positions. Don't hand-roll either — dispatch the specialist.
 
 ## Project
 
-**ORBITAL OPS** — a real-time satellite and vessel tracker rendering a full 3D globe in the
-browser. npm-workspaces monorepo: `apps/web` (React 19 + Vite + CesiumJS + zustand),
+**ORBITAL OPS** — a real-time satellite, vessel and aircraft tracker rendering a full 3D globe
+in the browser. npm-workspaces monorepo: `apps/web` (React 19 + Vite + CesiumJS + zustand),
 `apps/api` (Node service), `packages/shared` (types shared by both). Satellite positions come
-from SGP4 via `satellite.js`; AIS vessel data is optional and degrades cleanly without a key.
+from SGP4 via `satellite.js`; AIS vessel data and ADS-B aircraft data are both optional and
+degrade cleanly without a key.
 
 Deployed at **orbit.irminsul.uk** from a GHCR image onto the `cloud` box (`/opt/orbital-ops`,
 docker network `web`) — see [`docs/DEPLOY.md`](docs/DEPLOY.md). The homelab monorepo carries
